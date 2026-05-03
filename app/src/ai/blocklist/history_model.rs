@@ -1094,6 +1094,9 @@ impl BlocklistAIHistoryModel {
             run_id: None,
             autoexecute_override: Some(source_conversation.autoexecute_override().into()),
             last_event_sequence: None,
+            // Forked conversations start with no user-set title; the user can rename the fork
+            // independently. See `specs/GH8642/` product spec invariant 9.
+            user_set_title: None,
         };
         let forked_conversation_id = AIConversationId::new();
         if let Err(e) = sqlite_sender.send(ModelEvent::UpdateMultiAgentConversation {
@@ -1248,6 +1251,8 @@ impl BlocklistAIHistoryModel {
             run_id: None,
             autoexecute_override: Some(conversation.autoexecute_override().into()),
             last_event_sequence: None,
+            // Forked conversations start with no user-set title. See `specs/GH8642/`.
+            user_set_title: None,
         };
 
         let forked_conversation_id = AIConversationId::new();
@@ -2189,6 +2194,16 @@ pub enum BlocklistAIHistoryEvent {
         conversation_id: AIConversationId,
         terminal_view_id: EntityId,
     },
+
+    /// Emitted when a conversation's user-set title changes (set, updated, or cleared).
+    /// Subscribers should re-render any surface that displays the conversation title.
+    /// `title` carries the new value; `None` means the override was cleared and the
+    /// auto-generated title is now in effect. See `specs/GH8642/`.
+    UpdatedConversationTitle {
+        terminal_view_id: EntityId,
+        conversation_id: AIConversationId,
+        title: Option<String>,
+    },
 }
 
 impl BlocklistAIHistoryEvent {
@@ -2249,6 +2264,9 @@ impl BlocklistAIHistoryEvent {
                 terminal_view_id, ..
             }
             | BlocklistAIHistoryEvent::ConversationServerTokenAssigned {
+                terminal_view_id, ..
+            }
+            | BlocklistAIHistoryEvent::UpdatedConversationTitle {
                 terminal_view_id, ..
             } => Some(*terminal_view_id),
             // UpdatedConversationMetadata can have None when updating historical-only conversations
