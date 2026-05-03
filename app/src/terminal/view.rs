@@ -5431,6 +5431,12 @@ impl TerminalView {
                 });
                 self.is_using_conversation_for_pane_header_title = false;
             }
+            BlocklistAIHistoryEvent::UpdatedConversationTitle { .. } => {
+                // Refresh the pane header so it reflects the new title. The pane title is
+                // derived from `selected_conversation_display_title()`, which reads through
+                // `AIConversation::title()` and now picks up the user-set override.
+                self.update_pane_configuration(ctx);
+            }
             BlocklistAIHistoryEvent::CreatedSubtask { .. }
             | BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. }
             | BlocklistAIHistoryEvent::UpdatedTodoList { .. }

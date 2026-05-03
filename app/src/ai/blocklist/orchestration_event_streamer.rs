@@ -365,7 +365,10 @@ impl OrchestrationEventStreamer {
             | BlocklistAIHistoryEvent::UpdatedTodoList { .. }
             | BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. }
             | BlocklistAIHistoryEvent::SplitConversation { .. }
-            | BlocklistAIHistoryEvent::UpdatedConversationArtifacts { .. } => {}
+            | BlocklistAIHistoryEvent::UpdatedConversationArtifacts { .. }
+            // Title renames don't affect orchestration eligibility, watched run ids, or the
+            // SSE connection state.
+            | BlocklistAIHistoryEvent::UpdatedConversationTitle { .. } => {}
         }
     }
 

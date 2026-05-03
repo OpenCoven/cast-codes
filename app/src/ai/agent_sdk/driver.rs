@@ -1985,7 +1985,10 @@ impl AgentDriver {
                 | BlocklistAIHistoryEvent::UpdatedConversationMetadata { .. }
                 | BlocklistAIHistoryEvent::ClearedActiveConversation { .. }
                 | BlocklistAIHistoryEvent::UpdatedConversationArtifacts { .. }
-                | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. } => (),
+                | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. }
+                // SDK output streams don't include the title; renames are display-only and
+                // don't gate run-exit / idle-timeout decisions.
+                | BlocklistAIHistoryEvent::UpdatedConversationTitle { .. } => (),
             }
         });
 
