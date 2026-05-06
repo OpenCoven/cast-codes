@@ -11230,7 +11230,7 @@ impl TerminalView {
                                     // Notify the pane group that the detected repo
                                     // changed so the code review panel can
                                     // (re-)initialize with the correct context.
-                                    if old_repo_path != me.current_repo_path {
+                                    if old_repo_path != me.current_repo_path || repo_path_opt.is_none() {
                                         ctx.emit(Event::Pane(PaneEvent::RepoChanged));
                                     }
 
