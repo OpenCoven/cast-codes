@@ -3286,6 +3286,55 @@ impl Workspace {
                 // Re-render so the vertical tabs panel can update unread-activity dots.
                 ctx.notify();
             }
+            AgentManagementEvent::SendDesktopNotification {
+                title,
+                body,
+                is_completed,
+            } => {
+                // Only send desktop notifications when the user has navigated
+                // away from the Warp window (matching regular agent behavior).
+                let active_window = ctx.windows().active_window();
+                if Some(ctx.window_id()) == active_window {
+                    return;
+                }
+
+                let notification_settings =
+                    SessionSettings::as_ref(ctx).notifications.value().clone();
+                if notification_settings.mode != NotificationsMode::Enabled {
+                    return;
+                }
+                if *is_completed && !notification_settings.is_agent_task_completed_enabled {
+                    return;
+                }
+                if !*is_completed && !notification_settings.is_needs_attention_enabled {
+                    return;
+                }
+
+                let play_sound = notification_settings.play_notification_sound;
+                ctx.send_desktop_notification(
+                    UserNotification::new_with_sound(
+                        title.clone(),
+                        body.clone(),
+                        None,
+                        play_sound,
+                    ),
+                    |_workspace, notification_error, ctx| {
+                        if let NotificationSendError::Other { error_message } =
+                            &notification_error
+                        {
+                            log::error!(
+                                "Failed to send child agent desktop notification: {error_message}"
+                            );
+                        }
+                        send_telemetry_from_ctx!(
+                            TelemetryEvent::NotificationFailedToSend {
+                                error: notification_error.clone()
+                            },
+                            ctx
+                        );
+                    },
+                );
+            }
         }
     }
 

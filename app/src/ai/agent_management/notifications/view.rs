@@ -112,8 +112,9 @@ impl NotificationMailboxView {
                 me.rebuild_filtered_ids(ctx);
                 ctx.notify();
             }
-            // Legacy toast path.
-            AgentManagementEvent::ConversationNeedsAttention { .. } => {}
+            // Legacy toast path / desktop notification path — not relevant for the mailbox.
+            AgentManagementEvent::ConversationNeedsAttention { .. }
+            | AgentManagementEvent::SendDesktopNotification { .. } => {}
         });
 
         let close_button = ctx.add_typed_action_view(|_| {
