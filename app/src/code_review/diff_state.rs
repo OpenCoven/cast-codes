@@ -32,9 +32,9 @@ use crate::features::FeatureFlag;
 #[cfg(feature = "local_fs")]
 use crate::util::git::get_pr_for_branch;
 use crate::util::git::{
-    detect_current_branch, detect_main_branch, get_unpushed_commits, run_git_command, Commit,
-    PrInfo,
+    detect_current_branch, detect_main_branch, get_unpushed_commits, Commit, PrInfo,
 };
+use warp_util::git::run_git_command;
 
 use super::diff_size_limits::compute_diff_size;
 
@@ -1176,9 +1176,10 @@ impl DiffStateModel {
             moved,
             commit_updated,
             index_lock_detected,
+            remote_ref_updated,
         } = update;
 
-        let invalidation_behavior = if commit_updated {
+        let invalidation_behavior = if commit_updated || remote_ref_updated {
             InvalidationBehavior::All(InvalidationSource::MetadataChange)
         } else if index_lock_detected {
             InvalidationBehavior::All(InvalidationSource::IndexLockChange)
