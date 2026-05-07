@@ -28,7 +28,7 @@ use crate::{
 
 use super::{
     AIConversationMetadata, AIQueryHistoryOutputStatus, BlocklistAIHistoryModel, PersistedAIInput,
-    PersistedAIInputType,
+    PersistedAIInputType, RenameConversationError,
 };
 
 /// Helper function to create a PersistedAIInput for testing
@@ -1178,6 +1178,7 @@ fn test_find_by_token_after_insert_forked_conversation_from_tasks() {
             run_id: None,
             autoexecute_override: None,
             last_event_sequence: None,
+            user_set_title: None,
         };
         let tasks = vec![warp_multi_agent_api::Task {
             id: "root-task".to_string(),
@@ -1316,5 +1317,214 @@ fn test_set_server_conversation_token_rebinds_reverse_index() {
                 Some(conversation_id),
             );
         });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// GH8642: set_conversation_user_title tests
+// See `specs/GH8642/` (PR #9746) for behavior. Tests cover:
+//   - loaded conversation rename + reset
+//   - idempotency (no-op on identical re-set)
+//   - metadata mirror after rename
+//   - error variants for non-renamable rows (NotFound, NoLocalData,
+//     SharedSessionViewer, NotLoaded)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_set_conversation_user_title_renames_loaded_conversation_and_mirrors_metadata() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        // set_user_title calls write_updated_conversation_state, which needs a model_event_sender.
+        let (sender, _receiver) = std::sync::mpsc::sync_channel(1);
+        let mut handles = GlobalResourceHandles::mock(&mut app);
+        handles.model_event_sender = Some(sender);
+        app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(handles));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let terminal_view_id = EntityId::new();
+
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            model.start_new_conversation(terminal_view_id, false, false, ctx)
+        });
+
+        // Seed metadata so we can verify the mirror onto `all_conversations_metadata`.
+        history_model.update(&mut app, |model, _| {
+            let metadata = AIConversationMetadata::from(model.conversation(&conversation_id).unwrap());
+            model.all_conversations_metadata.insert(conversation_id, metadata);
+        });
+
+        // Initial rename succeeds and reports a change.
+        let result = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(
+                conversation_id,
+                Some("My Custom Title".to_string()),
+                ctx,
+            )
+        });
+        assert_eq!(result, Ok(true));
+
+        history_model.read(&app, |model, _| {
+            assert_eq!(
+                model.conversation(&conversation_id).unwrap().user_set_title(),
+                Some("My Custom Title"),
+            );
+            let metadata = model.get_conversation_metadata(&conversation_id).unwrap();
+            assert_eq!(metadata.user_set_title.as_deref(), Some("My Custom Title"));
+            assert_eq!(metadata.title, "My Custom Title");
+        });
+    });
+}
+
+#[test]
+fn test_set_conversation_user_title_is_idempotent_on_repeat_set() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        let (sender, _receiver) = std::sync::mpsc::sync_channel(2);
+        let mut handles = GlobalResourceHandles::mock(&mut app);
+        handles.model_event_sender = Some(sender);
+        app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(handles));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let terminal_view_id = EntityId::new();
+
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            model.start_new_conversation(terminal_view_id, false, false, ctx)
+        });
+
+        // First set: changes and returns Ok(true).
+        let first = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(conversation_id, Some("Hello".to_string()), ctx)
+        });
+        assert_eq!(first, Ok(true));
+
+        // Re-setting the normalized-equivalent value is a no-op.
+        let same = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(
+                conversation_id,
+                Some("  Hello  ".to_string()), // whitespace trim normalizes to same value
+                ctx,
+            )
+        });
+        assert_eq!(same, Ok(false));
+    });
+}
+
+#[test]
+fn test_set_conversation_user_title_reset_clears_override() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        let (sender, _receiver) = std::sync::mpsc::sync_channel(4);
+        let mut handles = GlobalResourceHandles::mock(&mut app);
+        handles.model_event_sender = Some(sender);
+        app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(handles));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let terminal_view_id = EntityId::new();
+
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            model.start_new_conversation(terminal_view_id, false, false, ctx)
+        });
+        history_model.update(&mut app, |model, _| {
+            let metadata = AIConversationMetadata::from(model.conversation(&conversation_id).unwrap());
+            model.all_conversations_metadata.insert(conversation_id, metadata);
+        });
+
+        // Set, then reset (Some("") and None both clear).
+        history_model
+            .update(&mut app, |model, ctx| {
+                model.set_conversation_user_title(conversation_id, Some("Custom".into()), ctx)
+            })
+            .unwrap();
+
+        let reset = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(conversation_id, None, ctx)
+        });
+        assert_eq!(reset, Ok(true));
+
+        history_model.read(&app, |model, _| {
+            assert_eq!(
+                model.conversation(&conversation_id).unwrap().user_set_title(),
+                None,
+            );
+            let metadata = model.get_conversation_metadata(&conversation_id).unwrap();
+            assert_eq!(metadata.user_set_title, None);
+        });
+
+        // Whitespace-only also clears.
+        history_model
+            .update(&mut app, |model, ctx| {
+                model.set_conversation_user_title(conversation_id, Some("x".into()), ctx)
+            })
+            .unwrap();
+        let reset_via_whitespace = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(conversation_id, Some("   ".into()), ctx)
+        });
+        assert_eq!(reset_via_whitespace, Ok(true));
+        history_model.read(&app, |model, _| {
+            assert_eq!(
+                model.conversation(&conversation_id).unwrap().user_set_title(),
+                None,
+            );
+        });
+    });
+}
+
+#[test]
+fn test_set_conversation_user_title_returns_not_found_for_unknown_id() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let unknown_id = AIConversationId::new();
+
+        let result = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(unknown_id, Some("X".into()), ctx)
+        });
+        assert_eq!(result, Err(RenameConversationError::NotFound(unknown_id)));
+    });
+}
+
+#[test]
+fn test_set_conversation_user_title_returns_no_local_data_for_cloud_only_metadata() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let cloud_only_id = AIConversationId::new();
+
+        // Insert metadata that has no local data (`from_server_metadata` sets has_local_data=false).
+        history_model.update(&mut app, |model, _| {
+            let metadata = AIConversationMetadata::from_server_metadata(
+                cloud_only_id,
+                create_server_metadata("Cloud-only", "token-cloud-only", 1.0, None),
+            );
+            model.all_conversations_metadata.insert(cloud_only_id, metadata);
+        });
+
+        let result = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(cloud_only_id, Some("X".into()), ctx)
+        });
+        assert_eq!(
+            result,
+            Err(RenameConversationError::NoLocalData(cloud_only_id)),
+        );
+    });
+}
+
+#[test]
+fn test_set_conversation_user_title_rejects_shared_session_viewer() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let terminal_view_id = EntityId::new();
+
+        // Conversation starts in viewer mode — the start_new_conversation third arg is
+        // `is_viewing_shared_session`.
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            model.start_new_conversation(terminal_view_id, false, true, ctx)
+        });
+
+        let result = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(conversation_id, Some("X".into()), ctx)
+        });
+        assert_eq!(
+            result,
+            Err(RenameConversationError::SharedSessionViewer(conversation_id)),
+        );
     });
 }

@@ -156,6 +156,7 @@ fn test_display_status_uses_matching_conversation_for_in_progress_task() {
                 run_id: Some(task_id.clone()),
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
@@ -209,6 +210,7 @@ fn test_display_status_updates_when_blocked_conversation_resumes() {
                 run_id: Some(task_id.clone()),
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
@@ -286,6 +288,7 @@ fn test_display_status_terminal_task_state_overrides_matching_conversation() {
                 run_id: Some(task_id.clone()),
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
@@ -339,6 +342,7 @@ fn test_status_filter_uses_display_status_for_task_backed_conversations() {
                 run_id: Some(task_id.clone()),
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
@@ -429,6 +433,7 @@ fn create_test_conversation_metadata(
             is_in_active_pane: false,
             is_closed: false,
             server_conversation_token: None,
+        has_user_set_title: false,
         },
     }
 }
@@ -650,6 +655,7 @@ fn test_environment_none_filter_includes_conversations() {
                     is_in_active_pane: false,
                     is_closed: false,
                     server_conversation_token: None,
+                has_user_set_title: false,
                 },
             },
         );
@@ -774,6 +780,7 @@ fn test_get_tasks_and_conversations_prefers_task_when_task_id_matches_conversati
                 run_id: Some(task_id.clone()),
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
@@ -832,6 +839,7 @@ fn test_get_tasks_and_conversations_prefers_task_when_server_token_matches() {
                 run_id: None,
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
@@ -889,6 +897,7 @@ fn test_get_tasks_and_conversations_keeps_unrelated_tasks_and_conversations() {
                 run_id: None,
                 autoexecute_override: None,
                 last_event_sequence: None,
+            user_set_title: None,
             },
         );
 
