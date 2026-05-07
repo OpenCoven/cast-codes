@@ -5196,6 +5196,74 @@ impl Workspace {
         ctx.notify();
     }
 
+    /// Begin renaming the given conversation by opening the workspace-level inline editor.
+    /// Phase 2b stub: the editor itself is wired up in phase 2d, alongside the title-slot
+    /// rendering changes in vertical tabs. For now this logs and is a no-op so the action
+    /// can already be dispatched from menus and tests without breaking. See `specs/GH8642/`.
+    ///
+    /// TODO(GH8642 phase 2d): seed the editor with the conversation's effective title (via
+    /// `BlocklistAIHistoryModel::conversation(...).title()`), select all, and focus.
+    pub fn rename_conversation(
+        &mut self,
+        conversation_id: AIConversationId,
+        _ctx: &mut ViewContext<Self>,
+    ) {
+        log::debug!(
+            "WorkspaceAction::RenameConversation dispatched for {conversation_id}; inline editor \
+             not yet wired (phase 2d). The conversation list view handles its own rename via \
+             ConversationListViewAction."
+        );
+    }
+
+    /// Clears the user-set title override for the given conversation, reverting to the
+    /// auto-generated title chain. Wraps the history-model API and translates errors into
+    /// log warnings (no toast yet — phase 2c will add UI surfaces for these errors).
+    pub fn reset_conversation_name(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let history_model = BlocklistAIHistoryModel::handle(ctx);
+        let result = history_model.update(ctx, |model, ctx| {
+            model.set_conversation_user_title(conversation_id, None, ctx)
+        });
+        match result {
+            Ok(true) => {}
+            Ok(false) => {
+                log::debug!(
+                    "reset_conversation_name: {conversation_id} had no user-set title; no-op"
+                );
+            }
+            Err(err) => {
+                log::warn!("reset_conversation_name failed for {conversation_id}: {err}");
+            }
+        }
+    }
+
+    /// Persists a user-set title for the given conversation. `title = None` (or a string
+    /// that normalizes to empty) clears the override, identical to
+    /// [`Self::reset_conversation_name`]. This is the single commit entry point both
+    /// rename surfaces (vertical tabs and the conversation list) converge on.
+    pub fn set_conversation_user_title(
+        &mut self,
+        conversation_id: AIConversationId,
+        title: Option<String>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let history_model = BlocklistAIHistoryModel::handle(ctx);
+        let result = history_model.update(ctx, |model, ctx| {
+            model.set_conversation_user_title(conversation_id, title, ctx)
+        });
+        match result {
+            Ok(_) => {}
+            Err(err) => {
+                log::warn!(
+                    "set_conversation_user_title failed for {conversation_id}: {err}"
+                );
+            }
+        }
+    }
+
     fn set_custom_pane_name(
         &mut self,
         locator: PaneViewLocator,
@@ -19765,6 +19833,16 @@ impl TypedActionView for Workspace {
             ResetPaneName(locator) => self.clear_pane_name(*locator, ctx),
             RenameActiveTab => self.rename_tab(self.active_tab_index, ctx),
             SetActiveTabName(name) => self.set_active_tab_name(name, ctx),
+            RenameConversation { conversation_id } => {
+                self.rename_conversation(*conversation_id, ctx)
+            }
+            ResetConversationName { conversation_id } => {
+                self.reset_conversation_name(*conversation_id, ctx)
+            }
+            SetConversationUserTitle {
+                conversation_id,
+                title,
+            } => self.set_conversation_user_title(*conversation_id, title.clone(), ctx),
             SetActiveTabColor(color) => self.set_tab_color(self.active_tab_index, *color, ctx),
             ToggleTabRightClickMenu { tab_index, anchor } => {
                 self.toggle_tab_right_click_menu(*tab_index, *anchor, ctx)
