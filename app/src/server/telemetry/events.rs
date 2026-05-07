@@ -500,6 +500,7 @@ pub enum CLIAgentType {
     Auggie,
     Cursor,
     Goose,
+    Vibe,
     Unknown,
 }
 
@@ -524,8 +525,8 @@ pub enum NotificationAgentVariant {
 impl From<NotificationSourceAgent> for NotificationAgentVariant {
     fn from(agent: NotificationSourceAgent) -> Self {
         match agent {
-            NotificationSourceAgent::Oz => Self::Oz,
-            NotificationSourceAgent::CLI(cli_agent) => Self::CLIAgent(cli_agent.into()),
+            NotificationSourceAgent::Oz { .. } => Self::Oz,
+            NotificationSourceAgent::CLI { agent, .. } => Self::CLIAgent(agent.into()),
         }
     }
 }
@@ -1044,6 +1045,7 @@ pub enum AIAgentInput {
     MessagesReceivedFromAgents { message_count: usize },
     EventsFromAgents { event_count: usize },
     PassiveSuggestionResult,
+    OrchestrationConfigUpdate,
 }
 
 impl From<FullAIAgentInput> for AIAgentInput {
@@ -1084,6 +1086,7 @@ impl From<FullAIAgentInput> for AIAgentInput {
                 event_count: events.len(),
             },
             FullAIAgentInput::PassiveSuggestionResult { .. } => Self::PassiveSuggestionResult,
+            FullAIAgentInput::OrchestrationConfigUpdate { .. } => Self::OrchestrationConfigUpdate,
         }
     }
 }
@@ -1370,7 +1373,9 @@ pub enum TelemetryEvent {
     /// We attempted to bootstrap an SSH session via the SSH wrapper.  The
     /// argument is the name of the remote shell.
     SSHBootstrapAttempt(String),
-    SSHControlMasterError,
+    SSHControlMasterError {
+        has_remote_server: bool,
+    },
     KeybindingChanged {
         action: String,
         keystroke: Keystroke,
@@ -2770,13 +2775,15 @@ pub enum TelemetryEvent {
     CloudAgentCapacityModalUpgradeClicked,
     /// Emitted when a RequestComputerUse action is approved (manually or auto-executed).
     ComputerUseApproved {
-        conversation_id: AIConversationId,
+        client_conversation_id: AIConversationId,
+        server_conversation_id: Option<String>,
         is_autoexecuted: bool,
         ambient_agent_task_id: Option<AmbientAgentTaskId>,
     },
     /// Emitted when a RequestComputerUse action is cancelled/rejected.
     ComputerUseCancelled {
-        conversation_id: AIConversationId,
+        client_conversation_id: AIConversationId,
+        server_conversation_id: Option<String>,
         ambient_agent_task_id: Option<AmbientAgentTaskId>,
     },
     /// Emitted when a warp://linear deeplink is opened.
@@ -4125,7 +4132,6 @@ impl TelemetryEvent {
             | TelemetryEvent::SettingsImportResetButtonClicked
             | TelemetryEvent::ITermMultipleHotkeys
             | TelemetryEvent::DriveSharingOnboardingBlockShown
-            | TelemetryEvent::SSHControlMasterError
             | TelemetryEvent::SettingsImportInitiated
             | TelemetryEvent::GrepToolSucceeded
             | TelemetryEvent::FileGlobToolSucceeded
@@ -4138,6 +4144,9 @@ impl TelemetryEvent {
             | TelemetryEvent::GlobalSearchOpened
             | TelemetryEvent::GlobalSearchQueryStarted
             | TelemetryEvent::GetStartedSkipToTerminal => None,
+            TelemetryEvent::SSHControlMasterError { has_remote_server } => Some(json!({
+                "has_remote_server": has_remote_server,
+            })),
             TelemetryEvent::RemoteServerBinaryCheck {
                 found,
                 error,
@@ -4538,19 +4547,23 @@ impl TelemetryEvent {
             TelemetryEvent::CloudAgentCapacityModalDismissed => None,
             TelemetryEvent::CloudAgentCapacityModalUpgradeClicked => None,
             TelemetryEvent::ComputerUseApproved {
-                conversation_id,
+                client_conversation_id,
+                server_conversation_id,
                 is_autoexecuted,
                 ambient_agent_task_id,
             } => Some(json!({
-                "conversation_id": conversation_id,
+                "client_conversation_id": client_conversation_id,
+                "server_conversation_id": server_conversation_id,
                 "is_autoexecuted": is_autoexecuted,
                 "ambient_agent_task_id": ambient_agent_task_id.map(|id| id.to_string()),
             })),
             TelemetryEvent::ComputerUseCancelled {
-                conversation_id,
+                client_conversation_id,
+                server_conversation_id,
                 ambient_agent_task_id,
             } => Some(json!({
-                "conversation_id": conversation_id,
+                "client_conversation_id": client_conversation_id,
+                "server_conversation_id": server_conversation_id,
                 "ambient_agent_task_id": ambient_agent_task_id.map(|id| id.to_string()),
             })),
             TelemetryEvent::FreeTierLimitHitInterstitialDisplayed => None,
@@ -4652,7 +4665,7 @@ impl TelemetryEvent {
             | TelemetryEvent::LoggedOutStartup
             | TelemetryEvent::DownloadSource(_)
             | TelemetryEvent::SSHBootstrapAttempt(_)
-            | TelemetryEvent::SSHControlMasterError
+            | TelemetryEvent::SSHControlMasterError { .. }
             | TelemetryEvent::KeybindingChanged { .. }
             | TelemetryEvent::KeybindingResetToDefault { .. }
             | TelemetryEvent::KeybindingRemoved { .. }
