@@ -1,6 +1,6 @@
 pub mod telemetry;
 
-use crate::ai::agent::conversation::ConversationStatus;
+use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
 use crate::ai::agent_management::AgentNotificationsModel;
 use crate::code::editor::{add_color, remove_color};
 use crate::code::icon_from_file_path;
@@ -3061,6 +3061,19 @@ struct TerminalAgentText {
     cli_agent_latest_user_prompt: Option<String>,
     is_oz_agent: bool,
     cli_agent: Option<CLIAgent>,
+    /// GH8642: id of the chrome conversation behind this terminal view, when one
+    /// exists. Carried alongside the title text so the vertical-tabs rename
+    /// dispatch (`WorkspaceAction::RenameConversation { conversation_id }`) can
+    /// route to the correct conversation without re-deriving the filter from
+    /// `TerminalView::selected_conversation_for_user_facing_chrome`.
+    conversation_id: Option<AIConversationId>,
+    /// GH8642: whether [`Self::conversation_id`] currently has a user-set title
+    /// override (i.e. `AIConversation::user_set_title().is_some()`). When true,
+    /// `preferred_agent_tab_titles` short-circuits and always returns
+    /// `conversation_display_title`, never the latest user prompt — user-set
+    /// titles must beat the `use_latest_user_prompt_as_conversation_title_in_tab_names`
+    /// setting. See spec PR #9746 "risks".
+    has_user_set_title: bool,
 }
 
 fn agent_tab_text_preference(app: &AppContext) -> AgentTabTextPreference {
@@ -3075,7 +3088,19 @@ fn preferred_agent_tab_titles(
     agent_text: &TerminalAgentText,
     preference: AgentTabTextPreference,
 ) -> (Option<String>, Option<String>) {
-    let conversation_title = match preference {
+    // GH8642: a user-set conversation title takes priority over
+    // `use_latest_user_prompt_as_conversation_title_in_tab_names`. Without this
+    // short-circuit, a user who renames a conversation can have their rename
+    // silently overridden whenever they toggle the latest-prompt setting (or
+    // ship a new exchange); see PR #9746 "risks". CLI-agent titles aren't
+    // affected because CLI agents don't expose a user-set-title API today.
+    let effective_preference = if agent_text.has_user_set_title {
+        AgentTabTextPreference::ConversationTitle
+    } else {
+        preference
+    };
+
+    let conversation_title = match effective_preference {
         AgentTabTextPreference::ConversationTitle => agent_text
             .conversation_display_title
             .clone()
@@ -3116,6 +3141,11 @@ fn terminal_agent_text(terminal_view: &TerminalView, app: &AppContext) -> Termin
         terminal_view.selected_conversation_latest_user_prompt_for_tab_name(app);
     agent_text.is_oz_agent =
         agent_text.conversation_display_title.is_some() || agent_text.is_oz_agent;
+    // GH8642: thread the conversation id + user-set-title flag through so the
+    // rename surface can dispatch to the right conversation and the title
+    // preference can never override a user-set title.
+    agent_text.conversation_id = terminal_view.selected_conversation_id_for_chrome(app);
+    agent_text.has_user_set_title = terminal_view.selected_conversation_has_user_set_title(app);
 
     if let Some(session) = cli_agent_session {
         agent_text.cli_agent_title = session.session_context.title_like_text();
