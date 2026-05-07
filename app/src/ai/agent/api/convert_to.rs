@@ -781,17 +781,34 @@ fn convert_context(context: &[AIAgentContext]) -> api::InputContext {
                 active_rules,
                 additional_rule_paths,
             } => {
+                let source_active_rule_count = active_rules.len();
+                let source_active_rule_paths = active_rules
+                    .iter()
+                    .map(|rule| rule.file_name.clone())
+                    .collect::<Vec<_>>();
+                let active_rule_files = active_rules
+                    .into_iter()
+                    .flat_map(|rule| {
+                        let file_contents: Vec<api::FileContent> = rule.into();
+                        file_contents.into_iter()
+                    })
+                    .collect::<Vec<_>>();
+                if active_rule_files.is_empty() {
+                    let additional_rule_file_paths_count = additional_rule_paths.len();
+                    log::warn!(
+                        "Converted ProjectRules context has empty active_rule_files; root_path={root_path}; source_active_rules_count={source_active_rule_count}; source_active_rule_paths={source_active_rule_paths:?}; additional_rule_file_paths_count={additional_rule_file_paths_count}"
+                    );
+                } else if active_rule_files.len() != source_active_rule_count {
+                    let active_rule_files_count = active_rule_files.len();
+                    log::warn!(
+                        "Converted ProjectRules context changed active_rule_files count; root_path={root_path}; source_active_rules_count={source_active_rule_count}; active_rule_files_count={active_rule_files_count}; source_active_rule_paths={source_active_rule_paths:?}"
+                    );
+                }
                 api_context
                     .project_rules
                     .push(api::input_context::ProjectRules {
                         root_path,
-                        active_rule_files: active_rules
-                            .into_iter()
-                            .flat_map(|rule| {
-                                let file_contents: Vec<api::FileContent> = rule.into();
-                                file_contents.into_iter()
-                            })
-                            .collect(),
+                        active_rule_files,
                         additional_rule_file_paths: additional_rule_paths,
                     });
             }

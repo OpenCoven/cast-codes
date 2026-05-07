@@ -440,6 +440,7 @@ impl BlocklistAIContextModel {
         };
 
         let mut context = Vec::new();
+        let pwd_for_project_rules_log = pwd.clone();
 
         // Always include directory context
         context.push(AIAgentContext::Directory {
@@ -465,8 +466,29 @@ impl BlocklistAIContextModel {
 
         // Always include project rules if available
         if let Some(rules) = project_rules {
+            let root_path = rules.root_path.to_string_lossy().into_owned();
+            let active_rule_count = rules.active_rules.len();
+            let additional_rule_paths_for_log = rules.additional_rule_paths.clone();
+            if active_rule_count == 0 {
+                let additional_rule_paths_count = additional_rule_paths_for_log.len();
+                log::warn!(
+                    "Pending AI context has ProjectRules but no active rules for active_rule_files; pwd={pwd_for_project_rules_log:?}; root_path={root_path}; additional_rule_paths_count={additional_rule_paths_count}; additional_rule_paths={additional_rule_paths_for_log:?}"
+                );
+            }
+
+            let empty_active_rule_paths = rules
+                .active_rules
+                .iter()
+                .filter(|rule| rule.content.is_empty())
+                .map(|rule| rule.path.display().to_string())
+                .collect::<Vec<_>>();
+            if !empty_active_rule_paths.is_empty() {
+                log::warn!(
+                    "Pending AI context has empty active project rule content for active_rule_files; pwd={pwd_for_project_rules_log:?}; root_path={root_path}; empty_active_rule_paths={empty_active_rule_paths:?}"
+                );
+            }
             context.push(AIAgentContext::ProjectRules {
-                root_path: rules.root_path.to_string_lossy().into(),
+                root_path,
                 active_rules: rules
                     .active_rules
                     .into_iter()

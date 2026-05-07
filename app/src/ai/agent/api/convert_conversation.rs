@@ -262,6 +262,27 @@ pub(crate) fn convert_input_context(context: Option<&api::InputContext>) -> Arc<
 
     // Convert project rules
     for project_rules in &context.project_rules {
+        if project_rules.root_path.is_empty()
+            && (!project_rules.active_rule_files.is_empty()
+                || !project_rules.additional_rule_file_paths.is_empty())
+        {
+            let active_rule_files_count = project_rules.active_rule_files.len();
+            let additional_rule_file_paths_count = project_rules.additional_rule_file_paths.len();
+            log::warn!(
+                "Skipping restored ProjectRules context with empty root_path; active_rule_files_count={active_rule_files_count}; additional_rule_file_paths_count={additional_rule_file_paths_count}"
+            );
+        }
+        if !project_rules.root_path.is_empty()
+            && project_rules.active_rule_files.is_empty()
+            && !project_rules.additional_rule_file_paths.is_empty()
+        {
+            let root_path = &project_rules.root_path;
+            let additional_rule_file_paths_count = project_rules.additional_rule_file_paths.len();
+            let additional_rule_file_paths = &project_rules.additional_rule_file_paths;
+            log::warn!(
+                "Restored ProjectRules context has empty active_rule_files; root_path={root_path}; additional_rule_file_paths_count={additional_rule_file_paths_count}; additional_rule_file_paths={additional_rule_file_paths:?}"
+            );
+        }
         if !project_rules.root_path.is_empty()
             && (!project_rules.active_rule_files.is_empty()
                 || !project_rules.additional_rule_file_paths.is_empty())
