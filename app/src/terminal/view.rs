@@ -1371,6 +1371,10 @@ pub enum ContextMenuAction {
         url_content: String,
     },
     CopyBlocks,
+    /// Copy command + output as GitHub-flavored markdown, with OSC 8
+    /// hyperlink spans reified as `[visible](URI)`. Disallowed-scheme
+    /// spans render as plain text. See `specs/GH6393/product.md` invariant 13.
+    CopyBlocksAsMarkdown,
     CopyBlockCommands,
     CopyBlockOutputs,
     CopyBlockFilteredOutputs,
@@ -1492,6 +1496,7 @@ impl fmt::Debug for ContextMenuAction {
             InsertSelectedText => f.write_str("InsertSelectedText"),
             CopySelectedText => f.write_str("CopySelectedText"),
             CopyBlocks => f.write_str("CopyBlocks"),
+            CopyBlocksAsMarkdown => f.write_str("CopyBlocksAsMarkdown"),
             CopyBlockCommands => f.write_str("CopyBlockCommands"),
             CopyBlockOutputs => f.write_str("CopyBlockOutputs"),
             OpenShareBlockModal { block_index } => {
@@ -2129,6 +2134,10 @@ pub enum BlockEntity {
     Output,
     FilteredOutput,
     CommandAndOutput,
+    /// Command + output rendered as GitHub-flavored markdown, with OSC 8
+    /// hyperlinks reified as `[visible](URI)`. See `specs/GH6393/product.md`
+    /// invariant 13.
+    CommandAndOutputAsMarkdown,
 }
 
 impl BlockEntity {
@@ -2138,6 +2147,7 @@ impl BlockEntity {
             BlockEntity::Output => "Output",
             BlockEntity::CommandAndOutput => "Both",
             BlockEntity::FilteredOutput => "FilteredOutput",
+            BlockEntity::CommandAndOutputAsMarkdown => "BothAsMarkdown",
         }
     }
 }
@@ -15218,6 +15228,12 @@ impl TerminalView {
                         ))
                         .with_disabled(is_copy_both_disabled)
                         .into_item(),
+                    MenuItemFields::new("Copy as markdown")
+                        .with_on_select_action(TerminalAction::ContextMenu(
+                            ContextMenuAction::CopyBlocksAsMarkdown,
+                        ))
+                        .with_disabled(is_copy_both_disabled)
+                        .into_item(),
                     MenuItemFields::new(copy_commands_str)
                         .with_on_select_action(TerminalAction::ContextMenu(
                             ContextMenuAction::CopyBlockCommands,
@@ -19547,6 +19563,10 @@ impl TerminalView {
         self.copy_blocks(BlockEntity::CommandAndOutput, ctx);
     }
 
+    fn context_menu_copy_blocks_as_markdown(&mut self, ctx: &mut ViewContext<Self>) {
+        self.copy_blocks(BlockEntity::CommandAndOutputAsMarkdown, ctx);
+    }
+
     fn context_menu_copy_block_commands(&mut self, ctx: &mut ViewContext<Self>) {
         self.copy_blocks(BlockEntity::Command, ctx);
     }
@@ -19656,6 +19676,11 @@ impl TerminalView {
                         block.output_to_string(),
                     ),
                     BlockEntity::FilteredOutput => block.output_to_string(),
+                    BlockEntity::CommandAndOutputAsMarkdown => format!(
+                        "```\n{}\n```\n\n{}",
+                        block.command_to_string().trim_end(),
+                        block.output_to_markdown_string(),
+                    ),
                 };
 
                 if !block_str.trim().is_empty() {
@@ -22819,6 +22844,7 @@ impl TerminalView {
             CopySelectedText => self.context_menu_copy_selected_text(ctx),
             CopyUrl { url_content } => self.context_menu_copy_url(url_content, ctx),
             CopyBlocks => self.context_menu_copy_blocks(ctx),
+            CopyBlocksAsMarkdown => self.context_menu_copy_blocks_as_markdown(ctx),
             CopyBlockCommands => self.context_menu_copy_block_commands(ctx),
             CopyBlockOutputs => self.context_menu_copy_block_outputs(ctx),
             OpenShareBlockModal { block_index } => {
