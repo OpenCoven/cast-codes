@@ -9,7 +9,8 @@ use crate::{
             conversation::{
                 AIAgentHarness, AIConversation, AIConversationId, ServerAIConversationMetadata,
             },
-            PassiveSuggestionTrigger,
+            AIAgentExchange, AIAgentInput, AIAgentOutputStatus, PassiveSuggestionTrigger,
+            UserQueryMode,
         },
         agent_conversations_model::AgentConversationsModel,
         ambient_agents::github_auth_notifier::GitHubAuthNotifier,
@@ -21,11 +22,12 @@ use crate::{
             orchestration_event_streamer::OrchestrationEventStreamer,
             orchestration_events::OrchestrationEventService,
             task_status_sync_model::TaskStatusSyncModel, BlocklistAIHistoryModel,
+            ResponseStreamId,
         },
         document::ai_document_model::AIDocumentModel,
         execution_profiles::profiles::AIExecutionProfilesModel,
         harness_availability::HarnessAvailabilityModel,
-        llms::LLMPreferences,
+        llms::{LLMId, LLMPreferences},
         mcp::{
             templatable_manager::TemplatableMCPServerManager, FileBasedMCPManager, FileMCPWatcher,
         },
@@ -81,7 +83,7 @@ use crate::{
     },
     AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandlesProvider,
 };
-use chrono::Utc;
+use chrono::{Local, Utc};
 use persistence::model::ConversationUsageMetadata;
 #[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
@@ -344,6 +346,52 @@ fn cloud_conversation_with_ambient_task(task_id: AmbientAgentTaskId) -> CloudCon
     conversation.set_task_id(task_id);
     conversation.set_server_metadata(test_server_conversation_metadata(Some(task_id)));
     CloudConversationData::Oz(Box::new(conversation))
+}
+
+fn cloud_conversation_with_non_empty_ambient_task(
+    task_id: AmbientAgentTaskId,
+    ctx: &mut ViewContext<PaneGroup>,
+) -> (CloudConversationData, AIConversationId) {
+    BlocklistAIHistoryModel::handle(ctx).update(ctx, |_, ctx| {
+        let mut conversation = AIConversation::new(false);
+        conversation.set_task_id(task_id);
+        conversation.set_server_metadata(test_server_conversation_metadata(Some(task_id)));
+        let conversation_id = conversation.id();
+
+        let exchange = AIAgentExchange {
+            id: Default::default(),
+            input: vec![AIAgentInput::UserQuery {
+                query: "test prompt".to_string(),
+                context: Default::default(),
+                static_query_type: None,
+                referenced_attachments: Default::default(),
+                user_query_mode: UserQueryMode::default(),
+                running_command: None,
+                intended_agent: None,
+            }],
+            output_status: AIAgentOutputStatus::Streaming { output: None },
+            added_message_ids: Default::default(),
+            start_time: Local::now(),
+            finish_time: None,
+            time_to_first_token_ms: None,
+            working_directory: None,
+            model_id: LLMId::from("test-model"),
+            coding_model_id: LLMId::from("test-coding-model"),
+            cli_agent_model_id: LLMId::from("test-cli-agent-model"),
+            computer_use_model_id: LLMId::from("test-computer-use-model"),
+            request_cost: None,
+            response_initiator: None,
+        };
+        conversation
+            .append_reassigned_exchange(
+                &ResponseStreamId::new_for_test(),
+                exchange,
+                EntityId::new(),
+                ctx,
+            )
+            .expect("test conversation should accept an exchange");
+        (CloudConversationData::Oz(Box::new(conversation)), conversation_id)
+    })
 }
 
 fn start_parent_conversation(
@@ -780,6 +828,73 @@ fn test_ambient_transcript_restore_uses_generic_viewer_when_handoff_disabled() {
         });
     });
 }
+
+#[test]
+fn test_live_ambient_hydration_restores_transcript_without_finishing_session() {
+    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
+    let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
+    let _setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
+    let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let pane_group = mock_pane_group(
+            &mut app,
+            MockOptions {
+                layout: PanesLayout::AmbientAgent,
+                ..Default::default()
+            },
+        );
+        let task_id = new_ambient_agent_task_id();
+
+        pane_group.update(&mut app, |panes, ctx| {
+            let pane_id = get_newly_created_pane_id(panes, &[]);
+            let terminal_view = panes
+                .terminal_view_from_pane_id(pane_id, ctx)
+                .expect("ambient pane should have a terminal view");
+            let terminal_view_id = terminal_view.id();
+            assert!(PaneGroup::terminal_view_needs_ambient_transcript_hydration(
+                terminal_view_id,
+                task_id,
+                ctx,
+            ));
+
+            let (conversation, conversation_id) =
+                cloud_conversation_with_non_empty_ambient_task(task_id, ctx);
+            PaneGroup::hydrate_live_ambient_cloud_mode_view(
+                terminal_view.clone(),
+                conversation,
+                task_id,
+                ctx,
+            );
+
+            assert!(!PaneGroup::terminal_view_needs_ambient_transcript_hydration(
+                terminal_view_id,
+                task_id,
+                ctx,
+            ));
+            assert_eq!(
+                ActiveAgentViewsModel::as_ref(ctx).get_terminal_view_id_for_ambient_task(task_id),
+                Some(terminal_view_id)
+            );
+
+            let view = terminal_view.as_ref(ctx);
+            assert_eq!(view.active_conversation_id(ctx), Some(conversation_id));
+            let ambient_model = view
+                .ambient_agent_view_model()
+                .expect("hydrated pane should have an ambient model")
+                .as_ref(ctx);
+            assert_eq!(ambient_model.task_id(), Some(task_id));
+            assert!(ambient_model.is_agent_running());
+
+            let model = view.model.lock();
+            assert!(!model.is_conversation_transcript_viewer());
+            assert!(!model.is_read_only());
+            assert_eq!(model.conversation_transcript_viewer_status(), None);
+        });
+    });
+}
+
 #[test]
 fn test_active_session_id_reset_on_last_pane_close() {
     App::test((), |mut app| async move {

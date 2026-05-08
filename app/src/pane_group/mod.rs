@@ -3466,6 +3466,174 @@ impl PaneGroup {
         });
     }
 
+    fn fetch_and_hydrate_live_ambient_transcript(
+        target_view: ViewHandle<TerminalView>,
+        server_conversation_token: ServerConversationToken,
+        ambient_agent_task_id: AmbientAgentTaskId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let history_model_handle = BlocklistAIHistoryModel::handle(ctx);
+
+        let future = history_model_handle
+            .as_ref(ctx)
+            .load_conversation_by_server_token(&server_conversation_token, ctx);
+        ctx.spawn(future, move |group, conversation, ctx| {
+            if !Self::terminal_view_needs_ambient_transcript_hydration(
+                target_view.id(),
+                ambient_agent_task_id,
+                ctx,
+            ) {
+                return;
+            }
+            let Some(conversation) = conversation else {
+                log::warn!(
+                    "Failed to hydrate restored ambient agent pane for task {ambient_agent_task_id}"
+                );
+                return;
+            };
+            let terminal_view_id = target_view.id();
+            Self::hydrate_live_ambient_cloud_mode_view(
+                target_view,
+                conversation,
+                ambient_agent_task_id,
+                ctx,
+            );
+            group.create_missing_child_agent_panes_for_terminal_view(terminal_view_id, ctx);
+            ctx.notify();
+        });
+    }
+
+    fn hydrate_live_ambient_cloud_mode_view(
+        terminal_view: ViewHandle<TerminalView>,
+        cloud_conversation: CloudConversationData,
+        task_id: AmbientAgentTaskId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let mut conversation_id = None;
+        terminal_view.update(ctx, |view, ctx| {
+            match cloud_conversation {
+                CloudConversationData::Oz(conversation) => {
+                    let id = conversation.id();
+                    view.restore_conversation_after_view_creation(
+                        RestoredAIConversation::new(*conversation),
+                        true,
+                        ctx,
+                    );
+                    view.enter_agent_view(None, Some(id), AgentViewEntryOrigin::CloudAgent, ctx);
+                    conversation_id = Some(id);
+                }
+                CloudConversationData::CLIAgent(cli_conversation) => {
+                    if !FeatureFlag::AgentHarness.is_enabled() {
+                        log::warn!(
+                            "AgentHarness flag is disabled; ignoring CLI agent conversation"
+                        );
+                        return;
+                    }
+                    let harness = match cli_conversation.metadata.harness {
+                        AIAgentHarness::ClaudeCode => Some(Harness::Claude),
+                        AIAgentHarness::Gemini => Some(Harness::Gemini),
+                        AIAgentHarness::Codex => Some(Harness::Codex),
+                        AIAgentHarness::Oz => None,
+                        AIAgentHarness::Unknown => Some(Harness::Unknown),
+                    };
+                    view.restore_conversation_and_directory_context(
+                        CloudConversationData::CLIAgent(cli_conversation),
+                        true,
+                        |_, _| {},
+                        ctx,
+                    );
+                    if let Some(harness) = harness {
+                        if let Some(ambient_agent_view_model) =
+                            view.ambient_agent_view_model().cloned()
+                        {
+                            ambient_agent_view_model.update(ctx, |model, ctx| {
+                                model.set_harness(harness, ctx);
+                            });
+                        }
+                    }
+                    view.enter_agent_view_for_new_conversation(
+                        None,
+                        AgentViewEntryOrigin::ThirdPartyCloudAgent,
+                        ctx,
+                    );
+                    if let Some(vehicle_conversation_id) = view.active_conversation_id(ctx) {
+                        view.model
+                            .lock()
+                            .block_list_mut()
+                            .attach_non_startup_blocks_to_conversation(vehicle_conversation_id);
+                    }
+                }
+            }
+
+            if let Some(ambient_agent_view_model) = view.ambient_agent_view_model().cloned() {
+                ambient_agent_view_model.update(ctx, |model, ctx| {
+                    model.set_conversation_id(conversation_id);
+                    model.enter_viewing_existing_session(task_id, ctx);
+                });
+            }
+        });
+
+        ActiveAgentViewsModel::handle(ctx).update(ctx, |active_views, ctx| {
+            active_views.register_ambient_session(terminal_view.id(), task_id, ctx);
+        });
+    }
+
+    fn terminal_view_needs_ambient_transcript_hydration(
+        terminal_view_id: EntityId,
+        task_id: AmbientAgentTaskId,
+        ctx: &AppContext,
+    ) -> bool {
+        !BlocklistAIHistoryModel::as_ref(ctx)
+            .all_live_conversations_for_terminal_view(terminal_view_id)
+            .any(|conversation| conversation.task_id() == Some(task_id) && !conversation.is_empty())
+    }
+
+    fn hydrate_restored_ambient_agent_pane_if_needed(
+        &self,
+        pane_id: PaneId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(terminal_view) = self.terminal_view_from_pane_id(pane_id, ctx) else {
+            return;
+        };
+        let Some(task_id) = terminal_view
+            .as_ref(ctx)
+            .ambient_agent_task_id_for_details_panel(ctx)
+        else {
+            return;
+        };
+        if !Self::terminal_view_needs_ambient_transcript_hydration(terminal_view.id(), task_id, ctx)
+        {
+            return;
+        }
+
+        let Some(server_conversation_token) = AgentConversationsModel::as_ref(ctx)
+            .get_task_data(&task_id)
+            .and_then(|task| task.conversation_id().map(ToString::to_string))
+            .map(ServerConversationToken::new)
+        else {
+            return;
+        };
+
+        Self::fetch_and_hydrate_live_ambient_transcript(
+            terminal_view,
+            server_conversation_token,
+            task_id,
+            ctx,
+        );
+    }
+
+    fn create_missing_child_agent_panes_for_terminal_view(
+        &mut self,
+        terminal_view_id: EntityId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(pane_id) = self.find_pane_id_for_terminal_view(terminal_view_id, ctx) else {
+            return;
+        };
+        self.create_missing_child_agent_panes(pane_id, ctx);
+    }
+
     /// Replaces a pane with a new cloud conversation.
     fn replace_pane_with_new_cloud_conversation(
         &mut self,
@@ -5399,6 +5567,7 @@ impl PaneGroup {
                     self.cleanup_closed_pane(pane_id, ctx);
                     return false;
                 }
+                self.hydrate_restored_ambient_agent_pane_if_needed(pane_id, ctx);
 
                 self.focus_pane_and_record_in_history(pane_id, ctx);
 
