@@ -72,6 +72,21 @@ impl DiffStateModelMap {
     fn remove(&mut self, key: &BufferLocation) -> Option<ModelHandle<DiffStateModel>> {
         self.models.remove(key)
     }
+
+    /// Removes all `BufferLocation::Remote` entries from the map and returns
+    /// them so the caller can run cleanup (e.g. `unsubscribe`).
+    fn drain_remote_models(&mut self) -> Vec<ModelHandle<DiffStateModel>> {
+        let remote_keys: Vec<BufferLocation> = self
+            .models
+            .keys()
+            .filter(|k| matches!(k, BufferLocation::Remote(_)))
+            .cloned()
+            .collect();
+        remote_keys
+            .into_iter()
+            .filter_map(|k| self.models.remove(&k))
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -270,6 +285,18 @@ impl WorkingDirectoriesModel {
                         model.stop_active_watcher(ctx);
                     });
                 }
+            }
+        }
+
+        // Remote models are not tracked in `repository_roots`, so clean up
+        // any remote entries when no pane group references any repos at all.
+        // This handles the common case of closing the last remote session.
+        // TODO: add per-pane-group remote repo tracking for fine-grained cleanup.
+        if self.repository_roots.values().all(|tab| tab.is_empty()) {
+            for model in self.diff_state_models.drain_remote_models() {
+                model.update(ctx, |model, ctx| {
+                    model.stop_active_watcher(ctx);
+                });
             }
         }
     }

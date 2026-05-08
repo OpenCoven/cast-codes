@@ -45,8 +45,12 @@ impl DiffStateModel {
                 ctx.subscribe_to_model(&local, Self::forward_event);
                 Self::Local(local)
             }
-            BufferLocation::Remote(_remote_id) => {
-                let remote = ctx.add_model(RemoteDiffStateModel::new);
+            BufferLocation::Remote(remote_path) => {
+                let host_id = remote_path.host_id.clone();
+                let repo_path = remote_path.path.clone();
+                let remote = ctx.add_model(|ctx| {
+                    RemoteDiffStateModel::new(host_id, repo_path, DiffMode::default(), ctx)
+                });
                 ctx.subscribe_to_model(&remote, Self::forward_event);
                 Self::Remote(remote)
             }
@@ -171,7 +175,7 @@ impl DiffStateModel {
     // ── Unified write API ────────────────────────────────────────────
 
     pub(crate) fn set_diff_mode(
-        &self,
+        &mut self,
         mode: DiffMode,
         should_fetch_base: bool,
         ctx: &mut ModelContext<Self>,
@@ -182,12 +186,15 @@ impl DiffStateModel {
                     local.set_diff_mode(mode, should_fetch_base, ctx);
                 });
             }
-            Self::Remote(_) => {}
+            Self::Remote(model) => {
+                let remote_path = model.as_ref(ctx).remote_path();
+                self.swap_remote_model(remote_path, mode, ctx);
+            }
         }
     }
 
     pub(crate) fn set_diff_mode_and_fetch_base(
-        &self,
+        &mut self,
         mode: DiffMode,
         ctx: &mut ModelContext<Self>,
     ) {
@@ -197,7 +204,10 @@ impl DiffStateModel {
                     local.set_diff_mode_and_fetch_base(mode, ctx);
                 });
             }
-            Self::Remote(_) => {}
+            Self::Remote(model) => {
+                let remote_path = model.as_ref(ctx).remote_path();
+                self.swap_remote_model(remote_path, mode, ctx);
+            }
         }
     }
 
@@ -255,7 +265,11 @@ impl DiffStateModel {
                     local.discard_files(file_infos, should_stash, branch_name, ctx);
                 });
             }
-            Self::Remote(_) => {}
+            Self::Remote(model) => {
+                model.update(ctx, |model, ctx| {
+                    model.discard_files(file_infos, should_stash, branch_name, ctx);
+                });
+            }
         }
     }
 
@@ -267,8 +281,45 @@ impl DiffStateModel {
                     local.stop_active_watcher(ctx);
                 });
             }
-            Self::Remote(_) => {}
+            Self::Remote(remote) => {
+                remote.update(ctx, |remote, ctx| {
+                    remote.unsubscribe(ctx);
+                });
+            }
         }
+    }
+
+    // ── Remote-only logic ─────────────────────────────────────────────
+
+    /// Swaps the remote backend to a new `RemoteDiffStateModel` with the given mode.
+    /// Unsubscribes the old model and subscribes to the new one.
+    ///
+    /// Precondition: `self` is `Self::Remote`. Both call sites already match on
+    /// `Self::Remote` before calling this method.
+    fn swap_remote_model(
+        &mut self,
+        remote_path: warp_util::remote_path::RemotePath,
+        mode: DiffMode,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        // Unsubscribe old model.
+        let Self::Remote(model) = self else {
+            debug_assert!(false, "swap_remote_model called on a Local variant");
+            return;
+        };
+        model.update(ctx, |m, ctx| m.unsubscribe(ctx));
+
+        // Create new model with the new mode.
+        let host_id = remote_path.host_id.clone();
+        let repo_path = remote_path.path.clone();
+        let new_model =
+            ctx.add_model(|ctx| RemoteDiffStateModel::new(host_id, repo_path, mode, ctx));
+        ctx.subscribe_to_model(&new_model, Self::forward_event);
+
+        *self = Self::Remote(new_model);
+
+        // Emit loading so the view shows a spinner immediately.
+        ctx.emit(DiffStateModelEvent::NewDiffsComputed(None));
     }
 }
 
