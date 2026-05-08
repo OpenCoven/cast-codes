@@ -586,6 +586,10 @@ pub enum VimEventType {
     GotoDefinition,
     FindReferences,
     ShowHover,
+    /// Move cursor and scroll viewport down by half a page. Triggered by `<C-d>`.
+    ScrollHalfPageDown,
+    /// Move cursor and scroll viewport up by half a page. Triggered by `<C-u>`.
+    ScrollHalfPageUp,
 }
 
 impl VimEventType {
@@ -643,7 +647,9 @@ impl VimEventType {
             | VimEventType::Escape
             | VimEventType::GotoDefinition
             | VimEventType::FindReferences
-            | VimEventType::ShowHover => None,
+            | VimEventType::ShowHover
+            | VimEventType::ScrollHalfPageDown
+            | VimEventType::ScrollHalfPageUp => None,
         }
     }
 }
@@ -794,6 +800,28 @@ impl VimFSA {
                 VimMode::Insert => self.handle_insert_mode_delete().into(),
                 VimMode::Normal | VimMode::Visual(_) => self.typed_character('x')?,
                 VimMode::Replace => self.change_mode(VimMode::Normal.into()).into(),
+            },
+            "ctrl-d" => match self.mode {
+                VimMode::Normal | VimMode::Visual(_) => {
+                    let count = self.get_action_count().unwrap_or(1);
+                    self.clear();
+                    VimEvent {
+                        event_type: VimEventType::ScrollHalfPageDown,
+                        count,
+                    }
+                }
+                _ => return None,
+            },
+            "ctrl-u" => match self.mode {
+                VimMode::Normal | VimMode::Visual(_) => {
+                    let count = self.get_action_count().unwrap_or(1);
+                    self.clear();
+                    VimEvent {
+                        event_type: VimEventType::ScrollHalfPageUp,
+                        count,
+                    }
+                }
+                _ => return None,
             },
             _ => return None,
         };
@@ -1768,7 +1796,7 @@ impl VimModel {
     }
 
     pub fn keypress(&mut self, keystroke: &Keystroke, ctx: &mut ModelContext<Self>) {
-        if let Some(event) = self.fsa.keypress(keystroke.key.as_str()) {
+        if let Some(event) = self.fsa.keypress(keystroke.normalized().as_str()) {
             ctx.emit(event);
         }
     }
@@ -1885,6 +1913,8 @@ where
             VimEventType::GotoDefinition => self.goto_definition(ctx),
             VimEventType::FindReferences => self.find_references(ctx),
             VimEventType::ShowHover => self.show_hover(ctx),
+            VimEventType::ScrollHalfPageDown => self.scroll_half_page_down(event.count, ctx),
+            VimEventType::ScrollHalfPageUp => self.scroll_half_page_up(event.count, ctx),
         };
     }
 }
@@ -2003,4 +2033,8 @@ pub trait VimHandler {
     fn find_references(&mut self, _ctx: &mut ViewContext<Self>) {}
     /// Show hover information for the symbol under cursor (gh).
     fn show_hover(&mut self, _ctx: &mut ViewContext<Self>) {}
+    /// Move the cursor down `count` half-pages and scroll the viewport (`<C-d>`).
+    fn scroll_half_page_down(&mut self, _count: u32, _ctx: &mut ViewContext<Self>) {}
+    /// Move the cursor up `count` half-pages and scroll the viewport (`<C-u>`).
+    fn scroll_half_page_up(&mut self, _count: u32, _ctx: &mut ViewContext<Self>) {}
 }

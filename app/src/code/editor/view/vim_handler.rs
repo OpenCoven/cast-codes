@@ -20,7 +20,7 @@ use warp_editor::{
     model::{CoreEditorModel, PlainTextEditorModel},
     selection::{TextDirection, TextUnit},
 };
-use warpui::{text::point::Point, SingletonEntity, ViewContext};
+use warpui::{text::point::Point, units::IntoPixels, SingletonEntity, ViewContext};
 
 impl VimHandler for CodeEditorView {
     fn insert_char(&mut self, c: char, ctx: &mut ViewContext<Self>) {
@@ -920,6 +920,30 @@ impl VimHandler for CodeEditorView {
 
     fn show_hover(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.emit(CodeEditorEvent::VimShowHover);
+    }
+
+    fn scroll_half_page_down(&mut self, count: u32, ctx: &mut ViewContext<Self>) {
+        let model = self.model.as_ref(ctx);
+        let lines = (model.lines_in_viewport(ctx) / 2).max(1) * count.max(1) as usize;
+        let scroll_pixels = (-(lines as f32 * model.line_height(ctx))).into_pixels();
+        self.model.update(ctx, |model, ctx| {
+            model.vim_move_vertical_by_offset(lines as u32, TextDirection::Forwards, false, ctx);
+            model.render_state().update(ctx, |render_state, ctx| {
+                render_state.scroll(scroll_pixels, ctx);
+            });
+        });
+    }
+
+    fn scroll_half_page_up(&mut self, count: u32, ctx: &mut ViewContext<Self>) {
+        let model = self.model.as_ref(ctx);
+        let lines = (model.lines_in_viewport(ctx) / 2).max(1) * count.max(1) as usize;
+        let scroll_pixels = (lines as f32 * model.line_height(ctx)).into_pixels();
+        self.model.update(ctx, |model, ctx| {
+            model.vim_move_vertical_by_offset(lines as u32, TextDirection::Backwards, false, ctx);
+            model.render_state().update(ctx, |render_state, ctx| {
+                render_state.scroll(scroll_pixels, ctx);
+            });
+        });
     }
 }
 
