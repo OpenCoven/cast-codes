@@ -464,8 +464,9 @@ use crate::palette::PaletteMode;
 use crate::search::command_palette::view::{Event as CommandPaletteEvent, View as CommandPalette};
 use crate::server::telemetry::{NotificationsTurnedOnSource, PaletteSource, TabRenameEvent};
 use crate::tab::{
-    tab_position_id, uses_vertical_tabs, NewSessionMenuItem, PaneNameMenuTarget, SelectedTabColor,
-    TabBarState, TabComponent, TabData, TabTelemetryAction, TAB_BAR_BORDER_HEIGHT,
+    tab_position_id, uses_vertical_tabs, NewSessionMenuItem, PaneConversationMenuTarget,
+    PaneNameMenuTarget, SelectedTabColor, TabBarState, TabComponent, TabData, TabTelemetryAction,
+    TAB_BAR_BORDER_HEIGHT,
 };
 use crate::terminal::view::ssh_file_upload::FileUploadId;
 use crate::ui_components::icons;
@@ -6744,10 +6745,38 @@ impl Workspace {
                 reset_label: "Reset active pane name",
             },
         };
-        let menu_items = tab.menu_items_with_pane_name_target(
+        // GH8642: resolve the conversation rename target by looking up the
+        // chrome conversation behind the right-clicked pane. Skip the menu
+        // entries entirely when the pane is a shared-session viewer (since
+        // the rename API would reject the commit anyway).
+        let pane_conversation_target = tab
+            .pane_group
+            .as_ref(ctx)
+            .terminal_view_from_pane_id(pane.pane_id, ctx)
+            .and_then(|terminal_view| {
+                terminal_view
+                    .as_ref(ctx)
+                    .selected_conversation_id_for_chrome(ctx)
+            })
+            .filter(|conversation_id| {
+                !BlocklistAIHistoryModel::as_ref(ctx)
+                    .conversation(conversation_id)
+                    .is_some_and(|c| c.is_viewing_shared_session())
+            })
+            .map(|conversation_id| {
+                let has_user_set_title = BlocklistAIHistoryModel::as_ref(ctx)
+                    .conversation(&conversation_id)
+                    .is_some_and(|c| c.user_set_title().is_some());
+                PaneConversationMenuTarget {
+                    conversation_id,
+                    has_user_set_title,
+                }
+            });
+        let menu_items = tab.menu_items_with_pane_targets(
             tab_index,
             self.tabs.len(),
             Some(pane_name_target),
+            pane_conversation_target,
             ctx,
         );
 

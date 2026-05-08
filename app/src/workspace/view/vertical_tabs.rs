@@ -118,6 +118,51 @@ fn vtab_pane_row_position_id(pane_group_id: EntityId, pane_id: PaneId) -> String
     format!("vertical_tabs:pane_row:{pane_group_id:?}:{pane_id}")
 }
 
+/// GH8642: resolves the conversation-rename triple for a single pane row in
+/// the vertical tabs panel.
+///
+/// Returns:
+/// * `conversation_id` — the chrome conversation behind this pane (terminal
+///   panes only; `None` for non-terminal panes and any conversation that
+///   matches the shared-session-viewer guard so we never offer rename to a
+///   user who can't commit).
+/// * `is_conversation_being_renamed` — whether the workspace-level rename
+///   editor is currently bound to that conversation.
+/// * `conversation_rename_editor` — the workspace editor handle, but only
+///   forwarded when this pane currently owns the rename, matching the
+///   pane-rename pattern of keeping the inline editor's mount point unique.
+fn pane_conversation_rename_props(
+    workspace: &Workspace,
+    pane_group: &PaneGroup,
+    pane_id: PaneId,
+    app: &AppContext,
+) -> (
+    Option<AIConversationId>,
+    bool,
+    Option<ViewHandle<EditorView>>,
+) {
+    let conversation_id = pane_group
+        .terminal_view_from_pane_id(pane_id, app)
+        .and_then(|terminal_view| terminal_view.as_ref(app).selected_conversation_id_for_chrome(app))
+        .filter(|conversation_id| {
+            !crate::BlocklistAIHistoryModel::as_ref(app)
+                .conversation(conversation_id)
+                .is_some_and(|c| c.is_viewing_shared_session())
+        });
+    let is_conversation_being_renamed = conversation_id.is_some_and(|id| {
+        workspace
+            .current_workspace_state
+            .is_conversation_being_renamed(id)
+    });
+    let conversation_rename_editor =
+        is_conversation_being_renamed.then(|| workspace.conversation_rename_editor.clone());
+    (
+        conversation_id,
+        is_conversation_being_renamed,
+        conversation_rename_editor,
+    )
+}
+
 fn terminal_title_fallback_font(agent_text: &TerminalAgentText) -> TerminalPrimaryLineFont {
     if agent_text.cli_agent.is_some() {
         TerminalPrimaryLineFont::Ui
@@ -325,6 +370,9 @@ fn render_pane_row_element(
         rename_editor: _,
         is_pane_being_renamed,
         pane_rename_editor: _,
+        conversation_id: _,
+        is_conversation_being_renamed: _,
+        conversation_rename_editor: _,
     } = props;
     let is_selected = is_active_tab && is_focused;
     let mut row = Hoverable::new(mouse_state, move |state| {
@@ -687,6 +735,20 @@ struct PaneProps<'a> {
     rename_editor: Option<ViewHandle<EditorView>>,
     is_pane_being_renamed: bool,
     pane_rename_editor: Option<ViewHandle<EditorView>>,
+    /// GH8642: id of the chrome conversation behind this pane (terminal panes
+    /// only; `None` for non-terminal panes and shared-session viewers). Used
+    /// to drive the conversation-rename inline editor and to flip the
+    /// title-region double-click target from `RenamePane` to
+    /// `RenameConversation`.
+    conversation_id: Option<AIConversationId>,
+    /// GH8642: when true, the workspace-level conversation rename editor is
+    /// active for [`Self::conversation_id`]. Causes the title slot to render
+    /// the inline editor instead of the conversation title text.
+    is_conversation_being_renamed: bool,
+    /// GH8642: workspace-level conversation rename editor; only forwarded by
+    /// the call site when the pane currently owns the rename, to keep the
+    /// editor mount-point unique across re-renders.
+    conversation_rename_editor: Option<ViewHandle<EditorView>>,
 }
 
 struct PaneRowState {
@@ -1024,6 +1086,9 @@ impl VerticalTabsPanelState {
                                 None,
                                 None,
                                 false,
+                                None,
+                                false,
+                                None,
                                 None,
                                 false,
                                 None,
@@ -1577,6 +1642,9 @@ fn render_groups(
                                     None,
                                     false,
                                     None,
+                                    None,
+                                    false,
+                                    None,
                                     app,
                                 )
                                 .is_some_and(|props| {
@@ -1601,6 +1669,9 @@ fn render_groups(
                                 None,
                                 None,
                                 false,
+                                None,
+                                false,
+                                None,
                                 None,
                                 false,
                                 None,
@@ -1843,6 +1914,8 @@ fn render_tab_group_internal(
                     .entry(*pane_id)
                     .or_default()
                     .clone();
+                let (conversation_id, is_conversation_being_renamed, conversation_rename_editor) =
+                    pane_conversation_rename_props(workspace, pane_group, *pane_id, app);
                 let Some(pane_props) = PaneProps::new(
                     pane_group,
                     *pane_id,
@@ -1864,6 +1937,9 @@ fn render_tab_group_internal(
                     (!uses_outer_group_container).then_some(rename_editor.clone()),
                     false,
                     None,
+                    conversation_id,
+                    is_conversation_being_renamed,
+                    conversation_rename_editor,
                     app,
                 ) else {
                     return Empty::new().finish();
@@ -1896,6 +1972,8 @@ fn render_tab_group_internal(
                 let is_pane_being_renamed = workspace
                     .current_workspace_state
                     .is_pane_being_renamed(locator);
+                let (conversation_id, is_conversation_being_renamed, conversation_rename_editor) =
+                    pane_conversation_rename_props(workspace, pane_group, *pane_id, app);
                 let Some(pane_props) = PaneProps::new(
                     pane_group,
                     *pane_id,
@@ -1917,6 +1995,9 @@ fn render_tab_group_internal(
                     (!uses_outer_group_container).then_some(rename_editor.clone()),
                     is_pane_being_renamed,
                     is_pane_being_renamed.then_some(workspace.pane_rename_editor.clone()),
+                    conversation_id,
+                    is_conversation_being_renamed,
+                    conversation_rename_editor,
                     app,
                 ) else {
                     continue;
@@ -2784,6 +2865,9 @@ impl<'a> PaneProps<'a> {
         rename_editor: Option<ViewHandle<EditorView>>,
         is_pane_being_renamed: bool,
         pane_rename_editor: Option<ViewHandle<EditorView>>,
+        conversation_id: Option<AIConversationId>,
+        is_conversation_being_renamed: bool,
+        conversation_rename_editor: Option<ViewHandle<EditorView>>,
         app: &AppContext,
     ) -> Option<Self> {
         let pane = pane_group.pane_by_id(pane_id)?;
@@ -2833,6 +2917,9 @@ impl<'a> PaneProps<'a> {
             rename_editor,
             is_pane_being_renamed,
             pane_rename_editor,
+            conversation_id,
+            is_conversation_being_renamed,
+            conversation_rename_editor,
         })
     }
 
@@ -2852,6 +2939,7 @@ impl<'a> PaneProps<'a> {
     fn shows_inline_tab_rename_editor(&self) -> bool {
         (self.is_tab_being_renamed && self.rename_editor.is_some())
             || (self.is_pane_being_renamed && self.pane_rename_editor.is_some())
+            || (self.is_conversation_being_renamed && self.conversation_rename_editor.is_some())
     }
 
     fn rendered_search_text_fragments(&self, app: &AppContext) -> Vec<String> {
@@ -3486,6 +3574,13 @@ fn render_title_override(
             .as_ref()
             .map(|rename_editor| render_inline_tab_rename_editor(rename_editor, appearance, app));
     }
+    // GH8642: conversation rename takes the same title slot as tab/pane rename.
+    if props.is_conversation_being_renamed {
+        return props
+            .conversation_rename_editor
+            .as_ref()
+            .map(|rename_editor| render_inline_tab_rename_editor(rename_editor, appearance, app));
+    }
 
     props
         .custom_vertical_tabs_title
@@ -3526,9 +3621,16 @@ fn render_pane_title_slot(
         pane_group_id: props.pane_group_id,
         pane_id: props.pane_id,
     };
+    // GH8642: when the pane has a chrome conversation, double-click renames
+    // the conversation; otherwise it falls through to pane rename.
+    let conversation_id = props.conversation_id;
     Hoverable::new(title_mouse_state, move |_| title)
         .on_double_click(move |ctx, _, _| {
-            ctx.dispatch_typed_action(WorkspaceAction::RenamePane(locator));
+            if let Some(conversation_id) = conversation_id {
+                ctx.dispatch_typed_action(WorkspaceAction::RenameConversation { conversation_id });
+            } else {
+                ctx.dispatch_typed_action(WorkspaceAction::RenamePane(locator));
+            }
         })
         .with_cursor(Cursor::PointingHand)
         .finish()
@@ -5421,6 +5523,9 @@ fn detail_pane_props<'a>(
         None,
         None,
         false,
+        None,
+        false,
+        None,
         None,
         false,
         None,
