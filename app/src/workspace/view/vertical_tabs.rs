@@ -143,7 +143,11 @@ fn pane_conversation_rename_props(
 ) {
     let conversation_id = pane_group
         .terminal_view_from_pane_id(pane_id, app)
-        .and_then(|terminal_view| terminal_view.as_ref(app).selected_conversation_id_for_chrome(app))
+        .and_then(|terminal_view| {
+            terminal_view
+                .as_ref(app)
+                .selected_conversation_id_for_chrome(app)
+        })
         .filter(|conversation_id| {
             !crate::BlocklistAIHistoryModel::as_ref(app)
                 .conversation(conversation_id)

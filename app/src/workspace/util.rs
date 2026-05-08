@@ -4,6 +4,10 @@ use warpui::{
     WindowId,
 };
 
+#[cfg(test)]
+#[path = "util_tests.rs"]
+mod tests;
+
 use super::OneTimeModalModel;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::window_settings::WindowSettings;

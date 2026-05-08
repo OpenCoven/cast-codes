@@ -5395,9 +5395,7 @@ impl Workspace {
         match result {
             Ok(_) => {}
             Err(err) => {
-                log::warn!(
-                    "set_conversation_user_title failed for {conversation_id}: {err}"
-                );
+                log::warn!("set_conversation_user_title failed for {conversation_id}: {err}");
             }
         }
     }

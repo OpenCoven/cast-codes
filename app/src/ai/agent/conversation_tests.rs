@@ -306,7 +306,7 @@ fn normalize_user_title_caps_length_at_max_chars() {
     use crate::ai::agent::conversation::AIConversation;
 
     let max = AIConversation::USER_SET_TITLE_MAX_CHARS;
-    let too_long: String = std::iter::repeat('a').take(max + 50).collect();
+    let too_long: String = "a".repeat(max + 50);
 
     let normalized = AIConversation::normalize_user_title(Some(too_long))
         .expect("non-empty input should normalize to Some");
@@ -324,7 +324,7 @@ fn normalize_user_title_counts_chars_not_bytes() {
     // Build a string of exactly max+1 multi-byte chars and verify the cap is
     // applied in chars, not bytes.
     let max = AIConversation::USER_SET_TITLE_MAX_CHARS;
-    let multibyte: String = std::iter::repeat('🦀').take(max + 1).collect();
+    let multibyte: String = "🦀".repeat(max + 1);
 
     let normalized = AIConversation::normalize_user_title(Some(multibyte))
         .expect("non-empty input should normalize to Some");
