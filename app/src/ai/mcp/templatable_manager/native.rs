@@ -1943,17 +1943,12 @@ async fn spawn_server(
     let server_info = service.peer_info();
     logger.log(format!("[info] MCP: Connected to server: {server_info:#?}"));
 
-    let resources = if server_info.is_some_and(|info| info.capabilities.resources.is_some()) {
-        match service.list_all_resources().await {
-            Ok(result) => result,
-            Err(err) => {
-                log::warn!("Failed to list resources for MCP server '{server_name}': {err}");
-                vec![]
-            }
-        }
-    } else {
-        vec![]
-    };
+    let resources = query_resources_for(
+        server_info.map(|info| &info.capabilities),
+        &server_name,
+        || service.list_all_resources(),
+    )
+    .await;
     let tools = match service.list_all_tools().await {
         Ok(result) => result,
         Err(rmcp::ServiceError::McpError(rmcp::model::ErrorData { code, .. }))
@@ -2202,12 +2197,46 @@ where
     }
 }
 
+/// Predicate companion to `query_resources_for`. Returns true when the server
+/// advertised the `resources` capability during initialization. Mirror of
+/// `should_query_prompts`.
+fn should_query_resources(capabilities: Option<&rmcp::model::ServerCapabilities>) -> bool {
+    capabilities.is_some_and(|c| c.resources.is_some())
+}
+
+/// Query `resources/list` from a connected MCP server, gated on the advertised
+/// capability and fail-soft on listing errors.
+///
+/// Mirrors `query_prompts_for` so the resources path uses the same testable
+/// helper-extraction pattern as prompts (Oz reviewer note on #10441). Production
+/// callers pass `|| service.list_all_resources()`.
+async fn query_resources_for<F, Fut>(
+    capabilities: Option<&rmcp::model::ServerCapabilities>,
+    server_name: &str,
+    list_resources: F,
+) -> Vec<rmcp::model::Resource>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<rmcp::model::Resource>, rmcp::ServiceError>>,
+{
+    if !should_query_resources(capabilities) {
+        return Vec::new();
+    }
+    match list_resources().await {
+        Ok(result) => result,
+        Err(err) => {
+            log::warn!("Failed to list resources for MCP server '{server_name}': {err}");
+            Vec::new()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{query_prompts_for, should_query_prompts};
+    use super::{query_prompts_for, query_resources_for, should_query_prompts, should_query_resources};
     use rmcp::model::{
-        ErrorCode, ErrorData, Prompt, PromptsCapability, ResourcesCapability, ServerCapabilities,
-        ToolsCapability,
+        AnnotateAble, ErrorCode, ErrorData, Prompt, PromptsCapability, RawResource, Resource,
+        ResourcesCapability, ServerCapabilities, ToolsCapability,
     };
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -2452,5 +2481,203 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], original);
+    }
+
+    // ---------- should_query_resources predicate tests ----------
+
+    fn test_resource(uri: &str) -> Resource {
+        RawResource::new(uri, "test resource").no_annotation()
+    }
+
+    /// `None` server info short-circuits to "do not query": there's no
+    /// capability declaration to drive the decision.
+    #[test]
+    fn should_query_resources_returns_false_when_server_info_is_none() {
+        assert!(!should_query_resources(None));
+    }
+
+    /// A server that responded to `initialize` but advertised no capabilities
+    /// must not be queried for resources.
+    #[test]
+    fn should_query_resources_returns_false_when_no_capabilities_advertised() {
+        let no_caps = ServerCapabilities::default();
+        assert!(!should_query_resources(Some(&no_caps)));
+    }
+
+    /// Decision must depend ONLY on `capabilities.resources` — never on whether
+    /// `tools` or `prompts` are also advertised. Exhaustively covers all
+    /// 2^3 = 8 combinations.
+    #[test]
+    fn should_query_resources_only_depends_on_resources_field() {
+        for has_tools in [false, true] {
+            for has_resources in [false, true] {
+                for has_prompts in [false, true] {
+                    let c = caps(has_tools, has_resources, has_prompts);
+                    assert_eq!(
+                        should_query_resources(Some(&c)),
+                        has_resources,
+                        "tools={has_tools}, resources={has_resources}, prompts={has_prompts}",
+                    );
+                }
+            }
+        }
+    }
+
+    /// `ResourcesCapability::list_changed` and `subscribe` are informational;
+    /// neither must affect the initial-listing decision.
+    #[test]
+    fn should_query_resources_ignores_inner_capability_flags() {
+        for list_changed in [None, Some(false), Some(true)] {
+            for subscribe in [None, Some(false), Some(true)] {
+                let c = ServerCapabilities {
+                    resources: Some(ResourcesCapability {
+                        list_changed,
+                        subscribe,
+                    }),
+                    ..Default::default()
+                };
+                assert!(
+                    should_query_resources(Some(&c)),
+                    "list_changed={list_changed:?}, subscribe={subscribe:?} must still query",
+                );
+            }
+        }
+    }
+
+    // ---------- query_resources_for control-flow tests ----------
+
+    #[tokio::test]
+    async fn query_resources_for_skips_listing_when_capability_not_advertised() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+        let no_caps = ServerCapabilities::default();
+
+        let result = query_resources_for(Some(&no_caps), "srv", || async move {
+            calls_clone.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![test_resource("file:///never")])
+        })
+        .await;
+
+        assert!(result.is_empty());
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "list function must not be called when capability is absent",
+        );
+    }
+
+    #[tokio::test]
+    async fn query_resources_for_skips_listing_when_server_info_is_none() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+
+        let result = query_resources_for(None, "srv", || async move {
+            calls_clone.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![test_resource("file:///never")])
+        })
+        .await;
+
+        assert!(result.is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn query_resources_for_returns_listed_resources_when_capability_advertised() {
+        let c = caps(false, true, false);
+        let expected = vec![test_resource("file:///a"), test_resource("file:///b")];
+        let to_return = expected.clone();
+
+        let result = query_resources_for(Some(&c), "srv", || async move { Ok(to_return) }).await;
+
+        assert_eq!(result, expected);
+    }
+
+    #[tokio::test]
+    async fn query_resources_for_returns_empty_vec_when_server_lists_no_resources() {
+        let c = caps(false, true, false);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+
+        let result = query_resources_for(Some(&c), "srv", || async move {
+            calls_clone.fetch_add(1, Ordering::SeqCst);
+            Ok(Vec::new())
+        })
+        .await;
+
+        assert!(result.is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn query_resources_for_returns_empty_on_transport_error() {
+        let c = caps(false, true, false);
+        let result = query_resources_for(Some(&c), "srv", || async {
+            Err(rmcp::ServiceError::TransportClosed)
+        })
+        .await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn query_resources_for_returns_empty_on_mcp_error() {
+        let c = caps(false, true, false);
+        let result = query_resources_for(Some(&c), "srv", || async {
+            Err(rmcp::ServiceError::McpError(ErrorData {
+                code: ErrorCode::METHOD_NOT_FOUND,
+                message: "resources/list not implemented".into(),
+                data: None,
+            }))
+        })
+        .await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn query_resources_for_calls_list_function_exactly_once() {
+        let c = caps(false, true, false);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_clone = calls.clone();
+
+        let _ = query_resources_for(Some(&c), "srv", || async move {
+            calls_clone.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![test_resource("file:///x")])
+        })
+        .await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// Independence test: query_resources_for's behavior must not depend on
+    /// whether tools or prompts are also advertised. Run the full happy-path
+    /// flow under all 8 capability combinations.
+    #[tokio::test]
+    async fn query_resources_for_decision_independent_of_other_capabilities() {
+        let resources = vec![test_resource("file:///x")];
+        for has_tools in [false, true] {
+            for has_resources in [false, true] {
+                for has_prompts in [false, true] {
+                    let c = caps(has_tools, has_resources, has_prompts);
+                    let to_return = resources.clone();
+                    let result = query_resources_for(Some(&c), "srv", || async move {
+                        Ok(to_return)
+                    })
+                    .await;
+
+                    if has_resources {
+                        assert_eq!(
+                            result, resources,
+                            "expected resources to be returned when advertised \
+                             (tools={has_tools}, resources={has_resources}, prompts={has_prompts})",
+                        );
+                    } else {
+                        assert!(
+                            result.is_empty(),
+                            "expected empty when resources not advertised \
+                             (tools={has_tools}, prompts={has_prompts})",
+                        );
+                    }
+                }
+            }
+        }
     }
 }

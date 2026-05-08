@@ -123,16 +123,16 @@ impl TemplatableMCPServerInfo {
         &self.name
     }
 
-    pub fn resources(&self) -> &Vec<rmcp::model::Resource> {
+    pub fn resources(&self) -> &[rmcp::model::Resource] {
         &self.resources
     }
 
-    pub fn tools(&self) -> &Vec<rmcp::model::Tool> {
+    pub fn tools(&self) -> &[rmcp::model::Tool] {
         &self.tools
     }
 
     #[allow(dead_code)]
-    pub fn prompts(&self) -> &Vec<rmcp::model::Prompt> {
+    pub fn prompts(&self) -> &[rmcp::model::Prompt] {
         &self.prompts
     }
 
