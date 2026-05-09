@@ -21,14 +21,15 @@ use warp_util::file::FileId;
 use super::proto::{
     client_message, delete_file_response, resolve_conflict_response, run_command_response,
     save_buffer_response, server_message, write_file_response, Abort, Authenticate, BufferEdit,
-    BufferUpdatedPush, ClientMessage, CloseBuffer, CodebaseIndexStatusesSnapshot, DeleteFile,
-    DeleteFileResponse, DeleteFileSuccess, ErrorCode, ErrorResponse, FailedFileRead,
-    FileContextProto, FileOperationError, Initialize, InitializeResponse, NavigatedToDirectory,
-    NavigatedToDirectoryResponse, OpenBuffer, OpenBufferResponse, ReadFileContextResponse,
-    ResolveConflict, ResolveConflictResponse, ResolveConflictSuccess, RunCommandError,
-    RunCommandErrorCode, RunCommandRequest, RunCommandResponse, RunCommandSuccess, SaveBuffer,
-    SaveBufferResponse, SaveBufferSuccess, ServerMessage, SessionBootstrapped, TextEdit, WriteFile,
-    WriteFileResponse, WriteFileSuccess,
+    BufferUpdatedPush, ClientMessage, CloseBuffer, CodebaseIndexStatus, CodebaseIndexStatusState,
+    CodebaseIndexStatusUpdated, CodebaseIndexStatusesSnapshot, DeleteFile, DeleteFileResponse,
+    DeleteFileSuccess, DropCodebaseIndex, ErrorCode, ErrorResponse, FailedFileRead,
+    FileContextProto, FileOperationError, IndexCodebase, Initialize, InitializeResponse,
+    ListCodebaseIndexStatuses, NavigatedToDirectory, NavigatedToDirectoryResponse, OpenBuffer,
+    OpenBufferResponse, ReadFileContextResponse, ResolveConflict, ResolveConflictResponse,
+    ResolveConflictSuccess, RunCommandError, RunCommandErrorCode, RunCommandRequest,
+    RunCommandResponse, RunCommandSuccess, SaveBuffer, SaveBufferResponse, SaveBufferSuccess,
+    ServerMessage, SessionBootstrapped, TextEdit, WriteFile, WriteFileResponse, WriteFileSuccess,
 };
 use super::server_buffer_tracker::{PendingBufferRequestKind, ServerBufferTracker};
 
@@ -156,6 +157,14 @@ pub struct ServerModel {
     /// Used to avoid sending duplicate snapshots on repeated
     /// `NavigatedToDirectory` calls while the user `cd`s within the same repo.
     snapshot_sent_roots_by_connection: HashMap<ConnectionId, HashSet<StandardizedPath>>,
+    /// Per-connection set of git repo roots for which we've already sent a
+    /// remote codebase-index status placeholder in this connection's lifetime.
+    ///
+    /// Until the daemon has a persisted indexing manager, first-seen git repos
+    /// become explicit `NotEnabled` entries so the client can observe the repo
+    /// instead of treating an absent status as meaningful state.
+    codebase_index_status_sent_roots_by_connection:
+        HashMap<ConnectionId, HashSet<StandardizedPath>>,
     /// Abort handle for the active grace timer, if any.
     /// Calling `.abort()` cancels the timer before it fires.
     grace_timer_cancel: Option<SpawnedFutureHandle>,
@@ -195,6 +204,7 @@ impl ServerModel {
         let mut model = Self {
             connection_senders: HashMap::new(),
             snapshot_sent_roots_by_connection: HashMap::new(),
+            codebase_index_status_sent_roots_by_connection: HashMap::new(),
             grace_timer_cancel: None,
             in_progress: HashMap::new(),
             host_id,
@@ -502,6 +512,8 @@ impl ServerModel {
         self.connection_senders.insert(conn_id, conn_tx);
         self.snapshot_sent_roots_by_connection
             .insert(conn_id, HashSet::new());
+        self.codebase_index_status_sent_roots_by_connection
+            .insert(conn_id, HashSet::new());
         ctx.notify();
     }
 
@@ -509,6 +521,8 @@ impl ServerModel {
     /// and starts the grace timer if no connections remain.
     pub fn deregister_connection(&mut self, conn_id: ConnectionId, ctx: &mut ModelContext<Self>) {
         self.snapshot_sent_roots_by_connection.remove(&conn_id);
+        self.codebase_index_status_sent_roots_by_connection
+            .remove(&conn_id);
         // Guard against double-deregister (reader and writer tasks both call
         // this on connection close; the second call must be a safe no-op).
         if self.connection_senders.remove(&conn_id).is_none() {
@@ -619,6 +633,15 @@ impl ServerModel {
             Some(client_message::Message::ResolveConflict(msg)) => {
                 self.handle_resolve_conflict(msg, &request_id, conn_id, ctx)
             }
+            Some(client_message::Message::ListCodebaseIndexStatuses(
+                ListCodebaseIndexStatuses {},
+            )) => self.handle_list_codebase_index_statuses(&request_id, conn_id),
+            Some(client_message::Message::IndexCodebase(msg)) => {
+                self.handle_index_codebase(msg, &request_id, conn_id)
+            }
+            Some(client_message::Message::DropCodebaseIndex(msg)) => {
+                self.handle_drop_codebase_index(msg, &request_id, conn_id)
+            }
             None => {
                 log::warn!(
                     "Received ClientMessage with no message variant (request_id={request_id})"
@@ -656,8 +679,8 @@ impl ServerModel {
         let snapshot = self.codebase_index_statuses_snapshot();
         let status_count = snapshot.statuses.len();
         log::info!(
-            "Pushing codebase index statuses snapshot: conn_id={conn_id} \
-             status_count={status_count}"
+            "[Remote codebase indexing] Daemon pushing bootstrap codebase index statuses snapshot: \
+             conn_id={conn_id} bootstrap_status_count={status_count} source=placeholder_no_status_store"
         );
         self.send_server_message(
             Some(conn_id),
@@ -667,13 +690,64 @@ impl ServerModel {
     }
 
     fn codebase_index_statuses_snapshot(&self) -> CodebaseIndexStatusesSnapshot {
-        // PR1 has no canonical daemon-side codebase-indexing state yet, so
-        // the bootstrap snapshot is empty. Later PRs will populate this from
-        // the remote indexing manager rather than deriving status from
-        // navigation events.
+        // The daemon has identity-scoped SQLite available on startup, but this
+        // PR does not add remote-codebase-index status/cache tables or a
+        // daemon indexing manager consumer yet. The bootstrap snapshot is
+        // therefore empty until a later PR loads real status state from SQLite.
+        // First-seen git repos are still pushed as explicit `NotEnabled`
+        // updates from navigation so the client can observe them.
         CodebaseIndexStatusesSnapshot {
             statuses: Vec::new(),
         }
+    }
+
+    fn handle_list_codebase_index_statuses(
+        &self,
+        request_id: &RequestId,
+        conn_id: ConnectionId,
+    ) -> HandlerOutcome {
+        let snapshot = self.codebase_index_statuses_snapshot();
+        let status_count = snapshot.statuses.len();
+        log::info!(
+            "[Remote codebase indexing] Daemon handling ListCodebaseIndexStatuses: \
+             request_id={request_id} conn_id={conn_id} status_count={status_count}"
+        );
+        HandlerOutcome::Sync(server_message::Message::CodebaseIndexStatusesSnapshot(
+            snapshot,
+        ))
+    }
+
+    fn handle_index_codebase(
+        &self,
+        msg: IndexCodebase,
+        request_id: &RequestId,
+        conn_id: ConnectionId,
+    ) -> HandlerOutcome {
+        log::info!(
+            "[Remote codebase indexing] Daemon handling IndexCodebase placeholder: \
+             request_id={request_id} conn_id={conn_id} repo_path={} state={:?}",
+            msg.repo_path,
+            CodebaseIndexStatusState::Unavailable
+        );
+        HandlerOutcome::Sync(server_message::Message::CodebaseIndexStatusUpdated(
+            unavailable_codebase_index_status_update(msg.repo_path),
+        ))
+    }
+    fn handle_drop_codebase_index(
+        &self,
+        msg: DropCodebaseIndex,
+        request_id: &RequestId,
+        conn_id: ConnectionId,
+    ) -> HandlerOutcome {
+        log::info!(
+            "[Remote codebase indexing] Daemon handling DropCodebaseIndex placeholder: \
+             request_id={request_id} conn_id={conn_id} repo_path={} state={:?}",
+            msg.repo_path,
+            CodebaseIndexStatusState::Unavailable
+        );
+        HandlerOutcome::Sync(server_message::Message::CodebaseIndexStatusUpdated(
+            unavailable_codebase_index_status_update(msg.repo_path),
+        ))
     }
 
     /// Routes a server message to its destination.
@@ -1063,6 +1137,27 @@ impl ServerModel {
                 if let Ok(root_path) =
                     StandardizedPath::from_local_canonicalized(Path::new(&indexed_path))
                 {
+                    if is_git {
+                        let should_send_status = me
+                            .codebase_index_status_sent_roots_by_connection
+                            .entry(conn_id_for_response)
+                            .or_default()
+                            .insert(root_path.clone());
+                        if should_send_status {
+                            log::info!(
+                                "[Remote codebase indexing] Daemon pushing first-seen repo status: \
+                                 conn_id={conn_id_for_response} repo_path={indexed_path} state={:?}",
+                                CodebaseIndexStatusState::NotEnabled
+                            );
+                            me.send_server_message(
+                                Some(conn_id_for_response),
+                                None,
+                                server_message::Message::CodebaseIndexStatusUpdated(
+                                    not_enabled_codebase_index_status_update(indexed_path.clone()),
+                                ),
+                            );
+                        }
+                    }
                     if is_git {
                         let already_sent = me
                             .snapshot_sent_roots_by_connection
@@ -1540,6 +1635,32 @@ impl ServerModel {
     }
 }
 
+fn unavailable_codebase_index_status_update(repo_path: String) -> CodebaseIndexStatusUpdated {
+    codebase_index_status_update(repo_path, CodebaseIndexStatusState::Unavailable)
+}
+
+fn not_enabled_codebase_index_status_update(repo_path: String) -> CodebaseIndexStatusUpdated {
+    codebase_index_status_update(repo_path, CodebaseIndexStatusState::NotEnabled)
+}
+
+fn codebase_index_status_update(
+    repo_path: String,
+    state: CodebaseIndexStatusState,
+) -> CodebaseIndexStatusUpdated {
+    CodebaseIndexStatusUpdated {
+        status: Some(CodebaseIndexStatus {
+            repo_path,
+            state: state.into(),
+            last_updated_epoch_millis: None,
+            progress_completed: None,
+            progress_total: None,
+            failure_message: None,
+            root_hash: None,
+            embedding_model: None,
+            embedding_dimensions: None,
+        }),
+    }
+}
 /// Converts a [`ReadFileContextResult`] into its protobuf equivalent.
 fn file_context_result_to_proto(result: ReadFileContextResult) -> ReadFileContextResponse {
     use crate::ai::agent::AnyFileContent;
