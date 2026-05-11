@@ -7,7 +7,7 @@ use cocoa::{
 };
 use objc::{class, msg_send, sel, sel_impl};
 use std::ffi::CStr;
-use std::os::raw::{c_uchar, c_void};
+use std::os::raw::c_void;
 use std::slice;
 
 use super::make_nsstring;
@@ -100,18 +100,29 @@ impl crate::Clipboard for Clipboard {
             });
 
             if available_paths > 0 {
-                content.paths = Some(
-                    (0..available_paths)
-                        .map(|i| {
-                            let directory = file_paths.objectAtIndex(i);
-                            let slice = slice::from_raw_parts(
-                                directory.UTF8String() as *const c_uchar,
-                                directory.len(),
+                let paths: Vec<String> = (0..available_paths)
+                    .filter_map(|i| {
+                        let directory = file_paths.objectAtIndex(i);
+                        let ptr = directory.UTF8String();
+                        if ptr.is_null() {
+                            log::error!(
+                                "null UTF8String from clipboard path {i}/{available_paths}"
                             );
-                            std::str::from_utf8_unchecked(slice).to_string()
-                        })
-                        .collect::<Vec<String>>(),
-                );
+                            return None;
+                        }
+                        let cstr = std::ffi::CStr::from_ptr(ptr);
+                        match cstr.to_str() {
+                            Ok(s) => Some(s.to_string()),
+                            Err(e) => {
+                                log::error!("invalid UTF-8 in clipboard path: {e}");
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+                if !paths.is_empty() {
+                    content.paths = Some(paths);
+                }
             }
 
             let html = NSPasteboard::stringForType(self.0, NSPasteboardTypeHTML);

@@ -46,9 +46,8 @@ use instant::Instant;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{cell::Cell, os::raw::c_uchar, panic, path::Path, ptr};
+use std::{cell::Cell, panic, path::Path, ptr};
 use std::{cell::RefCell, ffi::c_void, rc::Rc};
-use std::{slice, str};
 
 extern "C" {
     fn screenFrame() -> NSRect;
@@ -1681,8 +1680,23 @@ fn transform_origin_from_rect_coord_to_frame_coord(origin: Vector2F, size: Vecto
     Vector2F::new(origin.x(), -(origin.y() + size.y()))
 }
 
-/// Converts an Objective-C `Object` into a `String`
+/// Converts an Objective-C `Object` (NSString) into a Rust `String`.
+///
+/// Uses `CStr::from_ptr` to read the null-terminated UTF-8 output of
+/// `-[NSString UTF8String]`, because `-[NSString length]` returns the
+/// number of UTF-16 code units, not the number of UTF-8 bytes.
+///
+/// Returns an empty string if `UTF8String` returns null, which may occur
+/// when the receiver is `nil`.
 unsafe fn to_string(value: *mut Object) -> String {
-    let slice = slice::from_raw_parts(value.UTF8String() as *const c_uchar, value.len());
-    str::from_utf8_unchecked(slice).to_string()
+    let ptr = value.UTF8String();
+    if ptr.is_null() {
+        return String::new();
+    }
+    let cstr = std::ffi::CStr::from_ptr(ptr);
+    cstr.to_string_lossy().into_owned()
 }
+
+#[cfg(test)]
+#[path = "window_tests.rs"]
+mod tests;
