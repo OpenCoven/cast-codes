@@ -1,0 +1,4 @@
+interface:
+  display_name: "CastCodes Plugin Host"
+  short_description: "Build CastCodes plugin host features"
+  default_prompt: "Use $castcodes-plugin-host to work on CastCodes plugin host, skill, MCP, or CLI-agent plugin behavior."

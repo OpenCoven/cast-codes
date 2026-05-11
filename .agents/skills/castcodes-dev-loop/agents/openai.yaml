@@ -1,0 +1,4 @@
+interface:
+  display_name: "CastCodes Dev Loop"
+  short_description: "Run focused CastCodes build checks"
+  default_prompt: "Use $castcodes-dev-loop to choose and run the right CastCodes local verification commands."

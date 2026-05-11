@@ -1,0 +1,4 @@
+interface:
+  display_name: "CastCodes UI Work"
+  short_description: "Apply CastCodes UI implementation rules"
+  default_prompt: "Use $castcodes-ui-work to implement or review a CastCodes UI change."

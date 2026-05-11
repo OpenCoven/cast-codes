@@ -1,0 +1,4 @@
+interface:
+  display_name: "CastCodes Fork Local Boundary"
+  short_description: "Keep OSS builds off upstream services"
+  default_prompt: "Use $castcodes-fork-local-boundary to review CastCodes hosted-service and OSS behavior."
