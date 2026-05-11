@@ -53,6 +53,7 @@ message ServerMessage {
     BufferUpdatedPush buffer_updated = 15;
     SaveBufferResponse save_buffer_response = 16;
     ResolveConflictResponse resolve_conflict_response = 17;
+    BufferConflictDetected buffer_conflict_detected = 18;
   }
 }
 
@@ -361,10 +362,22 @@ message RepoMetadataUpdatePush {
 // The server reads the file, starts watching it, and returns the content.
 message OpenBuffer {
   string path = 1;
+  // When true, the server discards any in-memory buffer state and re-reads
+  // the file from disk. Used by the client to resolve conflicts ("accept
+  // server" / discard local edits). Other connections that have the buffer
+  // open receive a BufferUpdatedPush with the fresh content.
+  bool force_reload = 2;
 }
 
 // Server → client: response to OpenBuffer with the initial file content.
 message OpenBufferResponse {
+  oneof result {
+    OpenBufferSuccess success = 1;
+    FileOperationError error = 2;
+  }
+}
+
+message OpenBufferSuccess {
   string content = 1;
   uint64 server_version = 2;
 }
@@ -440,3 +453,10 @@ message ResolveConflictResponse {
 }
 
 message ResolveConflictSuccess {}
+
+// Server → client push: the file changed on disk while the client had
+// unsaved edits. The server does NOT apply the disk change to its buffer;
+// the client should show a conflict resolution banner.
+message BufferConflictDetected {
+  string path = 1;
+}
