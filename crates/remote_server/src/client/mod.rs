@@ -15,7 +15,8 @@ use warpui::r#async::{executor, FutureExt as _};
 
 use crate::proto::{
     client_message, server_message, Abort, Authenticate, BufferEdit, ClientMessage, CloseBuffer,
-    DeleteFile, ErrorCode, Initialize, InitializeResponse, LoadRepoMetadataDirectoryResponse,
+    DeleteFile, DiffStateFileDelta, DiffStateMetadataUpdate, DiffStateSnapshot, ErrorCode,
+    Initialize, InitializeResponse, LoadRepoMetadataDirectoryResponse,
     NavigatedToDirectoryResponse, OpenBuffer, OpenBufferResponse, ReadFileContextRequest,
     ReadFileContextResponse, RunCommandRequest, RunCommandResponse, ServerMessage,
     SessionBootstrapped, TextEdit, WriteFile,
@@ -87,7 +88,15 @@ pub enum ClientEvent {
         expected_client_version: u64,
         edits: Vec<crate::proto::TextEdit>,
     },
+    /// A full diff state snapshot was pushed by the server (NewDiffsComputed).
+    DiffStateSnapshotReceived { snapshot: DiffStateSnapshot },
+    /// A metadata-only diff state update was pushed by the server
+    /// (MetadataRefreshed or CurrentBranchChanged).
+    DiffStateMetadataUpdateReceived { update: DiffStateMetadataUpdate },
+    /// A single-file diff delta was pushed by the server (SingleFileUpdated).
+    DiffStateFileDeltaReceived { delta: DiffStateFileDelta },
 }
+
 /// Parameters for the `Initialize` handshake, sent to the daemon at
 /// connection time.
 pub struct InitializeParams {
@@ -497,6 +506,15 @@ impl RemoteServerClient {
                 expected_client_version: push.expected_client_version,
                 edits: push.edits,
             }),
+            server_message::Message::DiffStateSnapshot(snapshot) => {
+                Some(ClientEvent::DiffStateSnapshotReceived { snapshot })
+            }
+            server_message::Message::DiffStateMetadataUpdate(update) => {
+                Some(ClientEvent::DiffStateMetadataUpdateReceived { update })
+            }
+            server_message::Message::DiffStateFileDelta(delta) => {
+                Some(ClientEvent::DiffStateFileDeltaReceived { delta })
+            }
             other => {
                 safe_warn!(
                     safe: ("Unhandled push message variant"),
