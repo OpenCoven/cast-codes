@@ -19,6 +19,7 @@ use crate::{
     },
     cloud_object::{Owner, Revision, ServerMetadata, ServerPermissions},
     input_suggestions::HistoryInputSuggestion,
+    pane_group::PaneConfiguration,
     persistence::{model::PersistedAutoexecuteMode, ModelEvent},
     server::ids::ServerId,
     terminal::model::session::SessionId,
@@ -1526,5 +1527,136 @@ fn test_set_conversation_user_title_rejects_shared_session_viewer() {
             result,
             Err(RenameConversationError::SharedSessionViewer(conversation_id)),
         );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// GH8642: persistence-layer comparison test
+//
+// Demonstrates the divergence between the pre-existing "Rename pane"
+// (`PaneConfiguration::set_custom_vertical_tabs_title`) and the new "Rename
+// conversation" (`BlocklistAIHistoryModel::set_conversation_user_title`):
+//
+//   - Pane title is keyed on the `PaneConfiguration` *entity* — i.e. on the
+//     pane (`pane_group_id`, `pane_id`) the workspace happens to be hosting
+//     the conversation in. A different pane hosting the same conversation
+//     does NOT inherit a previously-set pane title.
+//   - Conversation title is keyed on the *conversation id* and lives on the
+//     `AIConversation` itself plus the cached `AIConversationMetadata` mirror,
+//     so it is reachable regardless of which pane is currently rendering the
+//     conversation.
+//
+// This test is the ground-truth answer to "do Rename pane and Rename
+// conversation actually do the same thing?" — they don't; they write to
+// different layers with different lifetimes. The pane label is a workspace
+// layout decoration that dies with the pane; the conversation title is
+// metadata of the conversation itself and survives pane lifecycle, the
+// conversation list, the command palette, and (after persistence) restart.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_pane_title_is_pane_scoped_while_conversation_title_is_conversation_scoped() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        // set_user_title -> write_updated_conversation_state needs a model_event_sender.
+        let (sender, _receiver) = std::sync::mpsc::sync_channel(2);
+        let mut handles = GlobalResourceHandles::mock(&mut app);
+        handles.model_event_sender = Some(sender);
+        app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(handles));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+        let terminal_view_id = EntityId::new();
+
+        // One conversation, two distinct PaneConfiguration entities. Models the
+        // user flow: rename pane in pane A; close pane A; reopen the same
+        // conversation in a brand-new pane B. The conversation id is stable
+        // across that flow; the pane ids are not.
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            model.start_new_conversation(terminal_view_id, false, false, ctx)
+        });
+        history_model.update(&mut app, |model, _| {
+            let metadata =
+                AIConversationMetadata::from(model.conversation(&conversation_id).unwrap());
+            model
+                .all_conversations_metadata
+                .insert(conversation_id, metadata);
+        });
+
+        let pane_a = app.add_model(|_| PaneConfiguration::new("auto-derived A"));
+        let pane_b = app.add_model(|_| PaneConfiguration::new("auto-derived B"));
+
+        // ---- Rename pane (pre-existing path) -------------------------------
+        // Same call site as `Workspace::set_custom_pane_name` uses inside
+        // `finish_pane_rename`: write the title onto pane A's PaneConfiguration.
+        pane_a.update(&mut app, |config, ctx| {
+            config.set_custom_vertical_tabs_title("Foo", ctx);
+        });
+        pane_a.read(&app, |config, _| {
+            assert_eq!(
+                config.custom_vertical_tabs_title(),
+                Some("Foo"),
+                "rename pane writes the title onto the PaneConfiguration entity",
+            );
+        });
+        pane_b.read(&app, |config, _| {
+            assert_eq!(
+                config.custom_vertical_tabs_title(),
+                None,
+                "pane title is pane-scoped: a different pane hosting the same \
+                 conversation must NOT inherit pane A's custom title",
+            );
+        });
+
+        // ---- Rename conversation (this PR) ---------------------------------
+        // Same call site `Workspace::finish_conversation_rename` uses:
+        // BlocklistAIHistoryModel::set_conversation_user_title.
+        let result = history_model.update(&mut app, |model, ctx| {
+            model.set_conversation_user_title(
+                conversation_id,
+                Some("Bar".to_string()),
+                ctx,
+            )
+        });
+        assert_eq!(result, Ok(true));
+
+        history_model.read(&app, |model, _| {
+            assert_eq!(
+                model.conversation(&conversation_id).unwrap().user_set_title(),
+                Some("Bar"),
+                "rename conversation writes user_set_title onto the AIConversation \
+                 itself, recoverable by conversation_id without going through any pane",
+            );
+            let metadata = model.get_conversation_metadata(&conversation_id).unwrap();
+            assert_eq!(
+                metadata.user_set_title.as_deref(),
+                Some("Bar"),
+                "rename conversation also mirrors onto AIConversationMetadata, \
+                 which is what the conversation list / command palette reads",
+            );
+            assert_eq!(metadata.title, "Bar");
+        });
+
+        // ---- The decisive divergence ---------------------------------------
+        // After both renames, pane B (the "new pane same conversation" case)
+        // still has no pane title, and the conversation's user-set title is
+        // still recoverable from its id without consulting any pane. The two
+        // features write to different layers — they are not interchangeable.
+        pane_b.read(&app, |config, _| {
+            assert_eq!(
+                config.custom_vertical_tabs_title(),
+                None,
+                "pane B is unaffected by either rename: it never had a pane \
+                 title and the conversation rename does not propagate into \
+                 PaneConfiguration",
+            );
+        });
+        history_model.read(&app, |model, _| {
+            assert_eq!(
+                model.conversation(&conversation_id).unwrap().user_set_title(),
+                Some("Bar"),
+                "conversation-scoped title persists in the history model — \
+                 this is what makes it survive pane lifecycle, conversation \
+                 list rendering, and (after persistence) restart",
+            );
+        });
     });
 }
