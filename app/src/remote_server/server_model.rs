@@ -299,6 +299,7 @@ impl ServerModel {
                 | RepoMetadataEvent::FileTreeUpdated { .. }
                 | RepoMetadataEvent::FileTreeEntryUpdated { .. }
                 | RepoMetadataEvent::UpdatingRepositoryFailed { .. }
+                | RepoMetadataEvent::RepositoryIndexedWithLimit { .. }
                 | RepoMetadataEvent::RepositoryUpdated {
                     id: RepositoryIdentifier::Remote(_),
                 } => {}
