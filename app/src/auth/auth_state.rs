@@ -280,6 +280,7 @@ impl AuthState {
                     linked_at: None,
                     personal_object_limits: None,
                     principal_type: PrincipalType::default(),
+                    global_skills: Vec::new(),
                 });
             }
         }
