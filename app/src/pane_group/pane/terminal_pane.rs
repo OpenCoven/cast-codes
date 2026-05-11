@@ -27,6 +27,7 @@ use crate::{
         llms::LLMPreferences,
         skills::SkillManager,
     },
+    terminal::view::ambient_agent::should_disable_snapshot,
     app_state::{AmbientAgentPaneSnapshot, LeafContents, TerminalPaneSnapshot},
     pane_group::child_agent::{
         create_error_child_agent_conversation, create_hidden_child_agent_conversation,
@@ -1592,6 +1593,7 @@ fn launch_remote_child(
         conversation_id: None,
         initial_snapshot_token: None,
         agent_identity_uid: None,
+        snapshot_disabled: should_disable_snapshot(ctx).then_some(true),
     };
 
     new_terminal_view.update(ctx, |terminal_view, ctx| {
