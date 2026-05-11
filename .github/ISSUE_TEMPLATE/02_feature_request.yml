@@ -6,9 +6,9 @@ body:
     attributes:
       label: "Pre-submit Checks"
       options:
-        - label: "I have [searched Warp feature requests](https://github.com/warpdotdev/warp/issues?q=is%3Aissue+label%3AFEATURE) and there are no duplicates"
+        - label: "I have [searched CastCodes feature requests](https://github.com/OpenCoven/cast-codes/issues?q=is%3Aissue+label%3AFEATURE) and there are no duplicates"
           required: true
-        - label: "I have [searched Warp docs](https://docs.warp.dev) and my feature is not there"
+        - label: "I have [searched CastCodes docs](https://github.com/OpenCoven/cast-codes) and my feature is not there"
           required: true
   - type: textarea
     id: "describe-solution"
@@ -61,7 +61,7 @@ body:
   - type: dropdown
     id: "linear-label-feature"
     attributes:
-      label: "Warp Internal (ignore) - linear-label:39cc6478-1249-4ee7-950b-c428edfeecd1"
+      label: "CastCodes Internal (ignore) - linear-label:39cc6478-1249-4ee7-950b-c428edfeecd1"
       multiple: false
       options:
         - Ignore

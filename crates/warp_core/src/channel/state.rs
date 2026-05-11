@@ -3,12 +3,13 @@ use parking_lot::Mutex;
 use std::{borrow::Cow, collections::HashSet};
 use url::{Origin, ParseError, Url};
 
-use crate::AppId;
 use crate::{
+    brand,
     channel::config::{
         ChannelConfig, McpOAuthProviderConfig, OzConfig, RudderStackDestination, WarpServerConfig,
     },
     features::FeatureFlag,
+    AppId,
 };
 
 use super::Channel;
@@ -37,15 +38,16 @@ pub struct ChannelState {
 impl ChannelState {
     pub fn init() -> Self {
         let channel = Channel::Oss;
-        let app_id = AppId::new("dev", "warp", "WarpOss");
+        let (qualifier, organization, application) = brand::public_app_id_parts();
+        let app_id = AppId::new(qualifier, organization, application);
         Self {
             channel,
             additional_features: Default::default(),
             config: ChannelConfig {
                 app_id,
-                logfile_name: "".into(),
-                server_config: WarpServerConfig::production(),
-                oz_config: OzConfig::production(),
+                logfile_name: brand::LOG_FILE_NAME.into(),
+                server_config: WarpServerConfig::unavailable(),
+                oz_config: OzConfig::unavailable(),
                 telemetry_config: None,
                 autoupdate_config: None,
                 crash_reporting_config: None,
@@ -127,11 +129,13 @@ impl ChannelState {
     /// Returns a profile name for isolating user data. This should be used to
     /// sandbox how user data is stored.
     ///
-    /// This is a debugging tool for isolating development instances of Warp, and is not
+    /// This is a debugging tool for isolating development instances of CastCodes, and is not
     /// supported in release builds.
     pub fn data_profile() -> Option<String> {
         if cfg!(debug_assertions) {
-            std::env::var("WARP_DATA_PROFILE").ok()
+            std::env::var("CAST_CODES_DATA_PROFILE")
+                .or_else(|_| std::env::var("WARP_DATA_PROFILE"))
+                .ok()
         } else {
             None
         }
@@ -140,7 +144,7 @@ impl ChannelState {
     /// Returns a value that should be used for namespacing persisted data.
     ///
     /// In release builds, this is identical to the app ID; in debug builds,
-    /// it optionally includes a suffix derived from the `WARP_DATA_PROFILE`
+    /// it optionally includes a suffix derived from the `CAST_CODES_DATA_PROFILE`
     /// environment variable.
     pub fn data_domain() -> String {
         match Self::data_profile() {
@@ -195,6 +199,15 @@ impl ChannelState {
     /// reporting should be hidden since the toggle has no effect.
     pub fn is_crash_reporting_available() -> bool {
         CHANNEL_STATE.lock().config.crash_reporting_config.is_some()
+    }
+
+    /// Returns whether this channel should expose hosted cloud services.
+    ///
+    /// The public CastCodes/OSS build is fork-local by default and must not
+    /// call Warp-owned hosted services unless CastCodes infrastructure is
+    /// intentionally added later.
+    pub fn cloud_services_available() -> bool {
+        !matches!(Self::channel(), Channel::Oss)
     }
 
     pub fn releases_base_url() -> Cow<'static, str> {
@@ -379,13 +392,13 @@ impl ChannelState {
 
     pub fn url_scheme() -> &'static str {
         match Self::channel() {
-            Channel::Stable => "warp",
-            Channel::Preview => "warppreview",
-            Channel::Dev => "warpdev",
+            Channel::Stable => brand::PUBLIC_URL_SCHEME,
+            Channel::Preview => "castcodespreview",
+            Channel::Dev => "castcodesdev",
             // Dummy value--integration tests shouldn't support URL schemes.
-            Channel::Integration => "warpintegration",
-            Channel::Local => "warplocal",
-            Channel::Oss => "warposs",
+            Channel::Integration => "castcodesintegration",
+            Channel::Local => "castcodeslocal",
+            Channel::Oss => brand::PUBLIC_URL_SCHEME,
         }
     }
 }

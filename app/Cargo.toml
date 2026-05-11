@@ -1,7 +1,7 @@
 [package]
-authors = ["Warp Team <dev@warp.dev>"]
-default-run = "warp-oss"
-description = "The cloud-backed terminal for individuals and teams"
+authors = ["CastCodes Maintainers"]
+default-run = "cast-codes"
+description = "The open-source agentic terminal and code workspace"
 edition = "2021"
 autobins = false
 name = "warp"
@@ -18,7 +18,7 @@ path = "src/lib.rs"
 # flag overrides). Otherwise these binaries are exactly identical to our main binary.
 
 [[bin]]
-name = "warp-oss"
+name = "cast-codes"
 path = "src/bin/oss.rs"
 test = false
 
@@ -652,9 +652,9 @@ global_ai_analytics_banner = []
 global_ai_analytics_collection = []
 grab_the_baton_editing = []
 grep_tool = []
-# This feature is enabled in graphical builds of Warp, and groups together other features
+# This feature is enabled in graphical builds of CastCodes, and groups together other features
 # that are not needed in headless builds. Because Cargo features are additive, the default
-# feature set is for a minimal build of Warp, and we add on GUI-specific features here.
+# feature set is for a minimal build of CastCodes, and we add on GUI-specific features here.
 # For the most part, including GUI code in headless builds is fine; the main use case is
 # for things that pull in external dependencies.
 gui = ["voice_input"]
@@ -682,7 +682,7 @@ inline_slash_commands = ["agent_view"]
 # Enable this feature to track heap usage and automatically produce a heap
 # profile report when app memory usage exceeds a 10GB threshold.
 #
-# Enabled on WarpDev by default.
+# Enabled on CastCodesDev by default.
 heap_usage_tracking = ["jemalloc_pprof", "crash_reporting"]
 image_as_context = []
 in_band_generators_ssh = []
@@ -730,7 +730,7 @@ resize_fix = []
 pluggable_notifications = []
 # This enables `read_files` to support images.
 read_image_files = []
-# This feature enables plugin support in Warp. Note that its typically checked
+# This feature enables plugin support in CastCodes. Note that its typically checked
 # directly, rather than via the `FeatureFlag` enum, because its value is
 # required early in the app lifecycle prior to `FeatureFlag` initialization.
 plugin_host = ["dep:rquickjs", "dep:warp_js", "warp_cli/plugin_host"]
@@ -937,55 +937,55 @@ configurable_context_window = []
 handoff_cloud_cloud = ["cloud_mode_setup_v2"]
 git_credential_refresh = []
 
-[package.metadata.bundle.bin.warp-oss]
+[package.metadata.bundle.bin.cast-codes]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.WarpOss"
-name = "WarpOss"
+copyright = "© 2026, CastCodes Maintainers"
+identifier = "dev.castcodes.CastCodes"
+name = "CastCodes"
 resources = ["assets/onboarding"]
 icon = ["channels/oss/icon/no-padding/512x512.png", "channels/oss/icon/no-padding/icon.ico"]
-short_description = "The open-source, cloud-backed terminal for individuals and teams."
+short_description = "The open-source agentic terminal and code workspace."
 
 [package.metadata.bundle.bin.stable]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Stable"
-name = "Warp"
+copyright = "© 2026, CastCodes Maintainers"
+identifier = "dev.castcodes.CastCodes"
+name = "CastCodes"
 osx_frameworks = [
     "frameworks/default/Sentry-Dynamic-WithARM64e.xcframework/macos-arm64_arm64e_x86_64/Sentry.framework",
 ]
 resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, stable build."
+short_description = "The CastCodes terminal and code workspace, stable build."
 
 [package.metadata.bundle.bin.preview]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Preview"
-name = "WarpPreview"
+copyright = "© 2026, CastCodes Maintainers"
+identifier = "dev.castcodes.CastCodesPreview"
+name = "CastCodesPreview"
 osx_frameworks = [
     "frameworks/default/Sentry-Dynamic-WithARM64e.xcframework/macos-arm64_arm64e_x86_64/Sentry.framework",
 ]
 resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, feature preview build."
+short_description = "The CastCodes terminal and code workspace, feature preview build."
 
 [package.metadata.bundle.bin.dev]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Dev"
-name = "WarpDev"
+copyright = "© 2026, CastCodes Maintainers"
+identifier = "dev.castcodes.CastCodesDev"
+name = "CastCodesDev"
 osx_frameworks = [
     "frameworks/dev/Sentry-Dynamic-WithARM64e.xcframework/macos-arm64_arm64e_x86_64/Sentry.framework",
 ]
 resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, developer build."
+short_description = "The CastCodes terminal and code workspace, developer build."
 
 [package.metadata.bundle.bin.warp]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.Warp-Local"
-name = "WarpLocal"
+copyright = "© 2026, CastCodes Maintainers"
+identifier = "dev.castcodes.CastCodesLocal"
+name = "CastCodesLocal"
 resources = ["assets/onboarding"]
-short_description = "The cloud-backed terminal for individuals and teams, developer build."
+short_description = "The CastCodes terminal and code workspace, local developer build."
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["embed_plist"]

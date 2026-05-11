@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-use crate::AppId;
+use crate::{brand, AppId};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChannelConfig {
@@ -49,6 +49,15 @@ impl WarpServerConfig {
             firebase_auth_api_key: "AIzaSyBdy3O3S9hrdayLJxJ7mriBR4qgUaUygAs".into(),
         }
     }
+
+    pub fn unavailable() -> Self {
+        Self {
+            server_root_url: brand::UNAVAILABLE_LOCALHOST_HTTP_URL.into(),
+            rtc_server_url: brand::UNAVAILABLE_LOCALHOST_WS_URL.into(),
+            session_sharing_server_url: None,
+            firebase_auth_api_key: "".into(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -66,6 +75,13 @@ impl OzConfig {
     pub fn production() -> Self {
         Self {
             oz_root_url: "https://oz.warp.dev".into(),
+            workload_audience_url: None,
+        }
+    }
+
+    pub fn unavailable() -> Self {
+        Self {
+            oz_root_url: brand::UNAVAILABLE_LOCALHOST_HTTP_URL.into(),
             workload_audience_url: None,
         }
     }

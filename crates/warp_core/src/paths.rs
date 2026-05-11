@@ -20,15 +20,20 @@ use cfg_if::cfg_if;
 use directories::BaseDirs;
 
 use crate::{
+    brand,
     channel::{Channel, ChannelState},
     AppId,
 };
 
-/// The name of the directory in which to put non-global Warp-specific files.
+/// The name of the directory in which to put non-global CastCodes-specific files.
 ///
 /// This should be used, for example, as the base directory under which
-/// repository workflows would be stored (in "./.warp/workflows").
-pub const WARP_CONFIG_DIR: &str = ".warp";
+/// repository workflows would be stored (in "./.cast-codes/workflows").
+pub const CAST_CODES_CONFIG_DIR: &str = brand::CONFIG_DIR;
+
+/// Legacy Warp config directory name. CastCodes may read this as a fallback but should not write
+/// newly-created data here.
+pub const WARP_CONFIG_DIR: &str = brand::LEGACY_CONFIG_DIR;
 
 /// The name of the folder that stores Warp execution logs and network logs.
 /// This is currently only used on Windows to maintain backwards compatibility.
@@ -36,19 +41,16 @@ pub const WARP_LOGS_DIR: &str = "logs";
 
 fn base_warp_config_dir_name() -> String {
     match ChannelState::channel() {
-        // Preview shares the same directory as Stable for backward
-        // compatibility — existing users already have config in `.warp`.
-        Channel::Stable | Channel::Preview => WARP_CONFIG_DIR.to_owned(),
-        Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
-        Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
-        Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
-        Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
+        Channel::Stable | Channel::Oss => CAST_CODES_CONFIG_DIR.to_owned(),
+        Channel::Preview => format!("{CAST_CODES_CONFIG_DIR}-preview"),
+        Channel::Dev => format!("{CAST_CODES_CONFIG_DIR}-dev"),
+        Channel::Integration => format!("{CAST_CODES_CONFIG_DIR}-integration"),
+        Channel::Local => format!("{CAST_CODES_CONFIG_DIR}-local"),
     }
 }
-/// Returns the home-relative Warp config directory name for the current channel and data profile.
+/// Returns the home-relative CastCodes config directory name for the current channel and data profile.
 ///
-/// This preserves the historical `.warp*` directory shape while still isolating dev, local,
-/// integration, oss, and optional development profiles.
+/// This isolates dev, local, integration, and optional development profiles.
 pub fn warp_home_config_dir_name() -> String {
     let base_dir_name = base_warp_config_dir_name();
 
@@ -59,13 +61,29 @@ pub fn warp_home_config_dir_name() -> String {
     }
 }
 
-/// Returns the home-relative Warp config directory for the current channel and data profile.
+/// Returns the home-relative CastCodes config directory for the current channel and data profile.
 ///
 /// Unlike [`data_dir`] and [`config_local_dir`] on non-macOS platforms, this intentionally keeps
-/// Warp-authored, user-facing config under a `.warp*` directory in the home directory instead of
+/// user-facing config under a `.cast-codes*` directory in the home directory instead of
 /// using the platform XDG/AppData project directories.
 pub fn warp_home_config_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home_dir| home_dir.join(warp_home_config_dir_name()))
+}
+
+fn legacy_warp_config_dir_name() -> String {
+    match ChannelState::channel() {
+        Channel::Stable | Channel::Preview => WARP_CONFIG_DIR.to_owned(),
+        Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
+        Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
+        Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
+        Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
+    }
+}
+
+/// Returns the legacy home-relative Warp config directory, when the caller needs a read-only
+/// fallback for migrated data.
+pub fn legacy_warp_home_config_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home_dir| home_dir.join(legacy_warp_config_dir_name()))
 }
 
 pub fn warp_home_skills_dir() -> Option<PathBuf> {
@@ -77,21 +95,14 @@ pub fn warp_home_mcp_config_file_path() -> Option<PathBuf> {
 }
 
 /// Returns the macOS config directory name for the current channel.
-///
-/// Stable uses `.warp`, while other channels include a channel suffix
-/// (e.g., `.warp-dev`, `.warp-local`).
-///
-/// These suffixes are persisted on disk as directory names and must not be
-/// changed once established, or existing user data will be orphaned.
 #[cfg(target_os = "macos")]
 fn macos_config_dir_name() -> String {
     match ChannelState::channel() {
-        Channel::Stable => WARP_CONFIG_DIR.to_owned(),
-        Channel::Preview => format!("{WARP_CONFIG_DIR}-preview"),
-        Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
-        Channel::Dev => format!("{WARP_CONFIG_DIR}-dev"),
-        Channel::Integration => format!("{WARP_CONFIG_DIR}-integration"),
-        Channel::Local => format!("{WARP_CONFIG_DIR}-local"),
+        Channel::Stable | Channel::Oss => CAST_CODES_CONFIG_DIR.to_owned(),
+        Channel::Preview => format!("{CAST_CODES_CONFIG_DIR}-preview"),
+        Channel::Dev => format!("{CAST_CODES_CONFIG_DIR}-dev"),
+        Channel::Integration => format!("{CAST_CODES_CONFIG_DIR}-integration"),
+        Channel::Local => format!("{CAST_CODES_CONFIG_DIR}-local"),
     }
 }
 
@@ -166,7 +177,7 @@ pub fn secure_state_dir() -> Option<PathBuf> {
 
     #[cfg(target_os = "macos")]
     if let Some(app_group_root) = app_group_container_path() {
-        // The macOS project_path is the bundle ID (i.e. `dev.warp.Warp-Stable`).
+        // The macOS project_path is the bundle ID (i.e. `dev.castcodes.CastCodes`).
         let project_dirs = project_dirs()?;
         return Some(
             app_group_root
@@ -239,9 +250,13 @@ fn project_dirs_for_app_id(
     cfg_if::cfg_if! {
         if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             // Adjust the base application name so that we end up with
-            // directories like "warp-terminal" and "warp-terminal-dev", to
+            // directories like "cast-codes" and "cast-codes-dev", to
             // match our Linux package name.
             let base_app_name = match app_id.application_name() {
+                "CastCodes" => "cast-codes".to_owned(),
+                "CastCodesDev" => "cast-codes-dev".to_owned(),
+                "CastCodesPreview" => "cast-codes-preview".to_owned(),
+                "CastCodesLocal" => "cast-codes-local".to_owned(),
                 "Warp" => "Warp-Terminal".to_owned(),
                 "WarpOss" => "Warp-Oss".to_owned(),
                 other if other.starts_with("Warp") => other.replace("Warp", "Warp-Terminal-"),
@@ -275,7 +290,7 @@ pub fn app_group_container_path() -> Option<PathBuf> {
 
         let fm = NSFileManager::defaultManager();
         // Keep in sync with Entitlements.plist
-        let group_id = format!("{}.dev.warp", crate::macos::APPLE_TEAM_ID);
+        let group_id = format!("{}.dev.castcodes", crate::macos::APPLE_TEAM_ID);
         let group_id = NSString::from_str(&group_id);
         // containerURLForSecurityApplicationGroupIdentifier always returns a value on macOS (unlike iOS).
         // We have to double-check that the path points to a directory we can actually use. In addition to

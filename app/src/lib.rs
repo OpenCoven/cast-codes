@@ -2905,5 +2905,46 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::GitCredentialRefresh,
     ]);
 
+    if !ChannelState::cloud_services_available() {
+        flags.retain(|flag| {
+            !matches!(
+                flag,
+                FeatureFlag::Autoupdate
+                    | FeatureFlag::Changelog
+                    | FeatureFlag::ViewingSharedSessions
+                    | FeatureFlag::CreatingSharedSessions
+                    | FeatureFlag::SessionSharingAcls
+                    | FeatureFlag::SharedWithMe
+                    | FeatureFlag::CloudEnvironments
+                    | FeatureFlag::AmbientAgentsCommandLine
+                    | FeatureFlag::AmbientAgentsImageUpload
+                    | FeatureFlag::ScheduledAmbientAgents
+                    | FeatureFlag::APIKeyAuthentication
+                    | FeatureFlag::APIKeyManagement
+                    | FeatureFlag::UsageBasedPricing
+                    | FeatureFlag::TeamApiKeys
+                    | FeatureFlag::AgentSharedSessions
+                    | FeatureFlag::SyncAmbientPlans
+                    | FeatureFlag::CloudConversations
+                    | FeatureFlag::AmbientAgentsRTC
+                    | FeatureFlag::AgentViewConversationListView
+                    | FeatureFlag::CloudMode
+                    | FeatureFlag::CloudModeFromLocalSession
+                    | FeatureFlag::CloudModeImageContext
+                    | FeatureFlag::CloudModeSetupV2
+                    | FeatureFlag::CloudModeInputV2
+                    | FeatureFlag::HandoffLocalCloud
+                    | FeatureFlag::HandoffCloudCloud
+                    | FeatureFlag::OzPlatformSkills
+                    | FeatureFlag::OzIdentityFederation
+                    | FeatureFlag::OzChangelogUpdates
+                    | FeatureFlag::OzLaunchModal
+                    | FeatureFlag::OpenWarpLaunchModal
+                    | FeatureFlag::HOANotifications
+                    | FeatureFlag::HOARemoteControl
+            )
+        });
+    }
+
     flags
 }

@@ -1,6 +1,6 @@
 #![cfg_attr(target_family = "wasm", allow(dead_code))]
 
-use std::{env, fmt, path::Path};
+use std::{env, ffi::OsString, fmt, path::Path};
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use url::Url;
@@ -39,6 +39,12 @@ pub const OZ_HARNESS_ENV: &str = "OZ_HARNESS";
 pub const SERVER_ROOT_URL_OVERRIDE_ENV: &str = "WARP_SERVER_ROOT_URL";
 pub const WS_SERVER_URL_OVERRIDE_ENV: &str = "WARP_WS_SERVER_URL";
 pub const SESSION_SHARING_SERVER_URL_OVERRIDE_ENV: &str = "WARP_SESSION_SHARING_SERVER_URL";
+pub const CAST_CODES_API_KEY_ENV: &str = "CAST_CODES_API_KEY";
+pub const CAST_CODES_OUTPUT_FORMAT_ENV: &str = "CAST_CODES_OUTPUT_FORMAT";
+pub const CAST_CODES_SERVER_ROOT_URL_OVERRIDE_ENV: &str = "CAST_CODES_SERVER_ROOT_URL";
+pub const CAST_CODES_WS_SERVER_URL_OVERRIDE_ENV: &str = "CAST_CODES_WS_SERVER_URL";
+pub const CAST_CODES_SESSION_SHARING_SERVER_URL_OVERRIDE_ENV: &str =
+    "CAST_CODES_SESSION_SHARING_SERVER_URL";
 
 /// Options related to the parent process that spawned this Warp instance.
 #[derive(Debug, Default, Clone, clap::Args)]
@@ -245,7 +251,7 @@ impl Args {
 
                 let command = Self::clap_command();
 
-                command.try_get_matches()
+                command.try_get_matches_from(args_with_cast_codes_env_aliases())
                     .and_then(|matches| Self::from_arg_matches(&matches))
                     .unwrap_or_else(|err| {
                         // We attach a console to ensure help and error messages are printed
@@ -418,6 +424,55 @@ impl Args {
     pub fn session_sharing_server_url(&self) -> Option<&str> {
         self.session_sharing_server_url.as_deref()
     }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn args_with_cast_codes_env_aliases() -> Vec<OsString> {
+    let mut args = env::args_os().collect::<Vec<_>>();
+    append_env_alias_arg(&mut args, CAST_CODES_API_KEY_ENV, "--api-key");
+    append_env_alias_arg(&mut args, CAST_CODES_OUTPUT_FORMAT_ENV, "--output-format");
+    append_env_alias_arg(
+        &mut args,
+        CAST_CODES_SERVER_ROOT_URL_OVERRIDE_ENV,
+        "--server-root-url",
+    );
+    append_env_alias_arg(
+        &mut args,
+        CAST_CODES_WS_SERVER_URL_OVERRIDE_ENV,
+        "--ws-server-url",
+    );
+    append_env_alias_arg(
+        &mut args,
+        CAST_CODES_SESSION_SHARING_SERVER_URL_OVERRIDE_ENV,
+        "--session-sharing-server-url",
+    );
+    args
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn append_env_alias_arg(args: &mut Vec<OsString>, env_name: &str, flag: &str) {
+    if has_cli_flag(args, flag) {
+        return;
+    }
+
+    let Some(value) = env::var_os(env_name) else {
+        return;
+    };
+    if value.is_empty() {
+        return;
+    }
+
+    args.push(OsString::from(flag));
+    args.push(value);
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn has_cli_flag(args: &[OsString], flag: &str) -> bool {
+    let flag_with_value = format!("{flag}=");
+    args.iter().skip(1).any(|arg| {
+        arg.to_str()
+            .is_some_and(|arg| arg == flag || arg.starts_with(&flag_with_value))
+    })
 }
 
 /// Warp may spawn several worker processes - mostly servers that support the main application.
