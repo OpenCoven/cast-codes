@@ -55,6 +55,8 @@ use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::handoff::touched_repos::{
     derive_touched_workspace, extract_paths_from_conversation, pick_handoff_overlap_env,
 };
+#[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
+use crate::ai::blocklist::handoff::PendingCloudLaunch;
 use crate::ai::blocklist::history_model::{load_conversation_from_server, CloudConversationData};
 use crate::ai::blocklist::suggested_agent_mode_workflow_modal::SuggestedAgentModeWorkflowAndId;
 use crate::ai::blocklist::suggested_rule_modal::{
@@ -193,6 +195,9 @@ use crate::settings::{
     DefaultSessionMode, InputModeSettings,
 };
 use crate::settings_view::environments_page::EnvironmentsPage;
+use crate::settings_view::handoff_environment_creation_modal::{
+    HandoffEnvironmentCreationModal, HandoffEnvironmentCreationModalEvent,
+};
 use crate::settings_view::pane_manager::SettingsPaneManager;
 use crate::settings_view::{SettingsSection, SettingsView, SettingsViewEvent};
 #[cfg(all(target_os = "windows", feature = "local_tty"))]
@@ -273,8 +278,6 @@ use crate::terminal::keys_settings::KeysSettings;
 use crate::terminal::shared_session::SharedSessionActionSource;
 
 use crate::ai::blocklist::agent_view::editor::{AgentToolbarEditorEvent, AgentToolbarEditorModal};
-#[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
-use crate::ai::blocklist::handoff::PendingCloudLaunch;
 use crate::prompt::editor_modal::{
     EditorModal as PromptEditorModal, EditorModalEvent as PromptEditorModalEvent,
     OpenSource as PromptEditorOpenSource,
@@ -1076,6 +1079,7 @@ pub struct Workspace {
     tab_config_action_sidecar_item: Option<SidecarItemKind>,
     tab_config_action_sidecar_mouse_states: crate::tab_configs::action_sidecar::SidecarMouseStates,
     remove_tab_config_confirmation_dialog: ViewHandle<RemoveTabConfigConfirmationDialog>,
+    handoff_environment_creation_modal: Option<ViewHandle<HandoffEnvironmentCreationModal>>,
 }
 
 impl Workspace {
@@ -3212,6 +3216,7 @@ impl Workspace {
             tab_config_action_sidecar_mouse_states: Default::default(),
             remove_tab_config_confirmation_dialog:
                 Self::build_remove_tab_config_confirmation_dialog(ctx),
+            handoff_environment_creation_modal: None,
         };
 
         ws.configure_new_workspace(workspace_setting, ctx);
@@ -13068,6 +13073,80 @@ impl Workspace {
         });
     }
 
+    fn show_handoff_environment_creation_modal(&mut self, ctx: &mut ViewContext<Self>) {
+        // Capture the initiating source view now, before async creation begins.
+        // If we waited until the Created callback, the user may have switched panes.
+        #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
+        let source_view = self
+            .active_tab_pane_group()
+            .as_ref(ctx)
+            .active_session_view(ctx);
+
+        let modal = ctx.add_typed_action_view(HandoffEnvironmentCreationModal::new);
+        ctx.subscribe_to_view(&modal, move |me, _, event, ctx| match event {
+            HandoffEnvironmentCreationModalEvent::Created { env_id } => {
+                let env_id = *env_id;
+                me.handoff_environment_creation_modal = None;
+                #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
+                {
+                    if let Some(source_view) = source_view.as_ref() {
+                        let launch = source_view.update(ctx, |view, ctx| {
+                            let input = view.input().clone();
+                            input.update(ctx, |input, ctx| {
+                                let prompt = input
+                                    .editor()
+                                    .as_ref(ctx)
+                                    .buffer_text(ctx)
+                                    .trim()
+                                    .to_owned();
+                                let attachments = input.collect_cloud_launch_attachments(ctx);
+                                input.exit_cloud_handoff_compose_and_clear(ctx);
+                                if prompt.is_empty() {
+                                    None
+                                } else {
+                                    Some(PendingCloudLaunch {
+                                        prompt,
+                                        attachments,
+                                    })
+                                }
+                            })
+                        });
+                        ctx.dispatch_typed_action_deferred(
+                            WorkspaceAction::OpenLocalToCloudHandoffPane {
+                                launch,
+                                explicit_environment_id: Some(env_id),
+                            },
+                        );
+                    }
+                }
+                #[cfg(not(all(feature = "local_fs", not(target_family = "wasm"))))]
+                {
+                    let _ = env_id;
+                }
+            }
+            HandoffEnvironmentCreationModalEvent::Cancelled => {
+                me.handoff_environment_creation_modal = None;
+                me.focus_active_tab(ctx);
+            }
+            HandoffEnvironmentCreationModalEvent::CreationFailed { error_message } => {
+                me.handoff_environment_creation_modal = None;
+                me.toast_stack.update(ctx, |toast_stack, ctx| {
+                    toast_stack.add_ephemeral_toast(
+                        DismissibleToast::error(format!(
+                            "Failed to create environment: {error_message}"
+                        )),
+                        ctx,
+                    );
+                });
+                me.focus_active_tab(ctx);
+            }
+        });
+        modal.update(ctx, |modal, ctx| modal.show(ctx));
+        ctx.focus(&modal);
+        self.handoff_environment_creation_modal = Some(modal);
+        ctx.notify();
+    }
+
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
     fn show_handoff_prepare_failed_toast(window_id: WindowId, ctx: &mut ViewContext<Self>) {
         WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
@@ -20636,6 +20715,9 @@ impl TypedActionView for Workspace {
                     let _ = (launch, explicit_environment_id);
                 }
             }
+            ShowHandoffEnvironmentCreationModal => {
+                self.show_handoff_environment_creation_modal(ctx);
+            }
             OpenNetworkLogPane => {
                 self.open_network_log_pane(ctx);
             }
@@ -23410,6 +23492,10 @@ impl View for Workspace {
 
         if let Some(lightbox_view) = &self.lightbox_view {
             stack.add_child(ChildView::new(lightbox_view).finish());
+        }
+
+        if let Some(handoff_modal) = &self.handoff_environment_creation_modal {
+            stack.add_child(ChildView::new(handoff_modal).finish());
         }
 
         if FeatureFlag::CreatingSharedSessions.is_enabled()
