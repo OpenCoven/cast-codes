@@ -21,7 +21,7 @@ use warp_editor::{
             DisplayOptions, DisplayStateHandle, RichTextAction, RichTextElement,
             VerticalExpansionBehavior,
         },
-        model::{BlockItem, HitTestBlockType, Location, RenderState},
+        model::{BlockItem, HitTestBlockType, Location, RenderState, RichTextStyles},
     },
     selection::{TextDirection, TextUnit},
 };
@@ -200,8 +200,8 @@ pub fn init(app: &mut AppContext) {
         ),
         FixedBinding::new("tab", EditorViewAction::Tab, text_entry.clone()),
         FixedBinding::new("shift-tab", EditorViewAction::ShiftTab, text_entry.clone()),
-        // Also create the word movement shortcuts with `meta` in place of `alt`, to accommodate
-        // the "Left Option is Meta" and "Right Option is Meta" settings.
+        // Also create the word movement and word deletion shortcuts with `meta` in place of
+        // `alt`, to accommodate the "Left Option is Meta" and "Right Option is Meta" settings.
         FixedBinding::new(
             "meta-left",
             EditorViewAction::MoveBackwardsByWord,
@@ -210,6 +210,16 @@ pub fn init(app: &mut AppContext) {
         FixedBinding::new(
             "meta-right",
             EditorViewAction::MoveForwardsByWord,
+            text_entry.clone(),
+        ),
+        FixedBinding::new(
+            "meta-backspace",
+            EditorViewAction::DeleteWordLeft,
+            text_entry.clone(),
+        ),
+        FixedBinding::new(
+            "meta-d",
+            EditorViewAction::CutWordRight,
             text_entry.clone(),
         ),
         FixedBinding::new_per_platform(
@@ -466,7 +476,7 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding("ctrl-f"),
         EditableBinding::new(
             // This doesn't reuse the move_to_line_start naming from the terminal input editor to
-            // distinguish between soft-wrapped line and hard-wrapped line (paragraph) movement.
+            // distinguish between soft-wrappped line and hard-wrapped line (paragraph) movement.
             "editor_view:move_to_paragraph_start",
             "Move to start of paragraph",
             EditorViewAction::MoveToParagraphStart,
@@ -996,7 +1006,7 @@ struct MouseStateHandles {
     secondary_link_mouse_handle: MouseStateHandle,
 }
 
-// Represents the states of an ongoing mouse event. Note that these states are mutually exclusive:
+// Represents the states of an ongoing mouse event. Note that these states are mutally exclusive:
 // If one is selecting, they couldn't be initiating task list toggling at the same time.
 enum OngoingMouseEvent {
     Selecting,
@@ -1082,6 +1092,9 @@ pub struct RichTextEditorView {
 
     /// When true, the block insertion menu (slash menu) is disabled.
     disable_block_insertion_menu: bool,
+
+    /// Custom factory for rebuilding [`RichTextStyles`] when appearance or font settings change.
+    style_factory: Option<fn(&Appearance, &FontSettings) -> RichTextStyles>,
 }
 
 #[derive(Default)]
@@ -1105,6 +1118,10 @@ pub struct RichTextEditorConfig {
     /// Enable or disable the block insertion menu (slash menu).
     /// When disabled, typing "/" will not open the menu.
     pub disable_block_insertion_menu: bool,
+
+    /// Custom factory for rebuilding [`RichTextStyles`] when appearance or font settings change.
+    /// When `None`, the default notebook styles are used.
+    pub style_factory: Option<fn(&Appearance, &FontSettings) -> RichTextStyles>,
 }
 
 impl RichTextEditorView {
@@ -1189,6 +1206,7 @@ impl RichTextEditorView {
             can_execute_shell_commands: config.can_execute_shell_commands.unwrap_or(true),
             disable_scrolling: config.disable_scrolling,
             disable_block_insertion_menu: config.disable_block_insertion_menu,
+            style_factory: config.style_factory,
         }
     }
 
@@ -1309,7 +1327,10 @@ impl RichTextEditorView {
     fn handle_appearance_or_font_change(&mut self, ctx: &mut ViewContext<Self>) {
         let font_settings = FontSettings::as_ref(ctx);
         let appearance = Appearance::as_ref(ctx);
-        let new_styles = rich_text_styles(appearance, font_settings);
+        let new_styles = match self.style_factory {
+            Some(factory) => factory(appearance, font_settings),
+            None => rich_text_styles(appearance, font_settings),
+        };
         self.model.update(ctx, move |model, ctx| {
             model.update_rich_text_styles(new_styles, ctx);
         });

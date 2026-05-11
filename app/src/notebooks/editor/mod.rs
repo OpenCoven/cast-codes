@@ -38,9 +38,12 @@ pub mod model;
 pub mod notebook_command;
 mod omnibar;
 pub mod view;
+mod styles;
 
 pub use block_insertion_menu::BlockInsertionSource;
 use warpui::elements::ListIndentLevel;
+
+pub use styles::RichTextStylesExt;
 
 const NOTEBOOK_LINE_HEIGHT_RATIO: f32 = 1.6;
 const NOTEBOOK_BASELINE_RATIO: f32 = 0.7;
@@ -202,6 +205,12 @@ pub(crate) fn markdown_table_style(
 
 /// Build [`RichTextStyles`] based on the current [`Appearance`].
 pub fn rich_text_styles(appearance: &Appearance, font_settings: &FontSettings) -> RichTextStyles {
+    rich_text_styles_internal(appearance, font_settings, NOTEBOOK_LINE_HEIGHT_RATIO, NOTEBOOK_BASELINE_RATIO)
+}
+
+/// Build [`RichTextStyles`] based on the current [`Appearance`].
+fn rich_text_styles_internal(appearance: &Appearance, font_settings: &FontSettings, line_height_ratio: f32, baseline_ratio: f32) -> RichTextStyles {
+
     let theme = appearance.theme();
     let inline_font_color: ColorU = theme.terminal_colors().normal.red.into();
     let font_size = derived_notebook_font_size(font_settings);
@@ -209,19 +218,19 @@ pub fn rich_text_styles(appearance: &Appearance, font_settings: &FontSettings) -
         base_text: ParagraphStyles {
             font_size,
             font_weight: Default::default(),
-            line_height_ratio: NOTEBOOK_LINE_HEIGHT_RATIO,
+            line_height_ratio,
             font_family: appearance.ui_font_family(),
             text_color: theme.main_text_color(theme.background()).into_solid(),
-            baseline_ratio: NOTEBOOK_BASELINE_RATIO,
+            baseline_ratio,
             fixed_width_tab_size: None,
         },
         code_text: ParagraphStyles {
             font_family: appearance.monospace_font_family(),
             font_size,
             font_weight: Default::default(),
-            line_height_ratio: NOTEBOOK_LINE_HEIGHT_RATIO,
+            line_height_ratio,
             text_color: theme.main_text_color(theme.background()).into_solid(),
-            baseline_ratio: NOTEBOOK_BASELINE_RATIO,
+            baseline_ratio,
             fixed_width_tab_size: Some(4),
         },
         code_background: theme.background().into(),
@@ -229,10 +238,10 @@ pub fn rich_text_styles(appearance: &Appearance, font_settings: &FontSettings) -
         embedding_text: ParagraphStyles {
             font_size,
             font_weight: Default::default(),
-            line_height_ratio: NOTEBOOK_LINE_HEIGHT_RATIO,
+            line_height_ratio,
             font_family: appearance.monospace_font_family(),
             text_color: theme.main_text_color(theme.surface_2()).into_solid(),
-            baseline_ratio: NOTEBOOK_BASELINE_RATIO,
+            baseline_ratio,
             fixed_width_tab_size: Some(4),
         },
         code_border: Border::all(1.).with_border_fill(theme.surface_3()),
@@ -274,6 +283,8 @@ pub fn rich_text_styles(appearance: &Appearance, font_settings: &FontSettings) -
         table_style: markdown_table_style(appearance, appearance.ui_font_family(), font_size),
     }
 }
+
+
 
 impl From<BlockType> for BufferBlockStyle {
     fn from(block_type: BlockType) -> Self {

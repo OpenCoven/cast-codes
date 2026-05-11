@@ -515,6 +515,13 @@ pub struct IndentableBlockSpacing {
 }
 
 impl IndentableBlockSpacing {
+    pub fn new(margin: Margin, unit_padding: f32) -> Self {
+        Self {
+            margin,
+            unit_padding,
+        }
+    }
+
     pub fn to_spacing(&self, indent_level: ListIndentLevel) -> BlockSpacing {
         BlockSpacing {
             margin: self.margin,
@@ -541,6 +548,27 @@ impl Default for BlockSpacings {
 }
 
 impl BlockSpacings {
+    /// Creates a `BlockSpacings` where all block types use the same spacing.
+    pub fn uniform(spacing: BlockSpacing) -> Self {
+        Self {
+            text: spacing,
+            header: spacing,
+            code_block: spacing,
+            task_list: IndentableBlockSpacing {
+                margin: spacing.margin,
+                unit_padding: 0.,
+            },
+            ordered_list: IndentableBlockSpacing {
+                margin: spacing.margin,
+                unit_padding: 0.,
+            },
+            unordered_list: IndentableBlockSpacing {
+                margin: spacing.margin,
+                unit_padding: 0.,
+            },
+        }
+    }
+
     pub fn from_block_style(&self, block_type: &BufferBlockStyle) -> BlockSpacing {
         match block_type {
             BufferBlockStyle::Header { .. } => self.header,
