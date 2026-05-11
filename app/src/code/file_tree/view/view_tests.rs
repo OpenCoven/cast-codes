@@ -1,13 +1,15 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use repo_metadata::entry::{DirectoryEntry, Entry, FileMetadata};
-use repo_metadata::file_tree_store::FileTreeState;
+use repo_metadata::file_tree_store::{FileTreeEntry, FileTreeState};
 use repo_metadata::local_model::IndexedRepoState;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
 use repo_metadata::RepoMetadataModel;
 use virtual_fs::{Stub, VirtualFS};
 use warp_core::ui::appearance::Appearance;
+use warp_core::HostId;
 use warpui::{platform::WindowStyle, App, ModelHandle};
 
 use crate::auth::AuthStateProvider;
@@ -19,7 +21,7 @@ use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace::ToastStack;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
-use super::FileTreeView;
+use super::{FileTreeAction, FileTreeIdentifier, FileTreeView, RootDirectory};
 
 fn std_path(path: &std::path::Path) -> warp_util::standardized_path::StandardizedPath {
     warp_util::standardized_path::StandardizedPath::try_from_local(path).unwrap()
@@ -110,6 +112,227 @@ fn build_repo_state_with_unloaded_directory(repo_root: &std::path::Path) -> File
         loaded: true,
     });
     FileTreeState::new(root, vec![], None)
+}
+
+fn menu_item_labels(items: &[crate::menu::MenuItem<FileTreeAction>]) -> Vec<String> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            crate::menu::MenuItem::Item(fields) => Some(fields.label().to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn directory_id_for_path(
+    view: &FileTreeView,
+    root: &warp_util::standardized_path::StandardizedPath,
+    path: &warp_util::standardized_path::StandardizedPath,
+) -> FileTreeIdentifier {
+    view.find_directory_header_id(root, path)
+        .expect("directory should exist in flattened tree")
+}
+
+#[test]
+fn local_directory_context_menu_includes_new_file_and_new_folder() {
+    VirtualFS::test("file_tree_local_directory_create_menu", |dirs, mut vfs| {
+        vfs.mkdir("repo/src");
+        let repo_root = dirs.tests().join("repo");
+        let src_dir = repo_root.join("src");
+
+        App::test((), |mut app| async move {
+            let _ = initialize_app(&mut app);
+            let (_, file_tree_view) = app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                view.set_is_active(true, ctx);
+                view.set_root_directories(vec![repo_root.clone()], ctx);
+            });
+
+            file_tree_view.read(&app, |view, _ctx| {
+                let root = std_path(&repo_root);
+                let src = std_path(&src_dir);
+                let id = directory_id_for_path(view, &root, &src);
+                let root_dir = view.root_directories.get(&root).unwrap();
+                let item = root_dir.items.get(id.index).unwrap();
+                let labels = menu_item_labels(&view.context_menu_items(item, &id));
+
+                assert!(labels.contains(&"New file".to_string()));
+                assert!(labels.contains(&"New folder".to_string()));
+            });
+        });
+    });
+}
+
+#[test]
+fn remote_directory_context_menu_omits_create_actions() {
+    App::test((), |mut app| async move {
+        let _ = initialize_app(&mut app);
+        let (_, file_tree_view) = app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
+        let remote_root = warp_util::standardized_path::StandardizedPath::try_new("/remote/repo")
+            .expect("remote path should be valid");
+
+        file_tree_view.update(&mut app, |view, _ctx| {
+            view.displayed_directories.push(remote_root.clone());
+            view.root_directories.insert(
+                remote_root.clone(),
+                RootDirectory {
+                    entry: FileTreeEntry::new_for_directory(Arc::new(remote_root.clone())),
+                    expanded_folders: HashSet::new(),
+                    items: Vec::new(),
+                    item_states: HashMap::new(),
+                    remote_host_id: Some(HostId::new("host-a".to_string())),
+                },
+            );
+            view.rebuild_flattened_items_for_root(&remote_root);
+        });
+
+        file_tree_view.read(&app, |view, _ctx| {
+            let id = directory_id_for_path(view, &remote_root, &remote_root);
+            let root_dir = view.root_directories.get(&remote_root).unwrap();
+            let item = root_dir.items.get(id.index).unwrap();
+            let labels = menu_item_labels(&view.context_menu_items(item, &id));
+
+            assert!(!labels.contains(&"New file".to_string()));
+            assert!(!labels.contains(&"New folder".to_string()));
+        });
+    });
+}
+
+#[test]
+fn committing_new_folder_creates_directory_and_updates_tree() {
+    VirtualFS::test("file_tree_create_folder", |dirs, mut vfs| {
+        vfs.mkdir("repo/src");
+        let repo_root = dirs.tests().join("repo");
+        let src_dir = repo_root.join("src");
+        let created_dir = src_dir.join("components");
+
+        App::test((), |mut app| async move {
+            let _ = initialize_app(&mut app);
+            let (_, file_tree_view) = app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                view.set_is_active(true, ctx);
+                view.set_root_directories(vec![repo_root.clone()], ctx);
+            });
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                let root = std_path(&repo_root);
+                let src = std_path(&src_dir);
+                let id = directory_id_for_path(view, &root, &src);
+
+                view.create_new_folder(&id, ctx);
+                view.editor_view.update(ctx, |editor, ctx| {
+                    editor.set_buffer_text("components", ctx);
+                });
+                view.commit_pending_edit(ctx);
+            });
+
+            assert!(created_dir.is_dir());
+            file_tree_view.read(&app, |view, _ctx| {
+                let root = std_path(&repo_root);
+                let created = std_path(&created_dir);
+                let root_dir = view.root_directories.get(&root).unwrap();
+
+                assert!(root_dir.entry.contains(&created));
+                let selected = view.selected_item.as_ref().expect("new folder selected");
+                let selected_item = root_dir.items.get(selected.index).unwrap();
+                assert_eq!(selected_item.path(), &created);
+            });
+        });
+    });
+}
+
+#[test]
+fn canceling_new_folder_removes_placeholder() {
+    VirtualFS::test("file_tree_cancel_create_folder", |dirs, mut vfs| {
+        vfs.mkdir("repo/src");
+        let repo_root = dirs.tests().join("repo");
+        let src_dir = repo_root.join("src");
+        let placeholder_dir = src_dir.join("new_folder");
+
+        App::test((), |mut app| async move {
+            let _ = initialize_app(&mut app);
+            let (_, file_tree_view) = app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                view.set_is_active(true, ctx);
+                view.set_root_directories(vec![repo_root.clone()], ctx);
+            });
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                let root = std_path(&repo_root);
+                let src = std_path(&src_dir);
+                let id = directory_id_for_path(view, &root, &src);
+
+                view.create_new_folder(&id, ctx);
+                view.cancel_pending_edit(ctx);
+            });
+
+            assert!(!placeholder_dir.exists());
+            file_tree_view.read(&app, |view, _ctx| {
+                let root = std_path(&repo_root);
+                let placeholder = std_path(&placeholder_dir);
+                let root_dir = view.root_directories.get(&root).unwrap();
+
+                assert!(!root_dir
+                    .items
+                    .iter()
+                    .any(|item| item.path() == &placeholder));
+                assert!(!root_dir.entry.contains(&placeholder));
+                assert!(view.pending_edit.is_none());
+            });
+        });
+    });
+}
+
+#[test]
+fn failed_new_folder_create_removes_placeholder() {
+    VirtualFS::test("file_tree_failed_create_folder", |dirs, mut vfs| {
+        vfs.mkdir("repo/src/components");
+        let repo_root = dirs.tests().join("repo");
+        let src_dir = repo_root.join("src");
+        let placeholder_dir = src_dir.join("new_folder");
+        let existing_dir = src_dir.join("components");
+
+        App::test((), |mut app| async move {
+            let _ = initialize_app(&mut app);
+            let (_, file_tree_view) = app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                view.set_is_active(true, ctx);
+                view.set_root_directories(vec![repo_root.clone()], ctx);
+            });
+
+            file_tree_view.update(&mut app, |view, ctx| {
+                let root = std_path(&repo_root);
+                let src = std_path(&src_dir);
+                let id = directory_id_for_path(view, &root, &src);
+
+                view.create_new_folder(&id, ctx);
+                view.editor_view.update(ctx, |editor, ctx| {
+                    editor.set_buffer_text("components", ctx);
+                });
+                view.commit_pending_edit(ctx);
+            });
+
+            assert!(existing_dir.is_dir());
+            assert!(!placeholder_dir.exists());
+            file_tree_view.read(&app, |view, _ctx| {
+                let root = std_path(&repo_root);
+                let placeholder = std_path(&placeholder_dir);
+                let existing = std_path(&existing_dir);
+                let root_dir = view.root_directories.get(&root).unwrap();
+
+                assert!(root_dir.entry.contains(&existing));
+                assert!(!root_dir
+                    .items
+                    .iter()
+                    .any(|item| item.path() == &placeholder));
+                assert!(view.pending_edit.is_none());
+            });
+        });
+    });
 }
 
 #[test]
