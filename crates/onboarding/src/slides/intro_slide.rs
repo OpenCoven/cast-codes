@@ -63,7 +63,7 @@ impl View for IntroSlide {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
         let content = self.render_centered_content(appearance);
-        let constrained = ConstrainedBox::new(content).with_max_width(421.).finish();
+        let constrained = ConstrainedBox::new(content).with_max_width(620.).finish();
         // Background is rendered by the parent onboarding view (including background images).
         let centered = Container::new(Align::new(constrained).finish()).finish();
 
@@ -147,7 +147,7 @@ impl IntroSlide {
         let base_color: ColorU = internal_colors::fg_overlay_4(theme).into();
         let shimmer_color: ColorU = theme.foreground().into();
         let title = ShimmeringTextElement::new(
-            "Welcome to Warp",
+            "Cast Codes with OpenCoven",
             appearance.ui_font_family(),
             32.,
             base_color,
@@ -159,7 +159,7 @@ impl IntroSlide {
 
         let subtitle_color = internal_colors::text_sub(theme, theme.background().into_solid());
         let subtitle = FormattedTextElement::from_str(
-            "A modern terminal with state of the art agents built in.",
+            "A sovereign terminal for conjuring agents, shaping code, and shipping with command.",
             appearance.ui_font_family(),
             16.,
         )
