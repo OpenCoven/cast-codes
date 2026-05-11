@@ -1170,26 +1170,31 @@ impl View for LeftPanelView {
                     .with_cross_axis_alignment(CrossAxisAlignment::Center)
                     .with_spacing(4.0);
 
-                // Show hidden files toggle when Project Explorer is active
                 if self.active_view() == ToolPanelView::ProjectExplorer {
-                    let is_active = *CodeSettings::as_ref(app).show_hidden_files;
-                    let icon_color = if is_active {
-                        appearance.theme().foreground()
+                    let show_hidden_files = *CodeSettings::as_ref(app).show_hidden_files;
+                    let icon = if show_hidden_files {
+                        icons::Icon::EyeOff
                     } else {
-                        appearance
-                            .theme()
-                            .sub_text_color(appearance.theme().background())
+                        icons::Icon::Eye
                     };
+                    let tooltip_label = if show_hidden_files {
+                        "Hide hidden files"
+                    } else {
+                        "Show hidden files"
+                    };
+                    let icon_color = appearance
+                        .theme()
+                        .sub_text_color(appearance.theme().background());
                     let tooltip = appearance
                         .ui_builder()
-                        .tool_tip("Toggle hidden files".to_string())
+                        .tool_tip(tooltip_label.to_string())
                         .build()
                         .finish();
                     row = row.with_child(
                         icon_button_with_color(
                             appearance,
-                            icons::Icon::Eye,
-                            is_active,
+                            icon,
+                            false,
                             self.mouse_state_handles.hidden_files_toggle.clone(),
                             icon_color,
                         )
