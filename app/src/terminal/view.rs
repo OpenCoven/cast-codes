@@ -21822,10 +21822,10 @@ impl TerminalView {
         };
 
         let start = block.start_ts().map_or_else(String::new, |b| {
-            format!("Started at: {}", b.format("%a %b %-d at %-I:%M %p"))
+            format!("Started at: {}", b.format("%a %b %-d at %-I:%M:%S %p"))
         });
         let end = block.completed_ts().map_or_else(String::new, |b| {
-            format!("\nCompleted at: {}", b.format("%a %b %-d at %-I:%M %p"))
+            format!("\nCompleted at: {}", b.format("%a %b %-d at %-I:%M:%S %p"))
         });
         format!("{start}{end}")
     }

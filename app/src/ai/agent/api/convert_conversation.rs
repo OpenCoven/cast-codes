@@ -2063,7 +2063,7 @@ fn convert_passive_suggestion_result_to_input(
         context,
     })
 }
-fn proto_timestamp_to_local_datetime(seconds: i64, nanos: i32) -> DateTime<Local> {
+pub(crate) fn proto_timestamp_to_local_datetime(seconds: i64, nanos: i32) -> DateTime<Local> {
     let nanos = if nanos < 0 { 0 } else { nanos as u32 };
 
     Local

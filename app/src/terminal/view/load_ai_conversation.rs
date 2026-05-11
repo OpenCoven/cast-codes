@@ -24,7 +24,23 @@ use itertools::Itertools;
 use prost::Message;
 use std::ops::Not;
 
+use crate::ai::agent::api::convert_conversation::proto_timestamp_to_local_datetime;
+
 use super::DEFAULT_AI_BLOCK_HEIGHT;
+
+/// A RunShellCommandResult paired with the tool call message timestamp (start)
+/// and the tool call result message timestamp (end).
+struct RunShellCommandResultWithTimestamps {
+    result: api::RunShellCommandResult,
+    /// Estimated timestamp when the command started.
+    /// Note that this may not be perfectly accurate, because it may come from the tool call timestamp
+    /// which is when the agent made the tool call, before the command actually started.
+    start_ts: Option<DateTime<Local>>,
+    /// Estimated timestamp when the command finished.
+    /// Note that this may not be perfectly accurate, because it may come from the tool call result timestamp
+    /// which is when the server receives the result, after the command actually finished.
+    completed_ts: Option<DateTime<Local>>,
+}
 
 use crate::ai::agent::task::helper::MessageExt;
 use crate::ai::agent::AIAgentActionResultType;
@@ -887,29 +903,55 @@ impl TerminalView {
         }
     }
 
-    /// Helper function to find a tool call result from a conversation's tasks given a message ID.
-    /// Returns the RunShellCommandResult if found.
+    /// Helper function to find a run shell command result tool call result from a conversation's tasks
+    /// given the message ID of the run shell command tool call.
+    /// Returns the RunShellCommandResult along with the tool call message timestamp (start)
+    /// and the tool call result message timestamp (end).
     fn find_run_shell_command_result_for_message(
         conversation: &AIConversation,
         message_id: &MessageId,
-    ) -> Option<api::RunShellCommandResult> {
-        // Find the message in any task with the given ID.
-        let tool_call_id = conversation
+    ) -> Option<RunShellCommandResultWithTimestamps> {
+        // Find the tool call message and extract its timestamp (command start time)
+        // and the tool_call_id.
+        let (tool_call_id, tool_call_ts) = conversation
+            .all_tasks()
+            .filter_map(|task| task.source())
+            .find_map(|api_task| {
+                let msg = api_task
+                    .messages
+                    .iter()
+                    .find(|msg| msg.id == **message_id)?;
+                let tool_call = msg.tool_call()?;
+                let ts = msg
+                    .timestamp
+                    .as_ref()
+                    .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos));
+                Some((tool_call.tool_call_id.clone(), ts))
+            })?;
+
+        // Find the result and extract the result message's timestamp (command end time).
+        let (result, result_message_id) =
+            conversation.find_run_shell_command_result(&tool_call_id)?;
+        let result_ts = conversation
             .all_tasks()
             .filter_map(|task| task.source())
             .find_map(|api_task| {
                 api_task
                     .messages
                     .iter()
-                    .find(|msg| msg.id == **message_id)
-                    .and_then(|message| message.tool_call())
-                    .map(|tool_call| tool_call.tool_call_id.clone())
-            })?;
+                    .find(|msg| msg.id == result_message_id)
+                    .and_then(|msg| {
+                        msg.timestamp
+                            .as_ref()
+                            .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
+                    })
+            });
 
-        // Use the conversation's method to find the result
-        conversation
-            .find_run_shell_command_result(&tool_call_id)
-            .map(|(result, _)| result)
+        Some(RunShellCommandResultWithTimestamps {
+            result,
+            start_ts: tool_call_ts,
+            completed_ts: result_ts,
+        })
     }
 
     /// Process code diffs from AI output messages and apply them to the AI block for rendering
@@ -945,8 +987,8 @@ impl TerminalView {
                     id: msg_id,
                     ..
                 } if should_create_requested_command_block => {
-                    // Get the tool call result from the conversation's tasks.
-                    let cmd_result =
+                    // Get the tool call result and timestamps from the conversation's tasks.
+                    let cmd_result_with_timestamps =
                         BlocklistAIHistoryModel::handle(ctx).read(ctx, |history_model, _| {
                             history_model
                                 .conversation(&conversation_id)
@@ -957,7 +999,12 @@ impl TerminalView {
                                     )
                                 })
                         });
-                    if let Some(cmd_result) = cmd_result {
+                    if let Some(RunShellCommandResultWithTimestamps {
+                        result: cmd_result,
+                        start_ts,
+                        completed_ts,
+                    }) = cmd_result_with_timestamps
+                    {
                         // Check if the command finished successfully
                         if let Some(api::run_shell_command_result::Result::CommandFinished(
                             api::ShellCommandFinished {
@@ -977,6 +1024,8 @@ impl TerminalView {
                                 *exit_code,
                                 Some(id.clone()),
                                 Some(conversation_id),
+                                start_ts,
+                                completed_ts,
                             );
                         }
                     }

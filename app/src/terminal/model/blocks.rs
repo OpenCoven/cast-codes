@@ -2668,6 +2668,11 @@ impl BlockList {
     /// Creates a restored command block with the given command, output, and exit code.
     /// This is used for creating command blocks from restored AI conversation data.
     /// The block is created hidden by default and can be toggled visible by the RequestedCommandView.
+    ///
+    /// If `start_ts` and/or `completed_ts` are provided, they override the timestamps that
+    /// `start()` / `finish()` would otherwise set to `Local::now()`. This ensures restored
+    /// blocks carry the original execution timestamps from the conversation transcript.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_restored_command_block(
         &mut self,
         command: &str,
@@ -2676,6 +2681,8 @@ impl BlockList {
         exit_code: i32,
         action_id: Option<AIAgentActionId>,
         conversation_id: Option<AIConversationId>,
+        start_ts: Option<DateTime<Local>>,
+        completed_ts: Option<DateTime<Local>>,
     ) {
         let did_active_block_receive_precmd_already = self.active_block().has_received_precmd();
         let precmd_value = PrecmdValue {
@@ -2712,6 +2719,15 @@ impl BlockList {
         // Finish the block (should transition from Executing to DoneWithExecution)
         self.active_block_mut().finish(exit_code);
         self.update_active_block_height();
+
+        // Override timestamps with the actual values from the conversation transcript,
+        // mirroring what restore_block() does for serialized blocks.
+        if let Some(ts) = start_ts {
+            self.active_block_mut().override_start_ts(ts);
+        }
+        if let Some(ts) = completed_ts {
+            self.active_block_mut().override_completed_ts(ts);
+        }
 
         // Set AI metadata if provided
         if let (Some(action_id), Some(conversation_id)) = (action_id, conversation_id) {
