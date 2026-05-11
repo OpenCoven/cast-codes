@@ -1,11 +1,12 @@
 use std::{collections::HashMap, ffi::OsString, path::PathBuf, sync::Arc};
 
 use crate::ai::{
+    agent::conversation::LocalClaudeHarnessMetadata,
     agent_sdk::{
         driver::{
             harness::{
-                claude_code::prepare_claude_environment_config, harness_kind,
-                harness_model_env_vars, HarnessKind,
+                claude_code::{prepare_claude_environment_config, CLAUDE_CODE_FORMAT},
+                harness_kind, harness_model_env_vars, HarnessKind,
             },
             AgentDriverError,
         },
@@ -14,6 +15,7 @@ use crate::ai::{
     ambient_agents::{task::HarnessConfig, AgentConfigSnapshot, AmbientAgentTaskId},
 };
 use crate::server::server_api::ai::AIClient;
+use crate::server::server_api::harness_support::HarnessSupportClient;
 use crate::terminal::cli_agent_sessions::plugin_manager::plugin_manager_for;
 use crate::terminal::shell::ShellType;
 use shell_words::quote as shell_quote;
@@ -26,6 +28,17 @@ pub(super) struct PreparedLocalHarnessLaunch {
     pub env_vars: HashMap<OsString, OsString>,
     pub run_id: String,
     pub task_id: AmbientAgentTaskId,
+    pub local_claude_harness_metadata: Option<LocalClaudeHarnessMetadata>,
+}
+pub(super) struct LocalHarnessChildLaunchRequest {
+    pub prompt: String,
+    pub harness_type: String,
+    pub model_id: Option<String>,
+    pub parent_run_id: Option<String>,
+    pub shell_type: Option<ShellType>,
+    pub startup_directory: Option<PathBuf>,
+    pub ai_client: Arc<dyn AIClient>,
+    pub harness_support_client: Arc<dyn HarnessSupportClient>,
 }
 
 pub(super) fn normalize_local_child_harness(harness_type: &str) -> Option<Harness> {
@@ -46,8 +59,7 @@ pub(super) fn validate_local_harness_shell(shell_type: Option<ShellType>) -> Res
     }
 }
 
-pub(super) fn build_local_claude_child_command(prompt: &str) -> String {
-    let session_id = Uuid::new_v4();
+pub(super) fn build_local_claude_child_command(prompt: &str, session_id: Uuid) -> String {
     let quoted_prompt = shell_quote(prompt);
     // Local child harness panes are launched off-screen. We intentionally skip
     // Claude's own permission prompts here so the child can start unattended
@@ -78,14 +90,18 @@ fn local_child_task_config(harness: Harness) -> Option<AgentConfigSnapshot> {
 }
 
 pub(super) async fn prepare_local_harness_child_launch(
-    prompt: String,
-    harness_type: String,
-    model_id: Option<String>,
-    parent_run_id: Option<String>,
-    shell_type: Option<ShellType>,
-    startup_directory: Option<PathBuf>,
-    ai_client: Arc<dyn AIClient>,
+    request: LocalHarnessChildLaunchRequest,
 ) -> Result<PreparedLocalHarnessLaunch, String> {
+    let LocalHarnessChildLaunchRequest {
+        prompt,
+        harness_type,
+        model_id,
+        parent_run_id,
+        shell_type,
+        startup_directory,
+        ai_client,
+        harness_support_client,
+    } = request;
     let Some(harness) = normalize_local_child_harness(&harness_type) else {
         let harness_name = harness_type.trim();
         return Err(if harness_name.is_empty() {
@@ -95,6 +111,7 @@ pub(super) async fn prepare_local_harness_child_launch(
         });
     };
     validate_local_harness_shell(shell_type)?;
+    let mut local_claude_harness_metadata = None;
     let command = match harness {
         Harness::Oz => unreachable!("normalize_local_child_harness filters out Oz"),
         Harness::Unknown => unreachable!("normalize_local_child_harness filters out Unknown"),
@@ -132,7 +149,19 @@ pub(super) async fn prepare_local_harness_child_launch(
                 }
             }
 
-            build_local_claude_child_command(&prompt)
+            let conversation_id = harness_support_client
+                .create_external_conversation(CLAUDE_CODE_FORMAT)
+                .await
+                .map_err(|error| {
+                    format!("Failed to create local Claude child conversation: {error}")
+                })?;
+            let session_id = Uuid::new_v4();
+            local_claude_harness_metadata = Some(LocalClaudeHarnessMetadata {
+                conversation_id,
+                session_id,
+                working_dir,
+            });
+            build_local_claude_child_command(&prompt, session_id)
         }
         Harness::Codex => {
             let HarnessKind::ThirdParty(third_party_harness) =
@@ -172,6 +201,20 @@ pub(super) async fn prepare_local_harness_child_launch(
                 harness.display_name()
             )
         })?;
+    if let Some(metadata) = local_claude_harness_metadata.as_ref() {
+        ai_client
+            .update_agent_task(
+                task_id,
+                None,
+                None,
+                Some(metadata.conversation_id.to_string()),
+                None,
+            )
+            .await
+            .map_err(|error| {
+                format!("Failed to link local Claude child task to conversation: {error}")
+            })?;
+    }
 
     let mut env_vars = task_env_vars(Some(&task_id), parent_run_id.as_deref(), harness);
     // Propagate the selected model to Claude Code via ANTHROPIC_MODEL.
@@ -184,6 +227,7 @@ pub(super) async fn prepare_local_harness_child_launch(
         env_vars,
         run_id: task_id.to_string(),
         task_id,
+        local_claude_harness_metadata,
     })
 }
 
