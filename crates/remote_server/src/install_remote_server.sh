@@ -14,7 +14,7 @@ set -e
 
 arch=$(uname -m)
 case "$arch" in
-  x86_64)        arch_name=x86_64 ;;
+  x86_64|amd64)  arch_name=x86_64 ;;
   aarch64|arm64) arch_name=aarch64 ;;
   *) echo "unsupported arch: $arch" >&2; exit 2 ;;
 esac
@@ -54,6 +54,8 @@ cleanup() {
   rm -rf "$tmpdir" 2>/dev/null || true
 }
 trap cleanup EXIT
+
+command -v tar >/dev/null 2>&1 || { echo "error: tar is not available — please install tar and try again" >&2; exit 1; }
 
 staging_tarball_path="{staging_tarball_path}"
 if [ -n "$staging_tarball_path" ]; then
