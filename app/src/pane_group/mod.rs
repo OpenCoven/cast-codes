@@ -60,7 +60,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{mpsc::SyncSender, Arc};
 
@@ -117,7 +117,7 @@ use crate::code::view::CodeView;
 use crate::drive::items::WarpDriveItemId;
 use crate::drive::{CloudObjectTypeAndId, OpenWarpDriveObjectArgs};
 use crate::features::FeatureFlag;
-use crate::launch_configs::launch_config::{self, PaneMode, PaneTemplateType};
+use crate::launch_configs::launch_config::{self, CommandTemplate, PaneMode, PaneTemplateType};
 use crate::persistence::ModelEvent;
 use crate::report_if_error;
 use crate::resource_center::{
@@ -1261,6 +1261,28 @@ impl PaneGroup {
         }
     }
 
+    fn startup_directory_for_template_cwd(cwd: &Path) -> Option<PathBuf> {
+        if cwd.as_os_str().is_empty() || !cwd.exists() {
+            return None;
+        }
+
+        dunce::canonicalize(cwd).ok()
+    }
+
+    fn pending_command_for_template_commands(
+        cwd: Option<&Path>,
+        commands: &[CommandTemplate],
+    ) -> String {
+        let command = commands.iter().map(|cmd| &cmd.exec).join(" && ");
+
+        let Some(cwd) = cwd else {
+            return command;
+        };
+        let cwd = cwd.display().to_string();
+        let cwd = shell_words::quote(&cwd);
+        format!("cd {cwd} && {command}")
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn pane_tree_from_template(
         root: PaneTemplateType,
@@ -1328,6 +1350,7 @@ impl PaneGroup {
                     None
                 };
 
+                let startup_directory = Self::startup_directory_for_template_cwd(&cwd);
                 let (view, terminal_manager) = match pane_mode {
                     PaneMode::Cloud => {
                         Self::create_ambient_agent_terminal(resources, view_size, ctx)
@@ -1335,7 +1358,7 @@ impl PaneGroup {
                     PaneMode::Terminal | PaneMode::Agent => PaneGroup::create_session(
                         // Use cwd from the template iff such path exists, otherwise None
                         // TODO(CORE-3187): On Windows, support WSL directory restoration.
-                        Some(cwd).filter(|p| p.exists()),
+                        startup_directory.clone(),
                         HashMap::new(),
                         IsSharedSessionCreator::No,
                         resources,
@@ -1352,7 +1375,10 @@ impl PaneGroup {
 
                 // Runs saved commands on start (terminal and agent modes only).
                 if !commands.is_empty() && !matches!(pane_mode, PaneMode::Cloud) {
-                    let exec = commands.iter().map(|cmd| &cmd.exec).join(" && ");
+                    let exec = Self::pending_command_for_template_commands(
+                        startup_directory.as_deref(),
+                        &commands,
+                    );
                     view.update(ctx, |terminal, ctx| {
                         terminal.set_pending_command(exec.as_str(), ctx);
                     });
