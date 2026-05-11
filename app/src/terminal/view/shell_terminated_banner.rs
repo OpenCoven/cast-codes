@@ -13,7 +13,7 @@ use warpui::{
     Entity, SingletonEntity as _, TypedActionView, View, ViewContext,
 };
 
-use crate::{terminal::model::terminal_model::ExitReason, ui_components};
+use crate::{terminal::model::terminal_model::ExitReason, ui_components, util::links};
 
 const FILE_ISSUE_TEXT: &str = "File issue";
 const MORE_INFO_TEXT: &str = "More info";
@@ -215,9 +215,7 @@ impl TerminationType {
                         .with_text_label(FILE_ISSUE_TEXT.to_string())
                         .build()
                         .on_click(|ctx, _, _| {
-                            ctx.dispatch_typed_action(Action::OpenUrl(
-                                "https://github.com/warpdotdev/Warp/issues/new/choose".to_string(),
-                            ));
+                            ctx.dispatch_typed_action(Action::OpenUrl(links::feedback_form_url()));
                         })
                         .finish(),
                     ui_builder
@@ -226,7 +224,7 @@ impl TerminationType {
                         .build()
                         .on_click(|ctx, _, _| {
                             ctx.dispatch_typed_action(Action::OpenUrl(
-                                "https://docs.warp.dev/support-and-community/troubleshooting-and-support/known-issues#debugging".to_string(),
+                                links::USER_DOCS_URL.to_string(),
                             ));
                         })
                         .finish(),
@@ -253,9 +251,7 @@ impl TerminationType {
                         .with_text_label(FILE_ISSUE_TEXT.to_string())
                         .build()
                         .on_click(|ctx, _, _| {
-                            ctx.dispatch_typed_action(Action::OpenUrl(
-                                "https://github.com/warpdotdev/Warp/issues/new/choose".to_string(),
-                            ));
+                            ctx.dispatch_typed_action(Action::OpenUrl(links::feedback_form_url()));
                         })
                         .finish(),
                     ui_builder
@@ -264,7 +260,7 @@ impl TerminationType {
                         .build()
                         .on_click(|ctx, _, _| {
                             ctx.dispatch_typed_action(Action::OpenUrl(
-                                "https://docs.warp.dev/support-and-community/troubleshooting-and-support/known-issues#debugging".to_string(),
+                                links::USER_DOCS_URL.to_string(),
                             ));
                         })
                         .finish(),

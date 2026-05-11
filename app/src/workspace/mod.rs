@@ -23,8 +23,6 @@ pub mod util;
 pub mod view;
 
 use crate::ai::blocklist::NEW_AGENT_PANE_LABEL;
-use crate::ai::skills::SkillManager;
-use crate::ai::AIRequestUsageModel;
 use crate::channel::Channel;
 use crate::code;
 use crate::features::FeatureFlag;
@@ -33,11 +31,10 @@ use crate::notebooks;
 use crate::pane_group::TabBarHoverIndex;
 use crate::server::telemetry::AgentModeEntrypoint;
 use crate::server::telemetry::PaletteSource;
-use crate::settings::AISettings;
 use crate::settings_view::{self, flags, SettingsSection};
 use crate::tab::uses_vertical_tabs;
 use crate::tab_configs;
-use warpui::SingletonEntity;
+use warpui::AppContext;
 
 use crate::channel::ChannelState;
 
@@ -50,7 +47,6 @@ use warpui::accessibility::AccessibilityVerbosity;
 use warpui::elements::DropTargetData;
 use warpui::keymap::FixedBinding;
 use warpui::keymap::{BindingDescription, EditableBinding};
-use warpui::AppContext;
 
 pub use action::{
     CommandSearchOptions, InitContent, RestoreConversationLayout, TabContextMenuAnchor,
@@ -69,20 +65,6 @@ pub use view::{
 // Helper function to access panel header corner radius from other modules
 pub fn panel_header_corner_radius() -> warpui::elements::CornerRadius {
     warpui::elements::CornerRadius::with_top(warpui::elements::Radius::Pixels(8.))
-}
-
-/// Returns `true` when `WorkspaceAction::SendFeedback` will launch the guided
-/// feedback skill in a new agent pane. When `false`, the action falls back to
-/// opening the GitHub issue form in the browser.
-///
-/// Kept in sync with the availability check in `Workspace::send_feedback` so
-/// the command palette label and the menu item behavior never diverge.
-pub fn is_feedback_skill_available(ctx: &AppContext) -> bool {
-    AISettings::as_ref(ctx).is_any_ai_enabled(ctx)
-        && AIRequestUsageModel::as_ref(ctx).has_any_ai_remaining(ctx)
-        && SkillManager::as_ref(ctx)
-            .active_bundled_skill("feedback", ctx)
-            .is_some()
 }
 
 use crate::workspace::view::{
@@ -1508,9 +1490,9 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::ReferAFriend),
         EditableBinding::new(
-            "workspace:link_to_slack",
-            "Join our Slack community (opens external link)",
-            WorkspaceAction::JoinSlack,
+            "workspace:open_github_issues",
+            "Open CastCodes GitHub issues (opens external link)",
+            WorkspaceAction::OpenGitHubIssues,
         )
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(
@@ -1521,9 +1503,7 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(
             "workspace:send_feedback",
-            BindingDescription::new("Send feedback (opens external link)").with_dynamic_override(
-                |ctx| is_feedback_skill_available(ctx).then(|| "Send feedback with Oz".into()),
-            ),
+            BindingDescription::new("Send feedback (opens external link)"),
             WorkspaceAction::SendFeedback,
         )
         .with_context_predicate(id!("Workspace")),

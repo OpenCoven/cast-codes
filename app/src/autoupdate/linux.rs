@@ -8,6 +8,7 @@ use warp_core::channel::{Channel, ChannelState};
 use warp_terminal::shell::ShellType;
 use warpui::ViewContext;
 
+use crate::util::links;
 use crate::workspace::Workspace;
 
 use super::release_assets_directory_url;
@@ -247,7 +248,7 @@ mod package_manager {
                 FormattedTextFragment::plain_text(" to install the update and re-launch Warp.  "),
                 FormattedTextFragment::hyperlink(
                     "Please report any issues",
-                    "https://github.com/warpdotdev/Warp/issues/new/choose",
+                    links::GITHUB_ISSUES_URL,
                 ),
             ]));
 

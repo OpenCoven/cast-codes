@@ -6,7 +6,7 @@ CastCodes is an open-source terminal and code workspace fork focused on local te
 
 ## Is CastCodes connected to upstream hosted services?
 
-No. CastCodes does not provide upstream hosted services. The public CastCodes build disables sign-in, upstream cloud cloud flows, hosted telemetry, hosted crash reporting, billing, shared sessions, upstream release feeds, and upstream feedback flows by default.
+No. CastCodes does not provide upstream hosted services. The public CastCodes build disables sign-in, upstream cloud flows, hosted telemetry, hosted crash reporting, billing, shared sessions, upstream release feeds, and upstream feedback flows by default. Feedback links route to this fork's GitHub issue tracker.
 
 ## Why do internal names still say `warp`?
 
@@ -14,7 +14,7 @@ This pass avoids a risky blind rename. Internal names such as `warp_core`, `warp
 
 ## Where does CastCodes store local data?
 
-New public CastCodes builds write to CastCodes paths such as `.cast-codes`, Linux `cast-codes`, Windows `castcodes\\CastCodes`, and macOS `dev.castcodes.CastCodes`. Legacy legacy upstream paths are only compatibility references and should not receive newly-created CastCodes data.
+New public CastCodes builds write to CastCodes paths such as `.cast-codes`, Linux `cast-codes`, Windows `castcodes\\CastCodes`, and macOS `dev.castcodes.CastCodes`. Legacy upstream paths are only compatibility references and should not receive newly-created CastCodes data.
 
 ## What should I run before opening a PR?
 

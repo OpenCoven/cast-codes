@@ -201,7 +201,7 @@ pub enum WorkspaceAction {
     },
     ShowUpgrade,
     ShowReferralSettingsPage,
-    JoinSlack,
+    OpenGitHubIssues,
     ViewUserDocs,
     ViewLatestChangelog,
     ViewPrivacyPolicy,
@@ -793,7 +793,7 @@ impl WorkspaceAction {
             | TogglePalette { mode: _, source: _ }
             | ShowUpgrade
             | ShowReferralSettingsPage
-            | JoinSlack
+            | OpenGitHubIssues
             | ViewUserDocs
             | ViewLatestChangelog
             | ViewPrivacyPolicy

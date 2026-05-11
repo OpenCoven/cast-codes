@@ -206,9 +206,8 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
 
-    // SkillManager must be registered because the command palette materializes
-    // binding descriptions eagerly, and `workspace:send_feedback`'s dynamic
-    // label calls `is_feedback_skill_available`, which reads `SkillManager`.
+    // SkillManager is registered here because several workspace and command
+    // palette paths materialize skill-backed menu data during initialization.
     // Registered after `HomeDirectoryWatcher`, `DirectoryWatcher`,
     // `WarpManagedPathsWatcher`, `DetectedRepositories`, and `RepoMetadataModel`
     // because `SkillWatcher::new` subscribes to all of them.

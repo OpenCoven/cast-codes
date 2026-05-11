@@ -24,9 +24,8 @@ use crate::view_components::action_button::{ActionButton, ActionButtonTheme, But
 const MODAL_WIDTH: f32 = 420.;
 const HERO_HEIGHT: f32 = 92.;
 const HERO_IMAGE_PATH: &str = "async/png/onboarding/openwarp_launch_banner.png";
-const REPO_URL: &str = "https://github.com/warpdotdev/warp";
-const CONTRIBUTING_URL: &str = "https://github.com/warpdotdev/warp/blob/master/CONTRIBUTING.md";
-const OZ_URL: &str = "https://oz.warp.dev";
+const REPO_URL: &str = "https://github.com/OpenCoven/cast-codes";
+const CONTRIBUTING_URL: &str = "https://github.com/OpenCoven/cast-codes/blob/main/CONTRIBUTING.md";
 
 struct InlineLink {
     text: &'static str,
@@ -45,25 +44,16 @@ const FEATURE_ITEMS: &[FeatureItem] = &[
     FeatureItem {
         icon: Icon::HeartHand,
         title: "Contribute",
-        description: "Warp's client code is now open source. Get started by using the /feedback skill to open an issue, and follow the contribution guidelines here.",
+        description: "CastCodes is open source. Get started by opening an issue, and follow the contribution guidelines here.",
         inline_link: Some(InlineLink {
             text: "here",
             url: CONTRIBUTING_URL,
         }),
     },
     FeatureItem {
-        icon: Icon::Oz,
-        title: "Open Automated Development",
-        description: "The Warp repo is managed by an agent-first workflow powered by Oz, our cloud agent orchestration platform.",
-        inline_link: Some(InlineLink {
-            text: "Oz",
-            url: OZ_URL,
-        }),
-    },
-    FeatureItem {
         icon: Icon::MessageChatSquare,
-        title: "Introducing 'auto (open-weights)'",
-        description: "We've added a new auto model that picks the best open weight model for a task, like Kimi or MiniMax.",
+        title: "Fork-local by default",
+        description: "Hosted cloud, telemetry, crash reporting, billing, and shared-session services stay unavailable unless CastCodes-owned infrastructure is added later.",
         inline_link: None,
     },
 ];
@@ -203,7 +193,7 @@ impl OpenWarpLaunchModal {
     }
 
     fn render_title(appearance: &Appearance) -> Box<dyn Element> {
-        Text::new("Warp is now open-source", appearance.ui_font_family(), 20.)
+        Text::new("CastCodes is open source", appearance.ui_font_family(), 20.)
             .with_color(PhenomenonStyle::modal_title_text())
             .with_style(Properties::default().weight(Weight::Semibold))
             .finish()
@@ -211,7 +201,7 @@ impl OpenWarpLaunchModal {
 
     fn render_description(appearance: &Appearance) -> Box<dyn Element> {
         Text::new(
-            "You, our community, can participate in building Warp using an agent-first workflow.",
+            "You can participate in building a fork-local terminal and code workspace.",
             appearance.ui_font_family(),
             14.,
         )

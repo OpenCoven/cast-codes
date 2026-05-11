@@ -187,7 +187,7 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
 
     menu_items.push(MenuItem::Separator);
     menu_items.push(link_menu_item(
-        "Privacy Policy...",
+        "CastCodes Privacy Notes...",
         links::PRIVACY_POLICY_URL.into(),
     ));
 
@@ -909,9 +909,8 @@ fn feedback_menu_item() -> MenuItem {
     MenuItem::Custom(CustomMenuItem::new(
         "Send Feedback...",
         move |ctx| {
-            // Route through the root-view action so workspace windows can open the
-            // guided AI flow, while non-workspace windows still fall back to the
-            // browser-based feedback form.
+            // Route through the root-view action so workspace windows and
+            // non-workspace windows use the same fork-local feedback target.
             ctx.dispatch_global_action("root_view:send_feedback", &());
         },
         no_updates,
@@ -924,9 +923,8 @@ fn make_new_help_menu() -> Menu {
         "Help",
         vec![
             feedback_menu_item(),
-            link_menu_item("Warp Documentation...", links::USER_DOCS_URL.into()),
+            link_menu_item("CastCodes Documentation...", links::USER_DOCS_URL.into()),
             link_menu_item("GitHub Issues...", links::GITHUB_ISSUES_URL.into()),
-            link_menu_item("Warp Slack Community...", links::SLACK_URL.into()),
         ],
     )
 }
