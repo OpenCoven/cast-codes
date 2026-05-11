@@ -388,6 +388,64 @@ impl ChannelState {
             Channel::Oss => "warposs",
         }
     }
+
+    /// URL schemes the current channel will accept on incoming custom URIs.
+    /// See [`accepted_url_schemes_for`] for the per-channel policy.
+    pub fn accepted_url_schemes() -> &'static [&'static str] {
+        accepted_url_schemes_for(Self::channel())
+    }
+}
+
+/// URL schemes a given channel will accept on incoming custom URIs.
+///
+/// The Stable channel emits the canonical `warp://` scheme on public web
+/// deeplinks (shared sessions, conversations, etc.). Non-Stable channels
+/// historically only accepted their channel-specific scheme (e.g.
+/// `warppreview://`), so a Preview-only install could not open public
+/// `warp://` links handed to it by the browser. Preview now also accepts
+/// the canonical scheme so it can act as a fallback handler when Stable
+/// is not installed (see #10473).
+pub fn accepted_url_schemes_for(channel: Channel) -> &'static [&'static str] {
+    match channel {
+        Channel::Stable => &["warp"],
+        Channel::Preview => &["warppreview", "warp"],
+        Channel::Dev => &["warpdev"],
+        Channel::Integration => &["warpintegration"],
+        Channel::Local => &["warplocal"],
+        Channel::Oss => &["warposs"],
+    }
+}
+
+#[cfg(test)]
+mod accepted_url_schemes_tests {
+    use super::{accepted_url_schemes_for, Channel};
+
+    #[test]
+    fn stable_accepts_only_canonical_scheme() {
+        assert_eq!(accepted_url_schemes_for(Channel::Stable), &["warp"]);
+    }
+
+    #[test]
+    fn preview_accepts_channel_specific_and_canonical_scheme() {
+        // Regression for #10473: Preview must accept the canonical `warp://`
+        // scheme so public app.warp.dev deeplinks reach a Preview-only install.
+        let accepted = accepted_url_schemes_for(Channel::Preview);
+        assert!(accepted.contains(&"warppreview"));
+        assert!(accepted.contains(&"warp"));
+    }
+
+    #[test]
+    fn other_channels_only_accept_their_own_scheme() {
+        for (channel, expected) in [
+            (Channel::Dev, "warpdev"),
+            (Channel::Integration, "warpintegration"),
+            (Channel::Local, "warplocal"),
+            (Channel::Oss, "warposs"),
+        ] {
+            let accepted = accepted_url_schemes_for(channel);
+            assert_eq!(accepted, &[expected], "channel = {channel:?}");
+        }
+    }
 }
 
 /// Derives an HTTP(S) origin URL from a WebSocket URL by rewriting the scheme
