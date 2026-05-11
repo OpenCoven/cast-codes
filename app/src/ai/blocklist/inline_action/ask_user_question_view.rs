@@ -34,7 +34,10 @@ use crate::{
                     self, NumberShortcutButtonBuilder, NumberShortcutButtons,
                     NumberShortcutButtonsConfig,
                 },
-                view_impl::{CONTENT_HORIZONTAL_PADDING, CONTENT_ITEM_VERTICAL_MARGIN},
+                view_impl::{
+                    render_autonomy_dropdown_setting_speedbump_footer, CONTENT_HORIZONTAL_PADDING,
+                    CONTENT_ITEM_VERTICAL_MARGIN,
+                },
             },
             inline_action::{
                 inline_action_header::{
@@ -732,6 +735,9 @@ pub(crate) struct AskUserQuestionView {
     toggle_mouse_state: MouseStateHandle,
     skip_button: CompactibleActionButton,
     next_button: CompactibleActionButton,
+    /// Opt-in speedbump footer installed by `AIBlock` when the Ask-User-Question
+    /// autonomy speedbump is seeded for this action. Read only by `render_completed`.
+    speedbump_footer: Option<crate::ai::blocklist::block::AskUserQuestionSpeedbumpFooter>,
 }
 
 impl AskUserQuestionView {
@@ -791,6 +797,7 @@ impl AskUserQuestionView {
             toggle_mouse_state: MouseStateHandle::default(),
             skip_button,
             next_button,
+            speedbump_footer: None,
         };
 
         ctx.subscribe_to_model(&action_model, |me, _, event, ctx| {
@@ -816,6 +823,17 @@ impl AskUserQuestionView {
 
     pub fn is_editing(&self) -> bool {
         self.session.is_editing()
+    }
+
+    /// Installs or clears the Ask-User-Question autonomy speedbump footer. The
+    /// footer is only actually drawn during the completed/finished render paths.
+    pub fn set_speedbump_footer(
+        &mut self,
+        footer: Option<crate::ai::blocklist::block::AskUserQuestionSpeedbumpFooter>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        self.speedbump_footer = footer;
+        ctx.notify();
     }
 
     /// Recover completed/cancelled status even if the live action entry is gone, so restored
@@ -1309,24 +1327,75 @@ impl AskUserQuestionView {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let header = HeaderConfig::new(label, app)
+        let speedbump_footer = self
+            .speedbump_footer
+            .as_ref()
+            .map(|footer| self.render_speedbump_footer(footer, appearance, app));
+        let has_speedbump_footer = speedbump_footer.is_some();
+
+        let mut header_config = HeaderConfig::new(label, app)
             .with_icon(status_icon)
             .with_interaction_mode(InteractionMode::ManuallyExpandable(
                 ExpandedConfig::new(self.is_expanded, self.toggle_mouse_state.clone())
                     .with_toggle_callback(|ctx| {
                         ctx.dispatch_typed_action(AskUserQuestionViewAction::ToggleExpanded);
                     }),
-            ))
-            .render(app);
+            ));
+        if has_speedbump_footer {
+            header_config = header_config
+                .with_corner_radius_override(CornerRadius::with_top(Radius::Pixels(8.)));
+        }
+        let header = header_config.render(app);
+
+        // Collapsed state: just the header — but still draw the speedbump footer if it's
+        // present, since the autonomy nudge must stay visible even if the user collapses
+        // their answers.
         if !self.is_expanded {
+            if let Some(footer) = speedbump_footer {
+                let mut wrapper =
+                    Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
+                wrapper.add_child(header);
+                wrapper.add_child(footer);
+                return wrap_with_agent_output_item_spacing(wrapper.finish(), app).finish();
+            }
             return wrap_with_agent_output_item_spacing(header, app).finish();
         }
 
         let mut wrapper = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
         wrapper.add_child(header);
-        wrapper.add_child(render_answers(questions, answers, appearance));
+        wrapper.add_child(render_answers(
+            questions,
+            answers,
+            appearance,
+            has_speedbump_footer,
+        ));
+        if let Some(footer) = speedbump_footer {
+            wrapper.add_child(footer);
+            return wrap_with_agent_output_item_spacing(wrapper.finish(), app).finish();
+        }
         wrap_with_agent_output_item_spacing(wrapper.finish(), app)
             .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
+            .finish()
+    }
+
+    fn render_speedbump_footer(
+        &self,
+        footer: &crate::ai::blocklist::block::AskUserQuestionSpeedbumpFooter,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let row = render_autonomy_dropdown_setting_speedbump_footer(
+            "Ask questions",
+            &footer.dropdown,
+            footer.settings_link_handle.clone(),
+            app,
+        );
+        Container::new(row)
+            .with_horizontal_padding(INLINE_ACTION_HORIZONTAL_PADDING)
+            .with_vertical_padding(4.)
+            .with_background(theme.surface_1())
+            .with_corner_radius(CornerRadius::with_bottom(Radius::Pixels(8.)))
             .finish()
     }
 
@@ -1616,6 +1685,7 @@ fn render_answers(
     questions: &[AskUserQuestionItem],
     answers: Option<&[AskUserQuestionAnswerItem]>,
     appearance: &Appearance,
+    flatten_bottom: bool,
 ) -> Box<dyn Element> {
     let theme = appearance.theme();
     let font_size = appearance.monospace_font_size();
@@ -1651,10 +1721,11 @@ fn render_answers(
         content.add_child(item_container.finish());
     }
 
-    Container::new(content.finish())
-        .with_background(theme.surface_2())
-        .with_corner_radius(CornerRadius::with_bottom(Radius::Pixels(8.)))
-        .finish()
+    let mut container = Container::new(content.finish()).with_background(theme.surface_2());
+    if !flatten_bottom {
+        container = container.with_corner_radius(CornerRadius::with_bottom(Radius::Pixels(8.)));
+    }
+    container.finish()
 }
 
 fn wrap_with_content_item_spacing(element: Box<dyn Element>) -> Container {

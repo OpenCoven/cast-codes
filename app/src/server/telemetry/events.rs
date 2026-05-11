@@ -35,6 +35,7 @@ use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::AIBlockResponseRating;
 use crate::ai::blocklist::CommandExecutionPermissionAllowedReason;
 use crate::ai::blocklist::InputType;
+use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::ai::mcp::TemplateVariable;
 use crate::ai::predict::generate_ai_input_suggestions::GenerateAIInputSuggestionsRequest;
 use crate::ai::predict::generate_ai_input_suggestions::GenerateAIInputSuggestionsResponseV2;
@@ -2279,6 +2280,10 @@ pub enum TelemetryEvent {
         src: AutonomySettingToggleSource,
         new: AgentModeCodingPermissionsType,
     },
+    ChangedAgentModeAskUserQuestionPermission {
+        src: AutonomySettingToggleSource,
+        new: AskUserQuestionPermission,
+    },
     FullEmbedCodebaseContextSearchSuccess {
         action_id: AIAgentActionId,
         total_search_duration: Duration,
@@ -3841,6 +3846,10 @@ impl TelemetryEvent {
                 "source": src,
                 "new": new,
             })),
+            TelemetryEvent::ChangedAgentModeAskUserQuestionPermission { src, new } => Some(json!({
+                "source": src,
+                "new": new,
+            })),
             TelemetryEvent::FullEmbedCodebaseContextSearchSuccess {
                 action_id,
                 total_search_duration,
@@ -4920,6 +4929,7 @@ impl TelemetryEvent {
             | TelemetryEvent::WorkflowAliasArgumentEdited { .. }
             | TelemetryEvent::ToggledAgentModeAutoexecuteReadonlyCommandsSetting { .. }
             | TelemetryEvent::ChangedAgentModeCodingPermissions { .. }
+            | TelemetryEvent::ChangedAgentModeAskUserQuestionPermission { .. }
             | TelemetryEvent::RepoOutlineConstructionSuccess { .. }
             | TelemetryEvent::RepoOutlineConstructionFailed { .. }
             | TelemetryEvent::AutoexecutedAgentModeRequestedCommand { .. }
@@ -5493,6 +5503,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::ToggledAgentModeAutoexecuteReadonlyCommandsSetting
             | Self::ChangedAgentModeCodingPermissions
+            | Self::ChangedAgentModeAskUserQuestionPermission
             | Self::AutoexecutedAgentModeRequestedCommand => EnablementState::Always,
             Self::AttachedImagesToAgentModeQuery => {
                 EnablementState::Flag(FeatureFlag::ImageAsContext)
@@ -6008,6 +6019,9 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::ChangedAgentModeCodingPermissions => {
                 "AIAutonomy.ChangedAgentModeCodingPermissions"
+            }
+            Self::ChangedAgentModeAskUserQuestionPermission => {
+                "AIAutonomy.ChangedAgentModeAskUserQuestionPermission"
             }
             Self::AutoexecutedAgentModeRequestedCommand => {
                 "AIAutonomy.AutoexecutedRequestedCommand"
@@ -6825,6 +6839,9 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::ChangedAgentModeCodingPermissions => {
                 "Changed Agent Mode permissions for coding tasks"
+            }
+            Self::ChangedAgentModeAskUserQuestionPermission => {
+                "Changed Agent Mode permission for asking user questions"
             }
             Self::AutoexecutedAgentModeRequestedCommand => {
                 "Autoexecuted an Agent Mode requested command"

@@ -1007,6 +1007,19 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: true,
     }
+    // Whether or not we should show the one-shot speedbump on Ask-User-Question cards.
+    //
+    // Not a user-visible setting - we model it as a setting so we can track state.
+    // Intentionally NOT cloud-synced: we want users to see the first-time nudge on
+    // each fresh device, and we avoid a cloud-sync race that would make the flag
+    // silently stay `false` on new devices after being consumed once elsewhere.
+    should_show_agent_mode_ask_user_question_speedbump: ShouldShowAgentModeAskUserQuestionSpeedbump {
+        type: bool,
+        default: true,
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Never,
+        private: true,
+    }
     // Whether to use locally loaded AWS credentials for Bedrock-enabled requests.
     aws_bedrock_credentials_enabled: AwsBedrockCredentialsEnabled {
         type: bool,
