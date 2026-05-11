@@ -378,21 +378,28 @@ impl ChannelState {
     }
 
     pub fn url_scheme() -> &'static str {
-        match Self::channel() {
-            Channel::Stable => "warp",
-            Channel::Preview => "warppreview",
-            Channel::Dev => "warpdev",
-            // Dummy value--integration tests shouldn't support URL schemes.
-            Channel::Integration => "warpintegration",
-            Channel::Local => "warplocal",
-            Channel::Oss => "warposs",
-        }
+        url_scheme_for(Self::channel())
     }
 
     /// URL schemes the current channel will accept on incoming custom URIs.
     /// See [`accepted_url_schemes_for`] for the per-channel policy.
     pub fn accepted_url_schemes() -> &'static [&'static str] {
         accepted_url_schemes_for(Self::channel())
+    }
+}
+
+/// Channel-canonical outbound URL scheme. Outbound URL emission uses this
+/// value; inbound validation uses [`accepted_url_schemes_for`], whose first
+/// entry must equal this string for every channel.
+pub fn url_scheme_for(channel: Channel) -> &'static str {
+    match channel {
+        Channel::Stable => "warp",
+        Channel::Preview => "warppreview",
+        Channel::Dev => "warpdev",
+        // Dummy value--integration tests shouldn't support URL schemes.
+        Channel::Integration => "warpintegration",
+        Channel::Local => "warplocal",
+        Channel::Oss => "warposs",
     }
 }
 
@@ -405,6 +412,16 @@ impl ChannelState {
 /// `warp://` links handed to it by the browser. Preview now also accepts
 /// the canonical scheme so it can act as a fallback handler when Stable
 /// is not installed (see #10473).
+///
+/// Invariant: the first entry of every slice equals [`ChannelState::url_scheme`]
+/// for the same channel — the channel-canonical outbound scheme is always
+/// also accepted on inbound. The `accepted_url_schemes_matches_url_scheme`
+/// test below enforces this so the two tables cannot drift.
+///
+/// Dev/Local/Oss/Integration are intentionally left single-scheme: they are
+/// developer-only builds with no expectation of handling public web
+/// deeplinks. If that changes for Dev, widening here is a one-line edit and
+/// the invariant test will keep things consistent.
 pub fn accepted_url_schemes_for(channel: Channel) -> &'static [&'static str] {
     match channel {
         Channel::Stable => &["warp"],
@@ -418,7 +435,16 @@ pub fn accepted_url_schemes_for(channel: Channel) -> &'static [&'static str] {
 
 #[cfg(test)]
 mod accepted_url_schemes_tests {
-    use super::{accepted_url_schemes_for, Channel};
+    use super::{accepted_url_schemes_for, url_scheme_for, Channel};
+
+    const ALL_CHANNELS: &[Channel] = &[
+        Channel::Stable,
+        Channel::Preview,
+        Channel::Dev,
+        Channel::Integration,
+        Channel::Local,
+        Channel::Oss,
+    ];
 
     #[test]
     fn stable_accepts_only_canonical_scheme() {
@@ -444,6 +470,24 @@ mod accepted_url_schemes_tests {
         ] {
             let accepted = accepted_url_schemes_for(channel);
             assert_eq!(accepted, &[expected], "channel = {channel:?}");
+        }
+    }
+
+    /// Enforces the invariant documented on [`accepted_url_schemes_for`]:
+    /// every channel's canonical outbound scheme must appear in its accepted
+    /// inbound set. If a future change adds a new channel or renames a
+    /// scheme, this test fails before the two tables can drift.
+    #[test]
+    fn accepted_url_schemes_includes_canonical_url_scheme_for_every_channel() {
+        for &channel in ALL_CHANNELS {
+            let canonical = url_scheme_for(channel);
+            let accepted = accepted_url_schemes_for(channel);
+            assert_eq!(
+                accepted.first().copied(),
+                Some(canonical),
+                "channel {channel:?}: accepted_url_schemes_for must list \
+                 url_scheme_for first; got {accepted:?}, expected {canonical:?}",
+            );
         }
     }
 }
