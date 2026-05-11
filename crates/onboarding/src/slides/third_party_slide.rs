@@ -136,7 +136,7 @@ impl ThirdPartySlide {
     fn render_header(&self, appearance: &Appearance) -> Box<dyn Element> {
         let title = appearance
             .ui_builder()
-            .paragraph("Customize third party agents")
+            .paragraph("Configure local harnesses")
             .with_style(UiComponentStyles {
                 font_size: Some(36.),
                 font_weight: Some(Weight::Medium),
@@ -146,7 +146,7 @@ impl ThirdPartySlide {
             .finish();
 
         let subtitle = FormattedTextElement::from_str(
-            "Select defaults for using agents like Claude Code, Codex, and Gemini.",
+            "Choose defaults for project-scoped sessions with Claude Code, Codex, Gemini, and other CLI agents.",
             appearance.ui_font_family(),
             16.,
         )

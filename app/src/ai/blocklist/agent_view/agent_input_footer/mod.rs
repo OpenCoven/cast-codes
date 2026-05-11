@@ -12,6 +12,7 @@ use crate::{
             usage::icon_for_context_window_usage,
             BlocklistAIInputModel,
         },
+        coven_brand::OPENCOVEN_PURPLE,
         execution_profiles::profiles::AIExecutionProfilesModel,
         harness_availability::HarnessAvailabilityModel,
         AIRequestUsageModel,
@@ -421,9 +422,7 @@ impl AgentInputFooter {
         let install_plugin_button = ctx.add_typed_action_view(|_ctx| {
             ActionButton::new("Enable notifications", InstallPluginButtonTheme)
                 .with_icon(Icon::Download)
-                .with_tooltip(
-                    "Install the Warp plugin to enable rich agent notifications within Warp",
-                )
+                .with_tooltip("Enable rich notifications for visible local agent session status")
                 .with_size(cli_button_size)
                 .with_tooltip_alignment(TooltipAlignment::Left)
                 .with_adjoined_side(AdjoinedSide::Right)
@@ -435,7 +434,7 @@ impl AgentInputFooter {
         let plugin_instructions_button = ctx.add_typed_action_view(|_ctx| {
             ActionButton::new("Notifications setup instructions", InstallPluginButtonTheme)
                 .with_icon(Icon::Info)
-                .with_tooltip("View instructions to install the Warp plugin")
+                .with_tooltip("View notification setup instructions")
                 .with_size(cli_button_size)
                 .with_tooltip_alignment(TooltipAlignment::Left)
                 .with_adjoined_side(AdjoinedSide::Right)
@@ -447,9 +446,9 @@ impl AgentInputFooter {
         });
 
         let update_plugin_button = ctx.add_typed_action_view(|_ctx| {
-            ActionButton::new("Update Warp plugin", InstallPluginButtonTheme)
+            ActionButton::new("Update notification plugin", InstallPluginButtonTheme)
                 .with_icon(Icon::Download)
-                .with_tooltip("A new version of the Warp plugin is available")
+                .with_tooltip("A notification plugin update is available")
                 .with_size(cli_button_size)
                 .with_tooltip_alignment(TooltipAlignment::Left)
                 .with_adjoined_side(AdjoinedSide::Right)
@@ -459,9 +458,9 @@ impl AgentInputFooter {
         });
 
         let update_instructions_button = ctx.add_typed_action_view(|_ctx| {
-            ActionButton::new("Plugin update instructions", InstallPluginButtonTheme)
+            ActionButton::new("Notification update instructions", InstallPluginButtonTheme)
                 .with_icon(Icon::Info)
-                .with_tooltip("View instructions to update the Warp plugin")
+                .with_tooltip("View notification update instructions")
                 .with_size(cli_button_size)
                 .with_tooltip_alignment(TooltipAlignment::Left)
                 .with_adjoined_side(AdjoinedSide::Right)
@@ -1235,7 +1234,7 @@ impl AgentInputFooter {
             // executor so it runs inside the container and targets the
             // container's shell / package layout. A common use case will be
             // running a 3p harness (e.g. Claude Code) inside a sandbox and
-            // needing the Warp plugin to integrate with it.
+            // needing the notification plugin to integrate with it.
             Some(ShellLaunchData::DockerSandbox { .. }) => return false,
         };
 
@@ -1353,10 +1352,10 @@ impl AgentInputFooter {
             .cli_agent(ctx)
             .and_then(plugin_manager_for)
             .map(|m| m.install_success_message())
-            .unwrap_or("Warp plugin installed. Please restart the session to activate.");
+            .unwrap_or("Notification plugin installed. Please restart the session to activate.");
         self.handle_plugin_operation(
-            "Installing Warp plugin...",
-            "Failed to install Warp plugin",
+            "Installing notification plugin...",
+            "Failed to install notification plugin",
             success_msg,
             PluginChipTelemetryKind::Install,
             |manager| async move { manager.install().await },
@@ -1370,10 +1369,10 @@ impl AgentInputFooter {
             .cli_agent(ctx)
             .and_then(plugin_manager_for)
             .map(|m| m.update_success_message())
-            .unwrap_or("Warp plugin updated. Please restart the session to activate.");
+            .unwrap_or("Notification plugin updated. Please restart the session to activate.");
         self.handle_plugin_operation(
-            "Updating Warp plugin...",
-            "Failed to update Warp plugin",
+            "Updating notification plugin...",
+            "Failed to update notification plugin",
             success_msg,
             PluginChipTelemetryKind::Update,
             |manager| async move { manager.update().await },
@@ -2683,17 +2682,16 @@ impl ActionButtonTheme for ActiveMicButtonTheme {
     }
 }
 
-/// Green-accented theme for the "Install Warp plugin" chip.
+/// OpenCoven-accented theme for the notification setup chip.
 struct InstallPluginButtonTheme;
 
 impl ActionButtonTheme for InstallPluginButtonTheme {
     fn background(&self, hovered: bool, appearance: &Appearance) -> Option<Fill> {
-        let green = appearance.theme().ansi_fg_green();
         let base = appearance.theme().surface_1();
         Some(if hovered {
-            base.blend(&Fill::Solid(green).with_opacity(30))
+            base.blend(&Fill::Solid(OPENCOVEN_PURPLE).with_opacity(30))
         } else {
-            base.blend(&Fill::Solid(green).with_opacity(15))
+            base.blend(&Fill::Solid(OPENCOVEN_PURPLE).with_opacity(15))
         })
     }
 
@@ -2701,14 +2699,18 @@ impl ActionButtonTheme for InstallPluginButtonTheme {
         &self,
         _hovered: bool,
         _background: Option<Fill>,
-        appearance: &Appearance,
+        _appearance: &Appearance,
     ) -> ColorU {
-        appearance.theme().ansi_fg_green()
+        OPENCOVEN_PURPLE
     }
 
-    fn border(&self, appearance: &Appearance) -> Option<ColorU> {
-        let green = appearance.theme().ansi_fg_green();
-        Some(ColorU::new(green.r, green.g, green.b, 80))
+    fn border(&self, _appearance: &Appearance) -> Option<ColorU> {
+        Some(ColorU::new(
+            OPENCOVEN_PURPLE.r,
+            OPENCOVEN_PURPLE.g,
+            OPENCOVEN_PURPLE.b,
+            96,
+        ))
     }
 
     fn should_opt_out_of_contrast_adjustment(&self) -> bool {
@@ -2720,10 +2722,10 @@ impl ActionButtonTheme for InstallPluginButtonTheme {
 /// Returns the log file path on success, or `None` if writing failed.
 #[cfg(not(target_family = "wasm"))]
 async fn write_install_log(agent: CLIAgent, err: &PluginInstallError) -> Option<PathBuf> {
-    let log_path = env::temp_dir().join("warp-plugin-install.log");
+    let log_path = env::temp_dir().join("agent-notification-plugin-install.log");
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
     let contents = format!(
-        "Warp plugin installation — {agent:?}\n\
+        "Agent notification plugin installation — {agent:?}\n\
          {now}\n\
          \n\
          {log}",

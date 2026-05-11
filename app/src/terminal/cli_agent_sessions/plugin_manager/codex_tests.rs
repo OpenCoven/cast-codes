@@ -17,3 +17,10 @@ fn install_instructions_has_steps() {
     assert!(!instructions.steps.is_empty());
     assert!(!instructions.title.is_empty());
 }
+
+#[test]
+fn install_instructions_are_local_session_oriented() {
+    let instructions = CodexPluginManager.install_instructions();
+    assert_eq!(instructions.title, "Enable Codex Notifications");
+    assert!(instructions.subtitle.contains("local agent sessions"));
+}
