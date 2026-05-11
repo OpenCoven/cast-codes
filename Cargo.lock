@@ -13716,6 +13716,8 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "asset_cache",
+ "instant",
+ "log",
  "pathfinder_color",
  "pathfinder_geometry",
  "rust-embed 8.7.2",
@@ -15106,6 +15108,7 @@ dependencies = [
  "instant",
  "itertools 0.14.0",
  "lazy_static",
+ "libc",
  "log",
  "markdown_parser",
  "minimp4",

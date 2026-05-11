@@ -162,6 +162,7 @@ use super::hoa_onboarding::{
 use super::lightbox_view::{LightboxParams, LightboxView, LightboxViewEvent};
 use super::util;
 use super::WorkspaceRegistry;
+// GH9729: image-preview Lightbox dispatch (see specs/GH9729/tech.md §119).
 use crate::ai::execution_profiles::editor::ExecutionProfileEditorManager;
 use crate::ai::execution_profiles::profiles::{AIExecutionProfilesModel, ClientProfileId};
 use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
@@ -204,6 +205,8 @@ use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::ligature_settings::should_use_ligature_rendering;
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::ui_components::avatar::{Avatar, AvatarContent, StatusElementTypes};
+use ui_components::lightbox::{LightboxImage, LightboxImageSource};
+use warpui::assets::asset_cache::AssetSource;
 
 #[cfg(target_family = "wasm")]
 use crate::ai::agent_conversations_model::AgentConversationsModelEvent;
@@ -5898,6 +5901,21 @@ impl Workspace {
             FileTarget::SystemGeneric => {
                 ctx.open_file_path(&path);
             }
+            FileTarget::ImagePreview => {
+                // GH9729: route image clicks through the existing Lightbox overlay.
+                // See specs/GH9729/tech.md §119. Construction of the entry lives
+                // in `build_image_preview_entry` so it can be unit-tested without
+                // a `ViewContext`. We invoke `open_lightbox` directly rather than
+                // dispatching `WorkspaceAction::OpenLightbox`: this arm runs from
+                // a child-view subscription callback (file tree → left panel →
+                // workspace), so `Workspace` is not in the action dispatcher's
+                // responder chain and the action would be silently dropped. The
+                // direct-call shape matches the other arms in this match block
+                // (`open_code`, `open_file_notebook`, etc.).
+                let image =
+                    build_image_preview_entry(&path, MAX_PREVIEW_FILE_BYTES, MAX_ERROR_MESSAGE_LEN);
+                self.open_lightbox(vec![image], 0, ctx);
+            }
         }
     }
 
@@ -7521,6 +7539,49 @@ impl Workspace {
                 });
             }
         }
+    }
+
+    /// Open (or refresh) the workspace Lightbox overlay with the given images.
+    ///
+    /// Mirrors the convention of other `open_*` helpers (`open_code`,
+    /// `open_file_notebook`): the helper owns the `LightboxView` lifecycle
+    /// directly so it can be invoked both from the `WorkspaceAction::OpenLightbox`
+    /// action handler (when dispatched from a focused-view context where
+    /// `Workspace` is in the responder chain — e.g. the artifacts and blocklist
+    /// call sites) and from subscription-driven paths where it isn't (the
+    /// `FileTarget::ImagePreview` arm in `open_file_with_target`, GH9729).
+    /// Calling the helper directly avoids the action-router responder-chain
+    /// dependency that the typed-action dispatcher imposes.
+    fn open_lightbox(
+        &mut self,
+        images: Vec<LightboxImage>,
+        initial_index: usize,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let params = LightboxParams {
+            images,
+            initial_index,
+        };
+        if let Some(handle) = &self.lightbox_view {
+            handle.update(ctx, |view, ctx| view.update_params(params, ctx));
+        } else {
+            let handle = ctx.add_typed_action_view(|ctx| LightboxView::new(params, ctx));
+            ctx.subscribe_to_view(&handle, |me, _, event, ctx| match event {
+                LightboxViewEvent::Close => {
+                    me.lightbox_view = None;
+                    me.focus_active_tab(ctx);
+                    ctx.notify();
+                }
+                LightboxViewEvent::FocusLost => {
+                    // Focus already moved elsewhere; just tear down the view.
+                    me.lightbox_view = None;
+                    ctx.notify();
+                }
+            });
+            ctx.focus(&handle);
+            self.lightbox_view = Some(handle);
+        }
+        ctx.notify();
     }
 
     /// Open a code diff view by temporarily replacing the current pane or in a new tab.
@@ -22352,30 +22413,11 @@ impl TypedActionView for Workspace {
                 images,
                 initial_index,
             } => {
-                let params = LightboxParams {
-                    images: images.clone(),
-                    initial_index: *initial_index,
-                };
-                if let Some(handle) = &self.lightbox_view {
-                    handle.update(ctx, |view, ctx| view.update_params(params, ctx));
-                } else {
-                    let handle = ctx.add_typed_action_view(|ctx| LightboxView::new(params, ctx));
-                    ctx.subscribe_to_view(&handle, |me, _, event, ctx| match event {
-                        LightboxViewEvent::Close => {
-                            me.lightbox_view = None;
-                            me.focus_active_tab(ctx);
-                            ctx.notify();
-                        }
-                        LightboxViewEvent::FocusLost => {
-                            // Focus already moved elsewhere; just tear down the view.
-                            me.lightbox_view = None;
-                            ctx.notify();
-                        }
-                    });
-                    ctx.focus(&handle);
-                    self.lightbox_view = Some(handle);
-                }
-                ctx.notify();
+                // Body extracted into `Workspace::open_lightbox` so the
+                // `FileTarget::ImagePreview` arm in `open_file_with_target` can
+                // invoke the same logic directly when the action dispatcher's
+                // responder chain does not include the workspace (GH9729).
+                self.open_lightbox(images.clone(), *initial_index, ctx);
             }
             UpdateLightboxImage { index, image } => {
                 if let Some(handle) = &self.lightbox_view {
@@ -24473,6 +24515,81 @@ fn should_reserve_traffic_light_space_in_tab_bar(side: TrafficLightSide) -> bool
 }
 
 /// Returns every tab-bar-equivalent rect laid out in `window_id` (horizontal
+/// One unified pre-read cap for raster and SVG image previews
+/// (specs/GH9729/tech.md §119). The SVG-specific allocation surface is
+/// bounded separately by the SVG intrinsic-dimension cap (item 4c).
+const MAX_PREVIEW_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Maximum number of Unicode scalar values rendered in the Lightbox error
+/// panel before truncation. Keeps a long message from occluding the close
+/// button or triggering expensive text shaping.
+const MAX_ERROR_MESSAGE_LEN: usize = 256;
+
+/// Build the single Lightbox entry for a `FileTarget::ImagePreview` click.
+///
+/// Performs a synchronous `metadata` stat to decide between
+/// `LightboxImageSource::Resolved` and `LightboxImageSource::Error`. The stat
+/// happens before any byte is read so an oversize file never enters memory.
+///
+/// Errors are sanitized here: the underlying OS error is logged via
+/// `log::warn!` for the operator, and the user-facing string is collapsed to
+/// one of three categorical constants so absolute paths and platform-specific
+/// error syntax never reach the UI panel (specs/GH9729/tech.md §119).
+///
+/// `metadata` follows symlinks, and `is_file()` rejects sym-resolved
+/// character devices, FIFOs, sockets, and directories.
+fn build_image_preview_entry(path: &Path, max_bytes: u64, max_message_len: usize) -> LightboxImage {
+    let filename = path.file_name().map(|n| n.to_string_lossy().into_owned());
+
+    let size_check: Result<(), &'static str> = match std::fs::metadata(path) {
+        Ok(meta) if !meta.is_file() => Err("not a regular file"),
+        Ok(meta) if meta.len() > max_bytes => Err("image is too large to preview"),
+        Ok(_) => Ok(()),
+        Err(err) => {
+            log::warn!("GH9729: could not stat image preview path: {}", err);
+            Err("could not read image")
+        }
+    };
+
+    match size_check {
+        Ok(()) => LightboxImage {
+            source: LightboxImageSource::Resolved {
+                asset_source: AssetSource::LocalFile {
+                    path: path.to_string_lossy().into_owned(),
+                },
+            },
+            description: filename,
+        },
+        Err(message) => LightboxImage {
+            source: LightboxImageSource::Error {
+                message: truncate_message(message, max_message_len),
+            },
+            description: filename,
+        },
+    }
+}
+
+/// Truncate an error message to at most `max_len` Unicode scalar values,
+/// appending an ellipsis when truncation occurs. Used by the
+/// `FileTarget::ImagePreview` arm to bound the message length so a long
+/// error string cannot occlude the close button or trigger expensive text
+/// shaping (specs/GH9729/tech.md §119).
+///
+/// The current callers pass short categorical constants so this rarely
+/// truncates in practice; it exists as a defensive bound.
+fn truncate_message(message: &str, max_len: usize) -> String {
+    if message.chars().count() <= max_len {
+        message.to_string()
+    } else if max_len <= 1 {
+        // Degenerate cap; avoid producing a longer string than `max_len` chars.
+        message.chars().take(max_len).collect()
+    } else {
+        // Reserve one char for the ellipsis ("…" is one Unicode scalar value).
+        let prefix: String = message.chars().take(max_len - 1).collect();
+        format!("{prefix}…")
+    }
+}
+
 /// tab bar and/or vertical tabs panel). Both must be considered because a
 /// window with vertical tabs still renders the horizontal bar at the top.
 pub(crate) fn tab_bar_rects_for_window(window_id: WindowId, app: &AppContext) -> Vec<RectF> {
