@@ -54,7 +54,7 @@ use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::ai::blocklist::handoff::touched_repos::{
     derive_touched_workspace, extract_paths_from_conversation, pick_handoff_overlap_env,
-    resolve_pwd_repo, TouchedWorkspace,
+    resolve_repo_for_path, TouchedWorkspace,
 };
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::ai::blocklist::handoff::PendingCloudLaunch;
@@ -158,6 +158,8 @@ use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 use sentry::protocol::{Attachment, AttachmentType};
 use serde_json;
 use warpui::notification::NotificationSendError;
+#[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
+use warpui::r#async::FutureExt as _;
 
 use super::hoa_onboarding::{
     mark_hoa_onboarding_completed, HoaOnboardingFlow, HoaOnboardingFlowEvent, HoaOnboardingStep,
@@ -13430,8 +13432,12 @@ impl Workspace {
                     http.as_ref(),
                 )
                 .await;
-                let pwd_repo = match source_pwd {
-                    Some(pwd) => resolve_pwd_repo(pwd).await,
+                let pwd_repo = match &source_pwd {
+                    Some(pwd) => resolve_repo_for_path(pwd)
+                        .with_timeout(Duration::from_secs(5))
+                        .await
+                        .ok()
+                        .flatten(),
                     None => None,
                 };
                 (workspace, upload_result, pwd_repo)
