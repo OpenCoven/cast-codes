@@ -14,7 +14,7 @@
 - Cloud objects and Drive: `app/src/cloud_object/**`, `app/src/drive/**`
 - Oz and agent cloud mode: `app/src/ai/**`, `crates/ai/**`, `crates/warp_cli/src/agent.rs`
 - Shared sessions: `app/src/terminal/shared_session/**`, `crates/warp_terminal/src/shared_session*`
-- Telemetry: `app/src/server/telemetry**`, `crates/warp_core/src/telemetry.rs`, `crates/warpui/**`
+- Telemetry: `app/src/server/telemetry/**`, `crates/warp_core/src/telemetry.rs`, `crates/warpui/**`
 - Crash reporting: `app/src/crash_reporting/**`, `app/build.rs`, Sentry scripts
 - Autoupdate and release feeds: `app/src/autoupdate/**`, channel version crates, platform bundle scripts
 - Billing and pricing: `app/src/billing/**`, `app/src/pricing/**`, onboarding billing state
