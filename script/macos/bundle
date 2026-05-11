@@ -25,8 +25,7 @@
 # Once the stapling is done, the app can be shared.
 #
 # Three passwords are read from GCP Secret Manager (or from env if --read-passwords-from-env is set) if you are codesigning.
-# 1) WARP_NOTARIZATION_PASSWORD:  This is an "app-specific password" that
-#    is tied to the zach@warp.dev account.  See https://support.apple.com/en-us/HT204397
+# 1) WARP_NOTARIZATION_PASSWORD:  This is an app-specific password for notarization.
 # 2) WARP_DEVELOPER_ID_CERT_PASSWORD: This is a password tied to the private key
 #    of our cert - it is needed to use the cert to sign our binary.
 # 3) WARP_CODESIGN_KEYCHAIN_PASSWORD: This is an arbitrary password only used
@@ -70,7 +69,7 @@ cleanup_dmg_files() {
         find "$target_dir" -name "rw.*.dmg" -type f -delete
     fi
     # Also check if any volumes are mounted and unmount them
-    hdiutil info | grep "/Volumes/Warp.*" | awk '{print $1}' | while read -r disk; do
+    hdiutil info | grep "/Volumes/CastCodes.*" | awk '{print $1}' | while read -r disk; do
         echo "Unmounting disk image: $disk"
         hdiutil detach "$disk" -force || true
     done
@@ -136,7 +135,7 @@ while (( "$#" )); do
       SELFSIGN=false
       shift
       ;;
-    # Sign with a local Apple Development cert instead of the official Warp cert.
+    # Sign with a local Apple Development cert instead of the distribution cert.
     # Useful for local debug builds when you don't have access to the company signing key.
     # Falls back to ad-hoc signing if no Apple Development cert is found.
     --selfsign)
@@ -270,9 +269,9 @@ fi
 
 if [[ $RELEASE_CHANNEL = "local" ]]; then
     WARP_BIN="warp"
-    BUNDLE_ID="dev.warp.Warp-Local"
-    WARP_APP_NAME="WarpLocal"
-    WARP_SCHEME_NAME="warplocal"
+    BUNDLE_ID="dev.castcodes.CastCodesLocal"
+    WARP_APP_NAME="CastCodesLocal"
+    WARP_SCHEME_NAME="castcodeslocal"
     FEATURES="$FEATURES,agent_mode_debug"
     # For local builds, use different versions of our bundled frameworks (e.g.:
     # Sentry).  This needs to be exported so it can be referenced by
@@ -280,9 +279,9 @@ if [[ $RELEASE_CHANNEL = "local" ]]; then
     export FRAMEWORK_OVERRIDE="dev"
 elif [[ $RELEASE_CHANNEL = "dev" ]]; then
     WARP_BIN="dev"
-    BUNDLE_ID="dev.warp.Warp-Dev"
-    WARP_APP_NAME="WarpDev"
-    WARP_SCHEME_NAME="warpdev"
+    BUNDLE_ID="dev.castcodes.CastCodesDev"
+    WARP_APP_NAME="CastCodesDev"
+    WARP_SCHEME_NAME="castcodesdev"
     FEATURES="$FEATURES,agent_mode_debug"
     # Enable heap usage tracking & profiling using jemalloc through pprof.
     FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
@@ -293,22 +292,22 @@ elif [[ $RELEASE_CHANNEL = "dev" ]]; then
     export HANDLE_MARKDOWN=1
 elif [[ $RELEASE_CHANNEL = "preview" ]]; then
     WARP_BIN="preview"
-    BUNDLE_ID="dev.warp.Warp-Preview"
-    WARP_APP_NAME="WarpPreview"
-    WARP_SCHEME_NAME="warppreview"
+    BUNDLE_ID="dev.castcodes.CastCodesPreview"
+    WARP_APP_NAME="CastCodesPreview"
+    WARP_SCHEME_NAME="castcodespreview"
     FEATURES="$FEATURES,preview_channel"
     # Enable heap usage tracking & profiling using jemalloc through pprof.
     FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
 elif [[ $RELEASE_CHANNEL = "stable" ]]; then
     WARP_BIN="stable"
-    BUNDLE_ID="dev.warp.Warp-Stable"
-    WARP_APP_NAME="Warp"
-    WARP_SCHEME_NAME="warp"
+    BUNDLE_ID="dev.castcodes.CastCodes"
+    WARP_APP_NAME="CastCodes"
+    WARP_SCHEME_NAME="castcodes"
 elif [[ $RELEASE_CHANNEL = "oss" ]]; then
-    WARP_BIN="warp-oss"
-    BUNDLE_ID="dev.warp.WarpOss"
-    WARP_APP_NAME="WarpOss"
-    WARP_SCHEME_NAME="warposs"
+    WARP_BIN="cast-codes"
+    BUNDLE_ID="dev.castcodes.CastCodes"
+    WARP_APP_NAME="CastCodes"
+    WARP_SCHEME_NAME="castcodes"
     # The OSS channel does not ship Sentry, so drop the cocoa_sentry feature
     # (which would otherwise pull in the Sentry framework dependency).
     FEATURES="release_bundle,extern_plist"
@@ -448,7 +447,7 @@ if [[ "$ARTIFACT" == "app" ]]; then
     </array>" "$BUNDLE_DIR"/$WARP_APP_NAME.app/Contents/Info.plist
   fi
 
-  # Temporary key that ChatGPT Desktop can use to determine if the latest version of Warp supports the ChatGPT integration.
+  # Temporary key that ChatGPT Desktop can use to determine if this app supports the ChatGPT integration.
   # Once support has been rolled out for a sufficient amount of time we (and ChatGPT) can remove this.
   plutil -insert SUPPORTS_CHAT_GPT_WORK_WITH_APPS -bool true "$BUNDLE_DIR"/$WARP_APP_NAME.app/Contents/Info.plist
 
@@ -531,7 +530,7 @@ if [[ "$ARTIFACT" == "app" ]]; then
   if [[ $RELEASE_CHANNEL = "stable" ]]; then
     CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/oz"
   elif [[ $RELEASE_CHANNEL = "oss" ]]; then
-    CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/warp-oss"
+    CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/cast-codes"
   else
     CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/oz-$RELEASE_CHANNEL"
   fi
@@ -700,7 +699,7 @@ if [[ "$ARTIFACT" = app ]]; then
     local source_folder="$1"
 
     local args=(
-      --volname Warp
+      --volname CastCodes
       # For --no-internet-enable, see https://github.com/create-dmg/create-dmg/issues/179
       --no-internet-enable
       --background app/assets/resources/mac/warp_install_image.png

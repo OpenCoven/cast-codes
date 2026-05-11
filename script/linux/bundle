@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds a Warp binary and bundles it up for distribution.
+# Builds a CastCodes binary and bundles it up for distribution.
 
 set -e
 
@@ -151,31 +151,31 @@ mkdir -p "$OUT_DIR"
 # BINARY_NAME is the desired name of the binary in the final package.
 if [[ $RELEASE_CHANNEL = "local" ]]; then
   WARP_BIN="warp"
-  BINARY_NAME="warp-local"
-  APP_NAME="WarpLocal"
+  BINARY_NAME="cast-codes-local"
+  APP_NAME="CastCodesLocal"
   FEATURES="$FEATURES,agent_mode_debug"
   export HANDLE_MARKDOWN=1
 elif [[ $RELEASE_CHANNEL = "dev" ]]; then
   WARP_BIN="dev"
-  BINARY_NAME="warp-dev"
-  APP_NAME="WarpDev"
+  BINARY_NAME="cast-codes-dev"
+  APP_NAME="CastCodesDev"
   FEATURES="$FEATURES,agent_mode_debug"
   # Enable heap profiling using jemalloc through pprof.
   FEATURES="$FEATURES,jemalloc_pprof"
   export HANDLE_MARKDOWN=1
 elif [[ $RELEASE_CHANNEL = "preview" ]]; then
   WARP_BIN="preview"
-  BINARY_NAME="warp-preview"
-  APP_NAME="WarpPreview"
+  BINARY_NAME="cast-codes-preview"
+  APP_NAME="CastCodesPreview"
   FEATURES="$FEATURES,preview_channel"
 elif [[ $RELEASE_CHANNEL = "stable" ]]; then
   WARP_BIN="stable"
-  BINARY_NAME="warp"
-  APP_NAME="Warp"
+  BINARY_NAME="cast-codes"
+  APP_NAME="CastCodes"
 elif [[ $RELEASE_CHANNEL = "oss" ]]; then
-  WARP_BIN="warp-oss"
-  BINARY_NAME="warp-oss"
-  APP_NAME="WarpOss"
+  WARP_BIN="cast-codes"
+  BINARY_NAME="cast-codes"
+  APP_NAME="CastCodes"
   # The OSS channel does not ship Sentry, so drop the crash_reporting feature
   # (which would otherwise pull in the Sentry SDK as a dependency).
   FEATURES="release_bundle"
@@ -183,11 +183,11 @@ fi
 
 # Artifact-specific binary naming
 if [[ "$ARTIFACT" == "cli" ]]; then
-  # For CLI artifacts, use oz instead of warp as the binary name.  The OSS
-  # channel is an exception: its CLI command name is `warp-oss`, matching
+  # For CLI artifacts, use oz instead of cast-codes as the binary name.  The OSS
+  # channel is an exception: its CLI command name is `cast-codes`, matching
   # `Channel::cli_command_name` in the Rust source.
   if [[ $RELEASE_CHANNEL != "oss" ]]; then
-    BINARY_NAME="${BINARY_NAME/warp/oz}"
+    BINARY_NAME="${BINARY_NAME/cast-codes/oz}"
   fi
 fi
 
@@ -198,7 +198,7 @@ elif [[ "$ARTIFACT" == "app" ]]; then
   FEATURES="$FEATURES,gui,nld_improvements"
 fi
 
-BUNDLE_ID="dev.warp.$APP_NAME"
+BUNDLE_ID="dev.castcodes.$APP_NAME"
 EXECUTABLE_PATH="$CARGO_TARGET_OUTPUT_DIR/$WARP_BIN"
 DEBUG_EXECUTABLE_PATH="$EXECUTABLE_PATH.debug"
 
@@ -217,7 +217,7 @@ fi
 
 # Build the binary.
 if [[ "$BUILD" == "true" ]]; then
-  echo "Building and bundling Warp for channel $RELEASE_CHANNEL and bundle id $BUNDLE_ID"
+  echo "Building and bundling CastCodes for channel $RELEASE_CHANNEL and bundle id $BUNDLE_ID"
   cargo build -p warp --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --features "$FEATURES"
   echo "Making debug copy of '$EXECUTABLE_PATH' at '$DEBUG_EXECUTABLE_PATH'"
   cp "$EXECUTABLE_PATH" "$DEBUG_EXECUTABLE_PATH"

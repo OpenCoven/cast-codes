@@ -18,7 +18,7 @@ pub enum Channel {
     /// The internal-only HEAD build.
     Local,
 
-    /// The open-source build of Warp.
+    /// The open-source build of CastCodes.
     Oss,
 
     /// The integration test build.
@@ -55,7 +55,7 @@ impl Channel {
             Channel::Preview => "oz-preview",
             Channel::Local => "oz-local",
             Channel::Integration => "oz-integration",
-            Channel::Oss => "warp-oss",
+            Channel::Oss => "cast-codes",
         }
     }
 }
@@ -68,7 +68,7 @@ impl fmt::Display for Channel {
             Channel::Dev => "dev",
             Channel::Integration => "integration",
             Channel::Local => "local",
-            Channel::Oss => "warp-oss",
+            Channel::Oss => "cast-codes",
         })
     }
 }

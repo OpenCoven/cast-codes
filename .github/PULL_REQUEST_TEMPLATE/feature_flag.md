@@ -17,7 +17,7 @@ This PR template helps ensure that as we launch new features we appropriately co
 - [ ] No sensitive info in logs
 - [ ] No crashes on dev related to the feature
 - [ ] No performance regression on dev. See [dashboard](https://warp.metabaseapp.com/dashboard/1519-dev-performance-by-version?shell=zsh)
-- [ ] Feature works fine, and no regression, over SSH. See [instructions](https://github.com/warpdotdev/warp-internal/tree/master/app/tests/ssh/README.md) on how to get a VM.
+- [ ] Feature works fine, and no regression, over SSH. See [instructions](https://github.com/OpenCoven/cast-codes-internal/tree/master/app/tests/ssh/README.md) on how to get a VM.
 - [ ] Have we explicitly brainstormed how this feature will be discovered by developers?
 - [ ] Link to Figma mocks
 - [ ] Tested on multiple themes (both dark and light)
@@ -28,7 +28,7 @@ This PR template helps ensure that as we launch new features we appropriately co
 
 - [ ] Help content
 - [ ] Changelog entry (add entry below)
-- [ ] [Telemetry entry](https://docs.warp.dev/getting-started/privacy#exhaustive-telemetry-table) (if applicable)
+- [ ] [Telemetry entry](https://github.com/OpenCoven/cast-codes) (if applicable)
 - [ ] Metrics dashboard in Metabase
 - [ ] Tweet (if appropriate)
 - [ ] Blog post (if appropriate)

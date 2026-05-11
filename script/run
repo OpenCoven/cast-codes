@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Cross-platform entrypoint for running a local Warp build.
+# Cross-platform entrypoint for running a local CastCodes build.
 #
-# On macOS this delegates to `./script/macos/run`, which builds and runs Warp
+# On macOS this delegates to `./script/macos/run`, which builds and runs CastCodes
 # as a real `.app` bundle (with code signing, plist updates, etc.). On Linux
 # and Windows it invokes `cargo run` directly for the appropriate binary.
 #
@@ -27,7 +27,7 @@ if command -v warp-channel-config &>/dev/null; then
     WARP_BIN_NAME="warp"
     WARP_CHANNEL="local"
 else
-    WARP_BIN_NAME="warp-oss"
+    WARP_BIN_NAME="cast-codes"
     WARP_CHANNEL="oss"
 fi
 
@@ -56,6 +56,7 @@ while (( "$#" )); do
       ;;
     --host-id)
       if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
+        export CAST_CODES_CLOUD_MODE_DEFAULT_HOST="$2"
         export WARP_CLOUD_MODE_DEFAULT_HOST="$2"
         shift 2
       else

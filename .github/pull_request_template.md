@@ -14,7 +14,7 @@ How did you test this change? What automated tests did you add? If you didn't ad
 
 Manual testing is required for changes that can be manually tested, and almost all changes can be manually tested. If your change can be manually tested, please include screenshots or a screen recording that show it working end to end.
 
-You can run the app locally using `./script/run` - see WARP.md for more details on how to get set up.
+You can run the app locally using `./script/run` - see CASTCODES.md for more details on how to get set up.
 -->
 
 - [ ] I have manually tested my changes locally with `./script/run`
@@ -23,7 +23,7 @@ You can run the app locally using `./script/run` - see WARP.md for more details 
 <!-- Attach screenshots or a short video demonstrating the change, where appropriate. Remove this section if it is not relevant to your PR. -->
 
 ## Agent Mode
-- [ ] Warp Agent Mode - This PR was created via Warp's AI Agent Mode
+- [ ] CastCodes Agent Mode - This PR was created via CastCodes Agent Mode
 
 <!--
 ## Changelog Entries for Stable

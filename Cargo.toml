@@ -23,7 +23,7 @@ default-members = [
 ]
 
 [workspace.package]
-authors = ["Warp Team <dev@warp.dev>"]
+authors = ["CastCodes Maintainers"]
 license = "AGPL-3.0-only"
 publish = false
 

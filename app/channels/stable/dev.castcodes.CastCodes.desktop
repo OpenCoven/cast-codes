@@ -4,20 +4,20 @@ Version=1.0
 
 Type=Application
 
-Name=WarpDev
+Name=CastCodes
 GenericName=TerminalEmulator
 
-Exec=warp-terminal-dev %U
-StartupWMClass=dev.warp.WarpDev
+Exec=cast-codes %U
+StartupWMClass=dev.castcodes.CastCodes
 
 Keywords=shell;prompt;command;commandline;cmd;
 
-Icon=dev.warp.WarpDev
+Icon=dev.castcodes.CastCodes
 
 Categories=System;TerminalEmulator;
 
 # Don't run this application within a terminal.
 Terminal=false
 
-# Register ourselves as the handler for warpdev:// URLs.
-MimeType=x-scheme-handler/warpdev;
+# Register ourselves as the handler for castcodes:// URLs.
+MimeType=x-scheme-handler/castcodes;

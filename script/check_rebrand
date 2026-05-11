@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# Guard public CastCodes surfaces against accidental Warp reintroduction.
+# This intentionally does not scan the full repository: internal crate names,
+# upstream dependency URLs, protocol markers, tests, and historical specs still
+# retain Warp names during this staged external rebrand.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+scan_paths=(
+  README.md
+  FAQ.md
+  CONTRIBUTING.md
+  SECURITY.md
+  CODE_OF_CONDUCT.md
+  CASTCODES.md
+  Cargo.toml
+  app/Cargo.toml
+  app/src/bin/oss.rs
+  app/channels
+  script/run
+  script/macos/run
+  script/macos/bundle
+  script/update_plist
+  script/Entitlements.plist
+  script/linux/bundle
+  script/linux/bundle_appimage
+  script/linux/bundle_arch
+  script/linux/bundle_deb
+  script/linux/bundle_install
+  script/linux/bundle_rpm
+  script/windows/bundle.ps1
+  script/windows/windows-installer.iss
+  resources/linux/arch/app
+  resources/linux/debian/app
+  resources/linux/rpm/app
+  .github/ISSUE_TEMPLATE
+  .github/PULL_REQUEST_TEMPLATE
+  .github/pull_request_template.md
+)
+
+patterns=(
+  'Warp'
+  'warp\.dev'
+  'warpdotdev'
+  'dev\.warp'
+  '\.warp'
+  'warp-terminal'
+  'warp-oss'
+  'warp://'
+)
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+for pattern in "${patterns[@]}"; do
+  rg -n --hidden --glob '!*.png' --glob '!*.ico' --glob '!*.bmp' --glob '!*.icns' \
+    "$pattern" "${scan_paths[@]}" >> "$tmp" || true
+done
+
+if [[ ! -s "$tmp" ]]; then
+  echo "CastCodes rebrand guard passed."
+  exit 0
+fi
+
+allowed='(^WARP.md:|script/macos/bundle:[0-9]+:.*WARP_|script/macos/bundle:[0-9]+:.*WarpDockTilePlugin|script/macos/run:[0-9]+:.*WARP_|script/run:[0-9]+:.*WARP_|script/linux/bundle:[0-9]+:.*WARP_|script/linux/bundle_appimage:[0-9]+:.*WARP_|script/windows/bundle\.ps1:[0-9]+:.*WARP_|script/windows/windows-installer\.iss:[0-9]+:.*WARP_CLI_MODE|app/src/bin/oss\.rs:[0-9]+:.*WarpServerConfig|app/Cargo\.toml:[0-9]+:.*package\.metadata\.bundle\.bin\.warp|app/Cargo\.toml:[0-9]+:.*open_warp_|app/Cargo\.toml:[0-9]+:.*warpify_|app/Cargo\.toml:[0-9]+:.*warpdotdev/|Cargo\.toml:[0-9]+:.*warpdotdev/)'
+
+violations="$(grep -Ev "$allowed" "$tmp" || true)"
+
+if [[ -n "$violations" ]]; then
+  echo "CastCodes rebrand guard failed. Unapproved public Warp references remain:" >&2
+  echo "$violations" >&2
+  exit 1
+fi
+
+echo "CastCodes rebrand guard passed with intentional compatibility allowances."

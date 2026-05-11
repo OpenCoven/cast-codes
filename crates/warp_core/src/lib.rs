@@ -1,5 +1,6 @@
 pub mod app_id;
 pub mod assertions;
+pub mod brand;
 pub mod channel;
 pub mod command;
 pub mod context_flag;
@@ -28,3 +29,7 @@ pub mod user_preferences;
 pub use app_id::AppId;
 pub use session_id::SessionId;
 pub use warp_util::host_id::HostId;
+
+#[cfg(test)]
+#[path = "brand_tests.rs"]
+mod brand_tests;
