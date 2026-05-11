@@ -1,9 +1,9 @@
-pkgname=warp-terminal@@CHANNEL_SUFFIX@@
+pkgname=cast-codes@@CHANNEL_SUFFIX@@
 pkgver=@@VERSION@@
 pkgrel=@@RELEASE@@
-pkgdesc="Warp, the Rust-based terminal for developers and teams"
+pkgdesc="CastCodes, the open-source agentic terminal and code workspace"
 arch=('@@ARCH@@')
-url="https://warp.dev"
+url="https://github.com/OpenCoven/cast-codes"
 license=('custom')
 depends=(
 	'curl'

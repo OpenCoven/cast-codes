@@ -4,19 +4,21 @@
 
 use anyhow::Result;
 use warp_core::{
-    channel::{Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig},
+    brand,
+    channel::{Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig as ServerConfig},
     AppId,
 };
 
-// Simple wrapper around warp::run() for Warp OSS builds.
+// Simple wrapper around warp::run() for public CastCodes builds.
 fn main() -> Result<()> {
+    let (qualifier, organization, application) = brand::public_app_id_parts();
     let mut state = ChannelState::new(
         Channel::Oss,
         ChannelConfig {
-            app_id: AppId::new("dev", "warp", "WarpOss"),
-            logfile_name: "warp-oss.log".into(),
-            server_config: WarpServerConfig::production(),
-            oz_config: OzConfig::production(),
+            app_id: AppId::new(qualifier, organization, application),
+            logfile_name: brand::LOG_FILE_NAME.into(),
+            server_config: ServerConfig::unavailable(),
+            oz_config: OzConfig::unavailable(),
             telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: None,
@@ -41,15 +43,15 @@ embed_plist::embed_info_plist_bytes!(r#"
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
     <key>CFBundleDisplayName</key>
-    <string>WarpOss</string>
+    <string>CastCodes</string>
     <key>CFBundleExecutable</key>
-    <string>warp-oss</string>
+    <string>cast-codes</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.warp.WarpOss</string>
+    <string>dev.castcodes.CastCodes</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>WarpOss</string>
+    <string>CastCodes</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -61,9 +63,9 @@ embed_plist::embed_info_plist_bytes!(r#"
     <key>UIDesignRequiresCompatibility</key>
     <true/>
     <key>CFBundleURLTypes</key>
-    <array><dict><key>CFBundleURLName</key><string>Custom App</string><key>CFBundleURLSchemes</key><array><string>warposs</string></array></dict></array>
+    <array><dict><key>CFBundleURLName</key><string>CastCodes</string><key>CFBundleURLSchemes</key><array><string>castcodes</string></array></dict></array>
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026, Denver Technologies, Inc</string>
+    <string>© 2026, CastCodes Maintainers</string>
     </dict>
     </plist>
 "#.as_bytes());

@@ -5,14 +5,14 @@ inputs:
     description: "Prompt to send to Warp"
     required: true
   warp_api_key:
-    description: "Warp API key"
+    description: "CastCodes API key"
     required: true
   warp_channel:
-    description: "Warp release channel (e.g., dev, preview, stable)"
+    description: "CastCodes release channel (e.g., dev, preview, stable)"
     required: false
     default: "dev"
   profile_id:
-    description: "Warp profile ID"
+    description: "CastCodes profile ID"
     required: false
   github_token:
     description: "GitHub token for cloning private repositories"
@@ -20,7 +20,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup Warp CLI
+    - name: Setup CastCodes CLI
       uses: ./.github/actions/setup_warp_cli
       with:
         warp_channel: ${{ inputs.warp_channel }}
@@ -120,8 +120,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        git config user.name "Warp Agent"
-        git config user.email "agent@warp.dev"
+        git config user.name "CastCodes Agent"
+        git config user.email "agent@castcodes.local"
     
     - name: Run Warp agent
       shell: bash
@@ -159,7 +159,7 @@ runs:
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: warp-logs.log
-        path: /home/runner/.local/state/warp-terminal-dev/warp_dev.log
+        path: /home/runner/.local/state/cast-codes-dev/warp_dev.log
         if-no-files-found: ignore
     - name: Upload Warp prompt
       if: ${{ always() }}

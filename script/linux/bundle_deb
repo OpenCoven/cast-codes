@@ -8,7 +8,7 @@
 #   - OUT_DIR: The directory into which we should place the final package.
 #   - CARGO_TARGET_OUTPUT_DIR: The cargo target directory containing build output.
 #   - RELEASE_CHANNEL: The release channel we're bundling (e.g.: "dev").
-#   - BUNDLE_ID: The app ID for the bundle (e.g.: "dev.warp.WarpDev").
+#   - BUNDLE_ID: The app ID for the bundle (e.g.: "dev.castcodes.CastCodesDev").
 #   - EXECUTABLE_PATH: The path to the compiled executable we want to install.
 #   - BINARY_NAME: The name that the compiled executable should have on the target machine.
 #   - ARTIFACT: Which artifact to build: app or cli.
@@ -19,19 +19,19 @@ set -e
 if [ "$ARTIFACT" = "cli" ]; then
   CHANNEL_SUFFIX="${BINARY_NAME#oz}"
 else
-  CHANNEL_SUFFIX="${BINARY_NAME#warp}"
+  CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
 fi
-REPO_NAME="warpdotdev$CHANNEL_SUFFIX"
+REPO_NAME="castcodes$CHANNEL_SUFFIX"
 
 # On Linux, we keep the `-stable` suffix for stable to avoid package conflicts.
-# The binary name is still `oz`, and the repo name is still `warpdotdev`.
+# The binary name is still `oz`, and the repo name is still `castcodes`.
 if [ "$ARTIFACT" = "cli" -a "$RELEASE_CHANNEL" = "stable" ]; then
   CHANNEL_SUFFIX="-stable"
 fi
 
 case "$ARTIFACT" in
   app)
-    PACKAGE_NAME="warp-terminal$CHANNEL_SUFFIX"
+    PACKAGE_NAME="cast-codes$CHANNEL_SUFFIX"
     ;;
   cli)
     PACKAGE_NAME="oz$CHANNEL_SUFFIX"
@@ -42,15 +42,6 @@ case "$ARTIFACT" in
     ;;
 esac
 TEMPLATE_DIR="$WORKSPACE_ROOT_DIR/resources/linux/debian/$ARTIFACT"
-
-# Add a simple test to make sure we're generating the appropriate repository
-# name for the stable channel.
-if [ "$RELEASE_CHANNEL" = "stable" ]; then
-  if [ "$REPO_NAME" != "warpdotdev" ]; then
-    echo "::error ::Unexpected repo name for $RELEASE_CHANNEL channel: $REPO_NAME (expected \"warpdotdev\")"
-    exit 1
-  fi
-fi
 
 BUILD_ARCH="${BUILD_ARCH:-$(uname -m)}"
 if [ "$BUILD_ARCH" = "aarch64" ]; then
@@ -79,7 +70,7 @@ mkdir -p "$PKGDIR"
 
 # Populate the directory with the package contents, in the appropriate
 # locations.
-OPT_DIR="/opt/warpdotdev/$PACKAGE_NAME"
+OPT_DIR="/opt/castcodes/$PACKAGE_NAME"
 source "$WORKSPACE_ROOT_DIR/script/linux/bundle_install" "$PKGDIR"
 
 # Move the Debian-specific package metadata into the package directory.
@@ -95,18 +86,9 @@ sed \
     < "$TEMPLATE_DIR/postinst.template" \
     > "$DEBIAN_DIR/postinst"
 sed \
-    "s#@@REPO_NAME@@#$REPO_NAME#g; s#@@CHANNEL@@#$RELEASE_CHANNEL#g; s#@@ARCH@@#$ARCH#g" \
-    < "$WORKSPACE_ROOT_DIR/resources/linux/debian/common/postinst.repo.template" \
-    >> "$DEBIAN_DIR/postinst"
-sed \
     "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@OPTDIR@@#$OPT_DIR#g; s#@@REPO_NAME@@#$REPO_NAME#g" \
     < "$TEMPLATE_DIR/postrm.template" \
     > "$DEBIAN_DIR/postrm"
-sed \
-    "s#@@REPO_NAME@@#$REPO_NAME#g" \
-    < "$WORKSPACE_ROOT_DIR/resources/linux/debian/common/postrm.repo.template" \
-    >> "$DEBIAN_DIR/postrm"
-
 # Make the package scripts executable.
 chmod 755 \
     "$DEBIAN_DIR/postinst" \
