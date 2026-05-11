@@ -13717,6 +13717,7 @@ dependencies = [
  "anyhow",
  "asset_cache",
  "instant",
+ "log",
  "pathfinder_color",
  "pathfinder_geometry",
  "rust-embed 8.7.2",
