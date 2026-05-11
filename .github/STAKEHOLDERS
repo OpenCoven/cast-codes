@@ -168,6 +168,43 @@
 /app/src/settings/vim_banner.rs @liliwilson
 
 ###########################################################################
+# Cross-cutting: Input Method Editor (IME) / marked text
+###########################################################################
+
+# Mac platform IME implementation (Obj-C text input protocol and Rust bridge)
+/crates/warpui/src/platform/mac/objc/host_view.m @abhishekp106
+/crates/warpui/src/platform/mac/window.rs @abhishekp106
+
+# Winit platform IME implementation (Linux and Windows)
+/crates/warpui/src/windowing/winit/event_loop/mod.rs @abhishekp106
+/crates/warpui/src/windowing/winit/window.rs @abhishekp106
+
+# Core IME event types
+/crates/warpui_core/src/event.rs @abhishekp106
+
+# Editor marked text handling
+/app/src/editor/view/marked_text_tests.rs @abhishekp106
+/app/src/editor/view/mod.rs @abhishekp106
+/app/src/editor/view/element.rs @abhishekp106
+/app/src/editor/view/model/mod.rs @abhishekp106
+/app/src/editor/view/model/selections.rs @abhishekp106
+/app/src/editor/view/model/buffer/mod.rs @abhishekp106
+
+# Terminal marked text handling (grid rendering, block models, alt screen)
+/app/src/terminal/grid_renderer.rs @abhishekp106
+/app/src/terminal/grid_renderer/cell_type.rs @abhishekp106
+/app/src/terminal/block_list_element.rs @abhishekp106
+/app/src/terminal/view.rs @abhishekp106
+/app/src/terminal/view/action.rs @abhishekp106
+/app/src/terminal/model/blocks.rs @abhishekp106
+/app/src/terminal/model/block.rs @abhishekp106
+/app/src/terminal/model/blockgrid.rs @abhishekp106
+/app/src/terminal/model/terminal_model.rs @abhishekp106
+/app/src/terminal/model/alt_screen.rs @abhishekp106
+/app/src/terminal/alt_screen/alt_screen_element.rs @abhishekp106
+/app/src/terminal/model/grid/grid_handler.rs @abhishekp106
+
+###########################################################################
 # Team: Platform
 ###########################################################################
 
