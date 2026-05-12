@@ -183,6 +183,8 @@ mod tests;
 pub use crate::code_review::CodeReviewPanelArg;
 pub use pane::ai_document_pane::AIDocumentPane;
 pub use pane::ai_fact_pane::AIFactPane;
+pub use pane::browser::DEFAULT_BROWSER_URL;
+pub use pane::browser_pane::BrowserPane;
 pub use pane::code_diff_pane::CodeDiffPane;
 pub use pane::code_pane::CodePane;
 pub use pane::env_var_collection_pane::EnvVarCollectionPane;
@@ -197,8 +199,8 @@ pub use pane::workflow_pane::WorkflowPane;
 pub use pane::PaneHeaderAction;
 pub use pane::PaneHeaderCustomAction;
 pub use pane::{
-    AnyPaneContent, BackingView, PaneConfiguration, PaneConfigurationEvent, PaneContent, PaneEvent,
-    PaneId, PaneView, TerminalPaneId,
+    AnyPaneContent, BackingView, BrowserPaneId, PaneConfiguration, PaneConfigurationEvent,
+    PaneContent, PaneEvent, PaneId, PaneView, TerminalPaneId,
 };
 pub use tree::{Direction, PaneData, PaneFlex, PaneNode, SplitDirection};
 pub use working_directories::{WorkingDirectoriesEvent, WorkingDirectoriesModel};

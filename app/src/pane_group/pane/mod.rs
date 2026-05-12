@@ -10,6 +10,9 @@
 //! used to render a [`PaneView`] which internally renders the pane, including the [`BackingView`].
 pub(super) mod ai_document_pane;
 pub(super) mod ai_fact_pane;
+#[path = "../../browser/mod.rs"]
+pub(crate) mod browser;
+pub(super) mod browser_pane;
 pub(super) mod code_diff_pane;
 pub(super) mod code_diff_pane_model;
 pub(super) mod code_pane;
@@ -70,6 +73,7 @@ pub use self::view::PaneViewEvent;
 
 use welcome_view::WelcomeView;
 
+use self::browser::BrowserView;
 use super::{ActivationReason, LeafContents, PaneGroup, PaneGroupAction};
 
 pub(super) fn init(app: &mut AppContext) {
@@ -115,6 +119,19 @@ impl TerminalPaneId {
     }
 }
 
+/// A [`PaneId`] that is known to belong to a browser pane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct BrowserPaneId(EntityId);
+
+impl From<BrowserPaneId> for PaneId {
+    fn from(browser_pane: BrowserPaneId) -> Self {
+        PaneId(IPaneId {
+            pane_type: IPaneType::Browser,
+            pane_view_id: browser_pane.0,
+        })
+    }
+}
+
 /// An internal representation of a pane ID. Specifically, we don't want to allow
 /// consumers to derive the underlying view ID from a pane ID. Instead, consumers
 /// should use the relevant [`crate::PaneGroup`] APIs to access pane content (which
@@ -137,6 +154,7 @@ impl Display for IPaneId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum IPaneType {
     Terminal,
+    Browser,
     Notebook,
     File,
     Code,
@@ -161,6 +179,7 @@ impl Display for IPaneType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IPaneType::Terminal => write!(f, "Terminal"),
+            IPaneType::Browser => write!(f, "Browser"),
             IPaneType::Notebook => write!(f, "Notebook"),
             IPaneType::File => write!(f, "File"),
             IPaneType::Code => write!(f, "Code"),
@@ -200,6 +219,11 @@ impl PaneId {
     /// Creates a [`PaneId`] from a [`ViewContext<PaneView<TerminalView>>`]
     pub fn from_terminal_pane_ctx(ctx: &ViewContext<terminal_pane::TerminalPaneView>) -> Self {
         Self::new_from_ctx(IPaneType::Terminal, ctx)
+    }
+
+    /// Creates a [`PaneId`] from a [`ViewContext<PaneView<BrowserView>>`].
+    pub fn from_browser_pane_ctx(ctx: &ViewContext<browser_pane::BrowserPaneView>) -> Self {
+        Self::new_from_ctx(IPaneType::Browser, ctx)
     }
 
     /// Creates a [`PaneId`] from a [`ViewContext<PaneView<FileNotebookView>>`]
@@ -281,6 +305,13 @@ impl PaneId {
         terminal_pane_view: &ViewHandle<terminal_pane::TerminalPaneView>,
     ) -> Self {
         Self::new(IPaneType::Terminal, terminal_pane_view)
+    }
+
+    /// Creates a [`PaneId`] from a [`PaneView<BrowserView>`] entity ID.
+    pub fn from_browser_pane_view(
+        browser_pane_view: &ViewHandle<browser_pane::BrowserPaneView>,
+    ) -> Self {
+        Self::new(IPaneType::Browser, browser_pane_view)
     }
 
     /// Creates a [`PaneId`] from a [`PaneView<NotebookView>`] entity ID.
@@ -403,6 +434,15 @@ impl PaneId {
         }
     }
 
+    /// Returns a [`BrowserPaneId`] for the pane, if this is a browser pane ID.
+    pub fn as_browser_pane_id(&self) -> Option<BrowserPaneId> {
+        if matches!(self.0.pane_type, IPaneType::Browser) {
+            Some(BrowserPaneId(self.0.pane_view_id))
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn pane_type(&self) -> IPaneType {
         self.0.pane_type
     }
@@ -413,6 +453,10 @@ impl PaneId {
 
     pub fn is_terminal_pane(&self) -> bool {
         matches!(self.0.pane_type, IPaneType::Terminal)
+    }
+
+    pub fn is_browser_pane(&self) -> bool {
+        matches!(self.0.pane_type, IPaneType::Browser)
     }
 
     pub fn is_notebook_pane(&self) -> bool {
@@ -451,6 +495,9 @@ impl PaneId {
         let mut element = match self.0.pane_type {
             IPaneType::Terminal => {
                 ChildView::<PaneView<TerminalView>>::with_id(self.0.pane_view_id).finish()
+            }
+            IPaneType::Browser => {
+                ChildView::<PaneView<BrowserView>>::with_id(self.0.pane_view_id).finish()
             }
             IPaneType::Notebook => {
                 ChildView::<PaneView<NotebookView>>::with_id(self.0.pane_view_id).finish()
