@@ -3249,7 +3249,8 @@ impl PaneGroup {
             IPaneType::AIFact => TypedPane::AIFact,
             IPaneType::AIDocument => TypedPane::AIDocument,
             IPaneType::ExecutionProfileEditor => TypedPane::ExecutionProfileEditor,
-            IPaneType::GetStarted
+            IPaneType::Browser
+            | IPaneType::GetStarted
             | IPaneType::NetworkLog
             | IPaneType::Welcome
             | IPaneType::DeferredPlaceholder => TypedPane::Other,

@@ -689,6 +689,38 @@ impl From<TerminalViewState> for Indicator {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TabKind {
+    Terminal,
+    Browser,
+}
+
+impl TabKind {
+    fn for_tab(tab: &TabData, ctx: &AppContext) -> Self {
+        if tab
+            .pane_group
+            .as_ref(ctx)
+            .focused_pane_id(ctx)
+            .is_browser_pane()
+        {
+            Self::Browser
+        } else {
+            Self::Terminal
+        }
+    }
+
+    fn icon(self) -> Icon {
+        match self {
+            Self::Terminal => Icon::Terminal,
+            Self::Browser => Icon::Globe,
+        }
+    }
+
+    fn should_render_icon(self) -> bool {
+        matches!(self, Self::Browser)
+    }
+}
+
 /// TabComponent is a custom UiComponent responsible for rendering a single tab in the tab bar. It
 /// relies on the TabData, and requires the editor (for the tab name editing). Note that since it's
 /// a UiComponent its state is not persisted between the renders.
@@ -702,6 +734,7 @@ pub struct TabComponent<'a> {
     styles: TabStyles,
     ui_builder: UiBuilder,
     indicator: Indicator,
+    kind: TabKind,
     close_button_position: TabCloseButtonPosition,
     appearance: &'a Appearance,
     tooltip_message: Option<String>,
@@ -851,6 +884,7 @@ impl<'a> TabComponent<'a> {
         let tooltip_message = Self::get_tooltip_message(&indicator, tab, ctx);
         let tooltip_directory = Self::get_tooltip_directory(&indicator, tab, ctx);
         let tooltip_git_branch = Self::get_tooltip_git_branch(&indicator, tab, ctx);
+        let kind = TabKind::for_tab(tab, ctx);
         let window_id = tab.pane_group.window_id(ctx);
         let background_opacity = WindowSettings::as_ref(ctx)
             .background_opacity
@@ -866,6 +900,7 @@ impl<'a> TabComponent<'a> {
             styles: TabStyles::default(appearance, tab.color()),
             ui_builder: appearance.ui_builder().clone(),
             indicator,
+            kind,
             close_button_position,
             appearance,
             tooltip_message,
@@ -1302,6 +1337,34 @@ impl<'a> TabComponent<'a> {
         })
     }
 
+    fn render_kind_icon(&self) -> Option<Box<dyn Element>> {
+        if !self.kind.should_render_icon() {
+            return None;
+        }
+
+        Some(
+            Container::new(
+                ConstrainedBox::new(
+                    self.kind
+                        .icon()
+                        .to_warpui_icon(
+                            self.styles
+                                .default
+                                .font_color
+                                .unwrap_or(ColorU::white())
+                                .into(),
+                        )
+                        .finish(),
+                )
+                .with_max_width(TAB_INDICATOR_HEIGHT)
+                .with_max_height(TAB_INDICATOR_HEIGHT)
+                .finish(),
+            )
+            .with_margin_right(4.)
+            .finish(),
+        )
+    }
+
     fn render_tab_container(&self, is_hovered: bool) -> Box<dyn Element> {
         let is_tab_dragging = self.is_tab_dragging();
         let is_hovered = is_hovered && !self.tab_bar.is_any_tab_dragging;
@@ -1393,6 +1456,8 @@ impl<'a> TabComponent<'a> {
                 .with_cross_axis_alignment(warpui::elements::CrossAxisAlignment::Center);
             if let Some(indicator) = self.render_indicator() {
                 flex_row.add_child(indicator);
+            } else if let Some(kind_icon) = self.render_kind_icon() {
+                flex_row.add_child(kind_icon);
             }
             flex_row.add_child(
                 Shrinkable::new(
@@ -1411,8 +1476,8 @@ impl<'a> TabComponent<'a> {
             if let Some(indicator) = self.render_indicator() {
                 indicator
             } else {
-                // Fallback to terminal icon if no indicator is present
-                Icon::Terminal
+                self.kind
+                    .icon()
                     .to_warpui_icon(
                         self.styles
                             .default
