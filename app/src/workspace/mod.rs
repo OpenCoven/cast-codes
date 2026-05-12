@@ -738,6 +738,14 @@ pub fn init(app: &mut AppContext) {
         .with_enabled(|| FeatureFlag::VerticalTabs.is_enabled())
         .with_key_binding(cmd_or_ctrl_shift("b")),
         EditableBinding::new(
+            "workspace:open_browser_pane",
+            BindingDescription::new("Open Browser Pane"),
+            WorkspaceAction::OpenBrowserPane { url: None },
+        )
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging"))
+        .with_key_binding(cmd_or_ctrl_shift("b")),
+        EditableBinding::new(
             LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME,
             BindingDescription::new("Left Panel: Agent conversations"),
             WorkspaceAction::ToggleConversationListView,

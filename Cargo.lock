@@ -7066,7 +7066,7 @@ dependencies = [
  "sum_tree",
  "sysinfo",
  "version-compare 0.1.1",
- "warp",
+ "warp-app",
  "warp-command-signatures",
  "warp-workflows",
  "warp_cli",
@@ -14963,7 +14963,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "warp"
+name = "warp-app"
 version = "0.1.0"
 dependencies = [
  "addr",

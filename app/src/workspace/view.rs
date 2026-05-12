@@ -178,9 +178,9 @@ use crate::drive::export::ExportManager;
 use crate::drive::settings::WarpDriveSettings;
 use crate::launch_configs::launch_config::WindowTemplate;
 use crate::pane_group::{
-    AIFactPane, ChildAgentOrigin, CodeReviewPanelArg, Direction as PaneGroupDirection,
+    AIFactPane, BrowserPane, ChildAgentOrigin, CodeReviewPanelArg, Direction as PaneGroupDirection,
     EnvironmentManagementPane, ExecutionProfileEditorPane, NetworkLogPane, PaneGroup, PaneId,
-    TerminalPaneId,
+    TerminalPaneId, DEFAULT_BROWSER_URL,
 };
 use crate::quit_warning::UnsavedStateSummary;
 use crate::search::command_palette::view::NavigationMode;
@@ -13050,6 +13050,19 @@ impl Workspace {
         });
     }
 
+    pub(crate) fn open_browser_pane(&mut self, url: Option<String>, ctx: &mut ViewContext<Self>) {
+        let url = url.unwrap_or_else(|| DEFAULT_BROWSER_URL.to_string());
+        let pane = BrowserPane::new(Some(url), ctx);
+        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+            pane_group.add_pane_with_direction(
+                Direction::Right,
+                pane,
+                true, /* focus_new_pane */
+                ctx,
+            );
+        });
+    }
+
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
     fn show_handoff_prepare_failed_toast(window_id: WindowId, ctx: &mut ViewContext<Self>) {
         WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
@@ -20612,6 +20625,9 @@ impl TypedActionView for Workspace {
             }
             OpenNetworkLogPane => {
                 self.open_network_log_pane(ctx);
+            }
+            OpenBrowserPane { url } => {
+                self.open_browser_pane(url.clone(), ctx);
             }
             FixSettingsWithOz { error_description } => {
                 use crate::ai::skills::SkillManager;
