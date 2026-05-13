@@ -107,11 +107,11 @@ impl CliAgentPluginManager for GeminiPluginManager {
     }
 
     fn install_success_message(&self) -> &'static str {
-        "Warp plugin installed. Please restart Gemini CLI to activate."
+        "Notification extension installed. Please restart Gemini CLI to activate."
     }
 
     fn update_success_message(&self) -> &'static str {
-        "Warp plugin updated. Please restart Gemini CLI to activate."
+        "Notification extension updated. Please restart Gemini CLI to activate."
     }
 
     fn install_instructions(&self) -> &'static PluginInstructions {
@@ -124,10 +124,10 @@ impl CliAgentPluginManager for GeminiPluginManager {
 }
 
 static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
-    title: "Install Warp Plugin for Gemini CLI",
+    title: "Install Gemini CLI Notification Extension",
     subtitle: "Run the following command, then restart Gemini CLI.",
     steps: &[PluginInstructionStep {
-        description: "Install the Warp extension",
+        description: "Install the notification extension",
         command:
             "gemini extensions install https://github.com/warpdotdev/gemini-cli-warp --consent",
         executable: true,
@@ -137,10 +137,10 @@ static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| Plu
 });
 
 static UPDATE_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
-    title: "Update Warp Plugin for Gemini CLI",
+    title: "Update Gemini CLI Notification Extension",
     subtitle: "Run the following command, then restart Gemini CLI.",
     steps: &[PluginInstructionStep {
-        description: "Update the Warp extension",
+        description: "Update the notification extension",
         command: "gemini extensions update gemini-warp",
         executable: true,
         link: None,
@@ -158,7 +158,7 @@ fn check_installed(extensions_dir: &Path) -> bool {
     serde_json::from_str::<Value>(&contents).is_ok()
 }
 
-/// Reads the installed version string for the Warp extension, if present.
+/// Reads the installed version string for the notification extension, if present.
 fn installed_version(extensions_dir: &Path) -> Option<String> {
     let manifest_path = extensions_dir
         .join(EXTENSION_NAME)

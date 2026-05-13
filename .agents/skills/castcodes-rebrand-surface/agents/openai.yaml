@@ -1,0 +1,4 @@
+interface:
+  display_name: "CastCodes Rebrand Surface"
+  short_description: "Guard public CastCodes naming surfaces"
+  default_prompt: "Use $castcodes-rebrand-surface to check a CastCodes public naming or app identity change."

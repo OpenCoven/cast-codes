@@ -2,7 +2,7 @@
 # Package Spec
 ###############################################################################
 
-Summary:     The orchestration platform for cloud agents.
+Summary:     The CastCodes terminal and code workspace CLI.
 Name:        oz@@CHANNEL_SUFFIX@@
 Version:     @@VERSION@@
 Release:     @@RELEASE@@
@@ -31,12 +31,12 @@ prefix:      /opt
 ###############################################################################
 
 %description
-The Oz CLI is a tool for running, managing, and orchestrating coding agents at scale.
+The CastCodes CLI is a tool for local terminal and code workflows.
 Use the CLI to:
-* Launch and inspect cloud agents
-* Schedule cloud agents to run in the future
-* Manage the environments that cloud agents run in
-* Upload secrets to Oz's secure storage
+* Launch the desktop app
+* Run local agent workflows
+* Manage MCP servers
+* Print diagnostics and shell completions
 
 ###############################################################################
 # Build rule - how does the package get built?

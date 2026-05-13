@@ -41,7 +41,8 @@ const UNSUPPORTED_SHELL_ERROR: &str =
 const TMUX_INSTALL_FAILED_ERROR: &str =
     "The tmux install hit an unexpected error. Please install tmux manually and try again.";
 
-const SSH_GITHUB_ISSUE_URL: &str = "https://github.com/warpdotdev/Warp/issues/new?assignees=&labels=Bugs,SSH-tmux&projects=&template=03_ssh_tmux.yml";
+const SSH_GITHUB_ISSUE_URL: &str =
+    "https://github.com/OpenCoven/cast-codes/issues/new?labels=Bug,SSH-tmux";
 
 fn get_ssh_github_issue_url(title: &str) -> String {
     let url = if let Some(version) = ChannelState::app_version() {

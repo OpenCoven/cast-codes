@@ -79,7 +79,7 @@ pub struct RemoteServerIdentityArgs {
 /// Global options that apply to all CLI commands.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct GlobalOptions {
-    /// API key for server authentication.
+    /// API key for hosted service authentication.
     #[arg(long = "api-key", global = true, env = "WARP_API_KEY")]
     pub api_key: Option<String>,
 
@@ -97,16 +97,15 @@ pub struct GlobalOptions {
 /// Command-line argument parser for the main Warp binary. This is used across all channels.
 #[derive(Debug, Default, Parser, Clone)]
 #[command(
-    name = "oz",
-    display_name = "Oz",
-    about = r#"The orchestration platform for cloud agents
+    name = "cast-codes",
+    display_name = "CastCodes",
+    about = r#"The CastCodes terminal and code workspace CLI
 
-The Oz CLI is a tool for running, managing, and orchestrating coding agents at scale.
 Use the CLI to:
-* Launch and inspect cloud agents
-* Schedule cloud agents to run in the future
-* Manage the environments that cloud agents run in
-* Upload secrets to Oz's secure storage"#
+* Launch the local desktop app
+* Run local agent workflows
+* Manage MCP servers
+* Print diagnostics and shell completions"#
 )]
 #[clap(args_conflicts_with_subcommands = true)]
 pub struct Args {
@@ -269,6 +268,10 @@ impl Args {
     /// IMPORTANT: use this instead of [`CommandFactory::command`], since we customize the command at runtime.
     pub fn clap_command() -> clap::Command {
         let mut command = <Args as CommandFactory>::command();
+
+        if !ChannelState::cloud_services_available() {
+            command = command.mut_arg("api_key", |arg| arg.hide(true));
+        }
 
         // Hide the environment subcommands and --environment flags from help text
         if !FeatureFlag::CloudEnvironments.is_enabled() {
@@ -535,7 +538,7 @@ pub enum WorkerCommand {
 /// but it allows scripting some Warp functionality.
 #[derive(Debug, Clone, Subcommand)]
 pub enum CliCommand {
-    /// Interact with Oz.
+    /// Run and manage agents.
     #[command(subcommand)]
     Agent(crate::agent::AgentCommand),
 

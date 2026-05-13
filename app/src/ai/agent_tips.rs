@@ -199,18 +199,11 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             kind: AgentTipKind::Mcp,
         },
         AgentTip {
-            description: "`/open-mcp-servers` to view and share MCP servers with your team.".to_string(),
+            description: "`/open-mcp-servers` to view MCP servers configured for your workspace.".to_string(),
             link: None,
             binding_name: None,
             action: None,
             kind: AgentTipKind::Mcp,
-        },
-        AgentTip {
-            description: "`/create-environment` to turn a repo into a remote docker environment an agent can run in.".to_string(),
-            link: Some("https://docs.warp.dev/reference/cli/integration-setup".to_string()),
-            binding_name: None,
-            action: None,
-            kind: AgentTipKind::General,
         },
         AgentTip {
             description: "`/add-prompt` to create a reusable prompt for repeatable workflows.".to_string(),
@@ -262,8 +255,8 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             kind: AgentTipKind::General,
         },
         AgentTip {
-            description: "Use the `oz` command to run an Oz agent in headless mode, useful for remote machines.".to_string(),
-            link: Some("https://docs.warp.dev/reference/cli".to_string()),
+            description: "Use the CastCodes CLI to run local agent workflows from a shell.".to_string(),
+            link: None,
             binding_name: None,
             action: None,
             kind: AgentTipKind::General,
@@ -290,7 +283,7 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             kind: AgentTipKind::Context,
         },
         AgentTip {
-            description: "Warpify a remote SSH session to enable Oz inside that environment.".to_string(),
+            description: "Warpify a remote SSH session to improve terminal integration in that environment.".to_string(),
             link: Some("https://docs.warp.dev/terminal/warpify".to_string()),
             binding_name: None,
             action: None,
@@ -319,7 +312,7 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
         },
         AgentTip {
             description: "Enable desktop notifications to get an alert when an agent needs your attention.".to_string(),
-            link: Some("https://docs.warp.dev/agent-platform/cloud-agents/managing-cloud-agents#in-app-agent-notifications".to_string()),
+            link: None,
             binding_name: None,
             action: None,
             kind: AgentTipKind::General,

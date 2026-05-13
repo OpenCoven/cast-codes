@@ -1,4 +1,5 @@
 use super::{derive_http_origin_from_ws_url, ChannelState};
+use crate::brand;
 use crate::channel::Channel;
 
 #[test]
@@ -29,4 +30,17 @@ fn oss_channel_uses_castcodes_public_identity() {
     );
     assert_eq!(ChannelState::url_scheme(), "castcodes");
     assert!(!ChannelState::cloud_services_available());
+    assert!(!ChannelState::is_telemetry_available());
+    assert!(!ChannelState::is_crash_reporting_available());
+    assert_eq!(ChannelState::releases_base_url(), "");
+    assert_eq!(
+        ChannelState::server_root_url(),
+        brand::UNAVAILABLE_LOCALHOST_HTTP_URL
+    );
+    assert_eq!(
+        ChannelState::oz_root_url(),
+        brand::UNAVAILABLE_LOCALHOST_HTTP_URL
+    );
+    assert_eq!(ChannelState::firebase_api_key(), "");
+    assert!(ChannelState::session_sharing_server_url().is_none());
 }

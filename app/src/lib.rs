@@ -2911,11 +2911,20 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
                 flag,
                 FeatureFlag::Autoupdate
                     | FeatureFlag::Changelog
+                    | FeatureFlag::CrashReporting
+                    | FeatureFlag::CocoaSentry
+                    | FeatureFlag::LogExpensiveFramesInSentry
+                    | FeatureFlag::RecordAppActiveEvents
+                    | FeatureFlag::GlobalAIAnalyticsBanner
+                    | FeatureFlag::GlobalAIAnalyticsCollection
                     | FeatureFlag::ViewingSharedSessions
                     | FeatureFlag::CreatingSharedSessions
+                    | FeatureFlag::SharedSessionWriteToLongRunningCommands
                     | FeatureFlag::SessionSharingAcls
                     | FeatureFlag::SharedWithMe
                     | FeatureFlag::CloudEnvironments
+                    | FeatureFlag::CreateEnvironmentSlashCommand
+                    | FeatureFlag::DriveObjectsAsContext
                     | FeatureFlag::AmbientAgentsCommandLine
                     | FeatureFlag::AmbientAgentsImageUpload
                     | FeatureFlag::ScheduledAmbientAgents
@@ -2925,8 +2934,10 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
                     | FeatureFlag::TeamApiKeys
                     | FeatureFlag::AgentSharedSessions
                     | FeatureFlag::SyncAmbientPlans
+                    | FeatureFlag::WarpManagedSecrets
                     | FeatureFlag::CloudConversations
                     | FeatureFlag::AmbientAgentsRTC
+                    | FeatureFlag::PluggableNotifications
                     | FeatureFlag::AgentViewConversationListView
                     | FeatureFlag::CloudMode
                     | FeatureFlag::CloudModeFromLocalSession

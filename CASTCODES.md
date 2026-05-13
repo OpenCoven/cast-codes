@@ -30,6 +30,6 @@ Use the rebrand guard for public-surface changes:
 Core identity checks:
 
 ```bash
-cargo test -p warp_core --features local_fs castcodes
+cargo test -p warp_core --features local_fs
 cargo check -p warp --bin cast-codes --features gui
 ```

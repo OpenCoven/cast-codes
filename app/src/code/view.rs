@@ -89,6 +89,8 @@ const LANGUAGE_ICON_WIDTH: f32 = 16.;
 const TAB_INTERNAL_MARGIN: f32 = 4.;
 const TAB_HORIZONTAL_MARGIN: f32 = 8.;
 const TAB_PADDING: f32 = 2.;
+const EDITOR_SURFACE_RADIUS: f32 = 6.;
+const EDITOR_STATUS_BAR_HEIGHT: f32 = 28.;
 
 // Keybinding constants - exported so AI document view can reuse
 pub const SAVE_FILE_BINDING_NAME: &str = "code_view:save";
@@ -1641,6 +1643,80 @@ impl CodeView {
         .finish()
     }
 
+    fn render_editor_status_bar(&self, tab: &TabData, app: &AppContext) -> Box<dyn Element> {
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let has_unsaved_changes = Self::has_unsaved_changes(tab, app);
+        let path_label = tab
+            .path
+            .clone()
+            .map(|path| Self::relative_path(path, self.window_id, app))
+            .unwrap_or_else(|| "Untitled".to_string());
+        let line_count = tab
+            .editor_view
+            .as_ref(app)
+            .editor()
+            .as_ref(app)
+            .model
+            .as_ref(app)
+            .line_count(app)
+            .max(1);
+        let line_label = if line_count == 1 {
+            "1 line".to_string()
+        } else {
+            format!("{line_count} lines")
+        };
+        let save_label = if has_unsaved_changes {
+            "Unsaved changes"
+        } else {
+            "Saved"
+        };
+        let main_text = blended_colors::text_main(theme, theme.surface_1());
+        let secondary_text = blended_colors::text_sub(theme, theme.surface_1());
+        let status_color = if has_unsaved_changes {
+            theme.accent().into_solid()
+        } else {
+            secondary_text
+        };
+
+        let path_text = Text::new_inline(
+            path_label,
+            appearance.ui_font_family(),
+            appearance.ui_font_size() - 1.,
+        )
+        .with_color(main_text)
+        .finish();
+        let status_text = Text::new_inline(
+            format!("{save_label} | {line_label}"),
+            appearance.ui_font_family(),
+            appearance.ui_font_size() - 1.,
+        )
+        .with_color(status_color)
+        .finish();
+
+        let mut row = Flex::row()
+            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .with_cross_axis_alignment(CrossAxisAlignment::Center);
+        row.add_child(
+            Shrinkable::new(
+                1.,
+                Container::new(path_text).with_margin_right(12.).finish(),
+            )
+            .finish(),
+        );
+        row.add_child(Container::new(status_text).finish());
+
+        Container::new(
+            ConstrainedBox::new(row.finish())
+                .with_height(EDITOR_STATUS_BAR_HEIGHT)
+                .finish(),
+        )
+        .with_horizontal_padding(10.)
+        .with_border(Border::top(1.).with_border_fill(theme.outline()))
+        .with_background_color(theme.surface_1().with_opacity(55).into())
+        .finish()
+    }
+
     /// Renders the tab bar with explicit draggable handling for multi-tab case.
     fn render_tab_bar_with_draggable(
         &self,
@@ -1680,20 +1756,30 @@ impl CodeView {
                 tab_data.mouse_state_handles.tab_handle.clone(),
                 |tab_handle| {
                     let mut stack = Stack::new();
-                    let container = Container::new(
-                        Container::new(Self::render_tab_internal(
-                            tab_data,
-                            index,
-                            is_active,
-                            tab_handle.is_hovered(),
-                            Self::has_unsaved_changes(tab_data, app),
-                            appearance,
-                        ))
-                        .with_horizontal_margin(TAB_HORIZONTAL_MARGIN)
-                        .with_padding(Padding::uniform(TAB_PADDING))
-                        .finish(),
-                    )
-                    .with_border(
+                    let mut tab_contents = Container::new(Self::render_tab_internal(
+                        tab_data,
+                        index,
+                        is_active,
+                        tab_handle.is_hovered(),
+                        Self::has_unsaved_changes(tab_data, app),
+                        appearance,
+                    ))
+                    .with_horizontal_margin(TAB_HORIZONTAL_MARGIN)
+                    .with_padding(Padding::uniform(TAB_PADDING));
+                    if is_active {
+                        tab_contents = tab_contents
+                            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
+                                EDITOR_SURFACE_RADIUS,
+                            )))
+                            .with_background_color(theme.surface_1().with_opacity(70).into());
+                    } else if tab_handle.is_hovered() {
+                        tab_contents = tab_contents
+                            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
+                                EDITOR_SURFACE_RADIUS,
+                            )))
+                            .with_background_color(theme.surface_2().with_opacity(45).into());
+                    }
+                    let container = Container::new(tab_contents.finish()).with_border(
                         Border::new(TAB_BAR_BORDER_HEIGHT)
                             .with_border_fill(theme.outline())
                             .with_sides(false, false, !is_active, true),
@@ -2038,20 +2124,32 @@ impl View for CodeView {
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let tab = self.tab_at(self.active_tab_index);
         let body = if let Some(tab) = tab {
-            match self.source {
-                CodeSource::AIAction { .. } => Flex::column()
-                    .with_child(self.render_request_edit_action_header(tab, app))
-                    .with_child(
-                        Shrinkable::new(1., ChildView::new(&tab.editor_view).finish()).finish(),
-                    )
-                    .finish(),
-                _ => ChildView::new(&tab.editor_view).finish(),
+            let mut column = Flex::column().with_main_axis_size(MainAxisSize::Max);
+            if let CodeSource::AIAction { .. } = self.source {
+                column.add_child(self.render_request_edit_action_header(tab, app));
             }
+            column
+                .add_child(Shrinkable::new(1., ChildView::new(&tab.editor_view).finish()).finish());
+            column.add_child(self.render_editor_status_bar(tab, app));
+            column.finish()
         } else {
             Empty::new().finish()
         };
 
-        Container::new(body).with_padding_top(PADDING).finish()
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        Container::new(
+            Container::new(body)
+                .with_border(Border::all(1.).with_border_fill(theme.outline()))
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
+                    EDITOR_SURFACE_RADIUS,
+                )))
+                .with_background_color(theme.background().into())
+                .finish(),
+        )
+        .with_padding(Padding::uniform(PADDING))
+        .with_background_color(theme.surface_1().with_opacity(28).into())
+        .finish()
     }
 }
 

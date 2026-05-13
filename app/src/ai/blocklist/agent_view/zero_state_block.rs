@@ -54,9 +54,9 @@ use crate::{
 };
 
 const CLOUD_AGENT_DOCS_URL: &str = "https://docs.warp.dev/agent-platform/cloud-agents/overview";
-const OZ_UPDATES_SECTION_HEADER: &str = "What's new in Oz";
+const OZ_UPDATES_SECTION_HEADER: &str = "What's new in agent orchestration";
 
-// The maximum number of Oz updates from the changelog rendered in-line in the 'What's new in Oz section'.
+// The maximum number of orchestration updates rendered inline in the zero-state section.
 const MAX_OZ_UPDATE_COUNT: usize = 4;
 
 const MAX_RECENT_CONVERSATION_COUNT: usize = 3;
@@ -412,7 +412,7 @@ impl View for AgentViewZeroStateBlock {
             }
         } else {
             let mut local_description =
-                "Send a prompt below to start a new conversation".to_owned();
+                "Send a prompt below to start visible, project-scoped work".to_owned();
             let active_session = self.active_session(app);
             let location_label = active_session.as_deref().and_then(|session| {
                 format_session_location(session, self.current_working_directory.as_deref())
@@ -422,7 +422,7 @@ impl View for AgentViewZeroStateBlock {
             }
 
             HeaderProps {
-                title: "New Oz agent conversation".into(),
+                title: "New local agent session".into(),
                 description: AgentViewDescription::PlainText(vec![local_description.into()]),
                 icon: Icon::Oz,
             }
