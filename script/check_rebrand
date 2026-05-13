@@ -42,6 +42,33 @@ scan_paths=(
   .github/pull_request_template.md
 )
 
+# Paths inside the app crate where user-visible strings live. We only scan
+# *quoted string literals* here (see the in-string pattern below) so that
+# internal Rust identifiers (WarpDrive, WarpifyPageView, EditorChoice::Warp,
+# WARP_* env vars, etc.) remain untouched per the staged rebrand policy.
+app_src_paths=(
+  app/src/app_menus.rs
+  app/src/root_view.rs
+  app/src/quit_warning
+  app/src/workspace/view.rs
+  app/src/workspace/mod.rs
+  app/src/workspace/cli_install.rs
+  app/src/workspace/view
+  app/src/workspace/hoa_onboarding
+  app/src/settings_view
+  app/src/terminal/input.rs
+  app/src/resource_center
+  app/src/auth
+  app/src/billing
+  app/src/wasm_nux_dialog.rs
+  app/src/themes/default_themes.rs
+  app/src/themes/theme.rs
+  app/src/uri/browser_url_handler.rs
+  app/src/uri/mod.rs
+  app/src/ai_assistant
+  app/src/tips/tip_view.rs
+)
+
 patterns=(
   'Warp'
   'warp\.dev'
@@ -61,12 +88,18 @@ for pattern in "${patterns[@]}"; do
     "$pattern" "${scan_paths[@]}" >> "$tmp" || true
 done
 
+# Scan in-app Rust source for "Warp" appearing inside quoted string literals
+# only. Internal identifiers (types, enum variants, env vars, log keys, file
+# paths) are out of scope by design. Exclude tests.
+rg -n --type rust --glob '!**/*_tests.rs' --glob '!**/tests/**' \
+  '"[^"]*\bWarp\b[^"]*"' "${app_src_paths[@]}" >> "$tmp" || true
+
 if [[ ! -s "$tmp" ]]; then
   echo "CastCodes rebrand guard passed."
   exit 0
 fi
 
-allowed='(^WARP.md:|script/macos/bundle:[0-9]+:.*WARP_|script/macos/bundle:[0-9]+:.*WarpDockTilePlugin|script/macos/run:[0-9]+:.*WARP_|script/run:[0-9]+:.*WARP_|script/linux/bundle:[0-9]+:.*WARP_|script/linux/bundle_appimage:[0-9]+:.*WARP_|script/windows/bundle\.ps1:[0-9]+:.*WARP_|script/windows/windows-installer\.iss:[0-9]+:.*WARP_CLI_MODE|app/src/bin/oss\.rs:[0-9]+:.*WarpServerConfig|app/Cargo\.toml:[0-9]+:.*package\.metadata\.bundle\.bin\.warp|app/Cargo\.toml:[0-9]+:.*open_warp_|app/Cargo\.toml:[0-9]+:.*warpify_|app/Cargo\.toml:[0-9]+:.*warpdotdev/|Cargo\.toml:[0-9]+:.*warpdotdev/)'
+allowed='(^WARP.md:|script/macos/bundle:[0-9]+:.*WARP_|script/macos/bundle:[0-9]+:.*WarpDockTilePlugin|script/macos/run:[0-9]+:.*WARP_|script/run:[0-9]+:.*WARP_|script/linux/bundle:[0-9]+:.*WARP_|script/linux/bundle_appimage:[0-9]+:.*WARP_|script/windows/bundle\.ps1:[0-9]+:.*WARP_|script/windows/windows-installer\.iss:[0-9]+:.*WARP_CLI_MODE|app/src/bin/oss\.rs:[0-9]+:.*WarpServerConfig|app/Cargo\.toml:[0-9]+:.*package\.metadata\.bundle\.bin\.warp|app/Cargo\.toml:[0-9]+:.*open_warp_|app/Cargo\.toml:[0-9]+:.*warpify_|app/Cargo\.toml:[0-9]+:.*warpdotdev/|Cargo\.toml:[0-9]+:.*warpdotdev/|app/src/settings_view/mod\.rs:[0-9]+:.*backward compatibility|app/src/settings_view/mod\.rs:[0-9]+:.*"WarpDrive" \| "Warp Drive"|app/src/settings_view/mod\.rs:[0-9]+:.*"Oz" \| "Warp Agent"|app/src/ai_assistant/mod\.rs:[0-9]+://!.*renamed to "Warp AI")'
 
 violations="$(grep -Ev "$allowed" "$tmp" || true)"
 

@@ -79,7 +79,7 @@ const SPACE_AFTER_TEXT_INPUT: f32 = ITEM_VERTICAL_SPACING - BUILT_IN_TEXT_INPUT_
 const SSH_TMUX_WARPIFICATION_DESCRIPTION: &str = "The tmux ssh wrapper works in many situations where the default one does not, but may require you to hit a button to warpify. Takes effect in new tabs.";
 
 const SSH_EXTENSION_INSTALL_MODE_DESCRIPTION: &str =
-    "Controls the installation behavior for Warp's SSH extension when a remote host doesn't have it installed.";
+    "Controls the installation behavior for the CastCodes SSH extension when a remote host doesn't have it installed.";
 
 /// This page lets users configure when they get asked to warpify a session. Some shell commands
 /// are recognized by default. Users can add new shell commands, or prevent the default ones from
@@ -186,7 +186,7 @@ impl WarpifyPageView {
         {
             categories.push(
                 Category::new("SSH", vec![Box::new(SSHWidget::default())])
-                    .with_subtitle("Warpify your interactive SSH sessions."),
+                    .with_subtitle("Castify your interactive SSH sessions."),
             );
         }
         PageType::new_categorized(categories, None)
@@ -557,7 +557,7 @@ impl TitleWidget {
         .finish();
 
         Flex::column()
-            .with_child(render_page_title("Warpify", HEADER_FONT_SIZE, appearance))
+            .with_child(render_page_title("Castify", HEADER_FONT_SIZE, appearance))
             .with_child(warpify_description)
             .finish()
     }
@@ -683,7 +683,7 @@ impl SettingsWidget for SSHWidget {
             &WarpifySettings::as_ref(app).enable_ssh_warpification,
             move || {
                 render_body_item::<WarpifyPageAction>(
-                    "Warpify SSH Sessions".into(),
+                    "Castify SSH Sessions".into(),
                     None,
                     LocalOnlyIconState::for_setting(
                         EnableSshWarpification::storage_key(),

@@ -477,7 +477,7 @@ impl LoginSlideView {
 
         let is_terminal = matches!(self.intention, OnboardingIntention::Terminal);
         let title_text = if is_terminal {
-            "Get started with Warp Drive"
+            "Get started with Cast Drive"
         } else {
             "Get started with AI"
         };
@@ -513,7 +513,7 @@ impl LoginSlideView {
         let tos_line = Flex::row()
             .with_child(
                 ui_builder
-                    .span("By continuing, you agree to Warp's ")
+                    .span("By continuing, you agree to CastCodes's ")
                     .with_style(disclaimer_styles)
                     .build()
                     .finish(),
@@ -601,7 +601,7 @@ impl LoginSlideView {
 
         let cmd_enter = Keystroke::parse("cmdorctrl-enter").unwrap_or_default();
         let skip_label = if matches!(self.intention, OnboardingIntention::Terminal) {
-            "Disable Warp Drive"
+            "Disable Cast Drive"
         } else {
             "Disable AI features"
         };
@@ -898,7 +898,7 @@ impl LoginSlideView {
 
         let is_terminal = matches!(self.intention, OnboardingIntention::Terminal);
         let title_text = if is_terminal {
-            "Are you sure you want to disable Warp Drive?"
+            "Are you sure you want to disable Cast Drive?"
         } else {
             "Are you sure you want to disable AI features?"
         };
@@ -934,9 +934,9 @@ impl LoginSlideView {
             .finish();
 
         let body_text_str = if is_terminal {
-            "Warp Drive lets you save workflows and knowledge across devices and share them with your team. By continuing, you won't have access to the following features:"
+            "Cast Drive lets you save workflows and knowledge across devices and share them with your team. By continuing, you won't have access to the following features:"
         } else {
-            "Warp is better with AI. By continuing, you won't have access to any of the following features:"
+            "CastCodes is better with AI. By continuing, you won't have access to any of the following features:"
         };
         let body_text =
             FormattedTextElement::from_str(body_text_str, appearance.ui_font_family(), 14.)
@@ -989,7 +989,7 @@ impl LoginSlideView {
             .finish();
 
         let cancel_label = if is_terminal {
-            "Enable Warp Drive"
+            "Enable Cast Drive"
         } else {
             "Enable AI features"
         };

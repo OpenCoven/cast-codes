@@ -75,7 +75,7 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
-const DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Warp Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. You can also find team servers that have been shared with you here. ";
+const DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Cast Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. You can also find team servers that have been shared with you here. ";
 
 #[derive(Debug, Clone)]
 pub enum MCPServersListPageViewEvent {
@@ -1280,8 +1280,8 @@ impl MCPServersListPageView {
                         .current_team()
                         .map(|team| team.name.clone());
                     let shared_by_text = match team_name {
-                        Some(name) => format!("Shared by Warp and {name}"),
-                        None => "Shared by Warp and from other devices".to_string(),
+                        Some(name) => format!("Shared by CastCodes and {name}"),
+                        None => "Shared by CastCodes and from other devices".to_string(),
                     };
 
                     page.add_child(self.render_server_cards_section(
@@ -1292,7 +1292,7 @@ impl MCPServersListPageView {
                     ));
                 } else if !filtered_gallery_cards.is_empty() {
                     page.add_child(self.render_server_cards_section(
-                        "Shared from Warp",
+                        "Shared from CastCodes",
                         &filtered_gallery_cards,
                         appearance,
                         app,

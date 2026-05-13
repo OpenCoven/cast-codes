@@ -141,7 +141,7 @@ pub fn refresh_warp_drive(
     UpdateManager::as_ref(ctx)
         .initial_load_complete()
         .with_timeout(WARP_DRIVE_SYNC_TIMEOUT)
-        .map_err(|_| anyhow::anyhow!("Timed out waiting for Warp Drive to sync"))
+        .map_err(|_| anyhow::anyhow!("Timed out waiting for Cast Drive to sync"))
 }
 
 /// Fetch the conversation's server metadata and validate that its harness matches the caller's

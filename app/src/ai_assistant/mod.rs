@@ -1,4 +1,4 @@
-//! AI Assistant has since been renamed to "Warp AI" in the product.
+//! AI Assistant was renamed to "Warp AI" then "Cast Agent" in the product.
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{
@@ -34,8 +34,8 @@ mod test_util;
 /// This is also roughly the limit at which the editor starts degrading.
 pub const PROMPT_CHARACTER_LIMIT: usize = 1000;
 
-pub const AI_ASSISTANT_FEATURE_NAME: &str = "Warp AI";
-pub const ASK_AI_ASSISTANT_TEXT: &str = "Ask Warp AI";
+pub const AI_ASSISTANT_FEATURE_NAME: &str = "Cast Agent";
+pub const ASK_AI_ASSISTANT_TEXT: &str = "Ask the Cast Agent";
 
 pub const AI_ASSISTANT_SVG_PATH: &str = "bundled/svg/ai-assistant.svg";
 

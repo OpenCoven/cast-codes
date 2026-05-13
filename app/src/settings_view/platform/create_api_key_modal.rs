@@ -41,7 +41,7 @@ impl ApiKeyType {
     fn description(&self) -> &'static str {
         match self {
             ApiKeyType::Personal => {
-                "This API key is tied to your user and can make requests against your Warp account."
+                "This API key is tied to your user and can make requests against your CastCodes account."
             }
             ApiKeyType::Team => {
                 "This API key is tied to your team and can make requests on behalf of your team."
@@ -155,7 +155,7 @@ impl CreateApiKeyModal {
                 ..Default::default()
             };
             let mut editor = EditorView::single_line(options, ctx);
-            editor.set_placeholder_text("Warp API Key", ctx);
+            editor.set_placeholder_text("CastCodes API Key", ctx);
             editor
         });
 
@@ -320,7 +320,7 @@ impl CreateApiKeyModal {
         let name = self.name_editor.as_ref(ctx).buffer_text(ctx);
 
         let final_name = if name.trim().is_empty() {
-            "Warp API Key".to_string()
+            "CastCodes API Key".to_string()
         } else {
             name.trim().to_string()
         };

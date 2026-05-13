@@ -42,8 +42,8 @@ use warpui::{
 
 const HEADER_FONT_SIZE: f32 = 18.;
 const HEADER_MARGIN_BOTTOM: f32 = 32.;
-const HEADER_TEXT: &str = "Invite a friend to Warp";
-const ANONYMOUS_USER_HEADER_TEXT: &str = "Sign up to participate in Warp's referral program";
+const HEADER_TEXT: &str = "Invite a friend to CastCodes";
+const ANONYMOUS_USER_HEADER_TEXT: &str = "Sign up to participate in CastCodes's referral program";
 
 const INVITE_FIELD_LABEL_BOTTOM_MARGIN: f32 = 8.;
 
@@ -65,7 +65,7 @@ const LINK_COPIED_TOAST: &str = "Link copied.";
 const EMAIL_SUCCESS_TOAST: &str = "Successfully sent emails.";
 const EMAIL_FAILURE_TOAST: &str = "Failed to send emails. Please try again.";
 
-const REWARD_INTRO: &str = "Get exclusive Warp goodies when you refer someone*";
+const REWARD_INTRO: &str = "Get exclusive CastCodes goodies when you refer someone*";
 const REWARD_INTRO_FONT_SIZE: f32 = 14.;
 const REWARD_SECTION_VERTICAL_SPACING: f32 = 24.;
 

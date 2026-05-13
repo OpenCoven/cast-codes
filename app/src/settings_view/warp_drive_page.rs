@@ -139,7 +139,7 @@ impl SettingsWidget for WarpDriveHeaderWidget {
 
         let message = Container::new(
             Text::new_inline(
-                "To use Warp Drive, please create an account.".to_string(),
+                "To use Cast Drive, please create an account.".to_string(),
                 appearance.ui_font_family(),
                 14.,
             )
@@ -218,7 +218,7 @@ impl SettingsWidget for WarpDriveToggleWidget {
                 .is_anonymous_or_logged_out();
 
         render_body_item::<WarpDriveSettingsPageAction>(
-            "Warp Drive".into(),
+            "Cast Drive".into(),
             Some(AdditionalInfo {
                 mouse_state: self.info_icon_mouse_state.clone(),
                 on_click_action: Some(WarpDriveSettingsPageAction::OpenUrl(
@@ -248,7 +248,7 @@ impl SettingsWidget for WarpDriveToggleWidget {
                     }
                 })
                 .finish(),
-            Some("Warp Drive is a workspace in your terminal where you can save Workflows, Notebooks, Prompts, and Environment Variables for personal use or to share with a team.".into()),
+            Some("Cast Drive is a workspace in your terminal where you can save Workflows, Notebooks, Prompts, and Environment Variables for personal use or to share with a team.".into()),
         )
     }
 }

@@ -1015,7 +1015,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "cloud_platform.third_party_api_keys.aws_bedrock_credentials_enabled",
-        description: "Whether Warp should use your local AWS credentials for Bedrock-enabled requests.",
+        description: "Whether CastCodes should use your local AWS credentials for Bedrock-enabled requests.",
     }
     // Whether to automatically run the AWS login command when Bedrock credentials are expired.
     //
@@ -1078,7 +1078,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "agents.knowledge.warp_drive_context_enabled",
-        description: "Whether Warp Drive context is included in AI requests.",
+        description: "Whether Cast Drive context is included in AI requests.",
     }
 
     // Whether the codebase speedbump banner has been permanently dismissed for a given repo path.
@@ -1201,7 +1201,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "cloud_platform.third_party_api_keys.can_use_warp_credits_with_byok",
-        description: "Whether Warp credits can be used even when providing your own API key.",
+        description: "Whether CastCodes credits can be used even when providing your own API key.",
     }
 
     should_render_use_agent_footer_for_user_commands: ShouldRenderUseAgentToolbarForUserCommands {
@@ -1458,7 +1458,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::No),
         private: false,
         toml_path: "agents.warp_agent.other.agent_attribution_enabled",
-        description: "Whether the Warp Agent adds an attribution co-author line to commit messages and pull requests it creates.",
+        description: "Whether the Cast Agent adds an attribution co-author line to commit messages and pull requests it creates.",
     }
 ]);
 

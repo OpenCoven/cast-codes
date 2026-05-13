@@ -1,6 +1,6 @@
 use url::Url;
 
-const DEFAULT_TITLE: &str = "Warp";
+const DEFAULT_TITLE: &str = warp_core::brand::PRODUCT_NAME;
 const BASE_APP_PATH: &str = "/app";
 
 pub fn update_browser_url(url: Option<Url>, force_redirect: bool) {

@@ -1,0 +1,19 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3A3F8F"/>
+      <stop offset="1" stop-color="#1A1B3F"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g transform="translate(512 512)">
+    <!-- Outer C arc: opening to the right -->
+    <path d="M 226 -290
+             A 360 360 0 1 0 226 290
+             L 162 215
+             A 270 270 0 1 1 162 -215 Z"
+          fill="#FAF9F6"/>
+    <!-- Accent dot: the broadcast signal -->
+    <circle cx="370" cy="0" r="60" fill="#FAF9F6"/>
+  </g>
+</svg>

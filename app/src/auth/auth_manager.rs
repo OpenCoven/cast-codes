@@ -840,7 +840,7 @@ impl AuthManager {
 
     /// Returns whether an auth redirect that failed state validation should be
     /// silently dropped rather than surfaced as an error. This covers the
-    /// "user clicks the browser's 'Take me to Warp' button twice" case: once
+    /// "user clicks the browser's 'Take me to CastCodes' button twice" case: once
     /// they're fully logged in, a second redirect targeting the same user is
     /// redundant and should not produce a user-visible error.
     fn should_silently_ignore_stale_redirect(&self, incoming_user_uid: &Option<UserUid>) -> bool {

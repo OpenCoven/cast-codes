@@ -234,8 +234,8 @@ impl Display for SettingsSection {
             SettingsSection::Keybindings => write!(f, "Keyboard shortcuts"),
             SettingsSection::SharedBlocks => write!(f, "Shared blocks"),
             SettingsSection::MCPServers => write!(f, "MCP Servers"),
-            SettingsSection::WarpDrive => write!(f, "Warp Drive"),
-            SettingsSection::WarpAgent => write!(f, "Warp Agent"),
+            SettingsSection::WarpDrive => write!(f, "Cast Drive"),
+            SettingsSection::WarpAgent => write!(f, "Cast Agent"),
             SettingsSection::AgentProfiles => write!(f, "Profiles"),
             SettingsSection::AgentMCPServers => write!(f, "MCP servers"),
             SettingsSection::Knowledge => write!(f, "Knowledge"),
@@ -333,10 +333,12 @@ impl FromStr for SettingsSection {
             "Referrals" => Ok(Self::Referrals),
             "Shared blocks" => Ok(Self::SharedBlocks),
             "Teams" => Ok(Self::Teams),
-            "Warpify" => Ok(Self::Warpify),
-            "WarpDrive" | "Warp Drive" => Ok(Self::WarpDrive),
-            // This page was called "Oz" at one point, keep for backward compatibility.
-            "Oz" | "Warp Agent" => Ok(Self::WarpAgent),
+            // "Warpify" kept for backward compatibility with persisted user settings.
+            "Castify" | "Warpify" => Ok(Self::Warpify),
+            // "Warp Drive" kept for backward compatibility with persisted user settings.
+            "Cast Drive" | "WarpDrive" | "Warp Drive" => Ok(Self::WarpDrive),
+            // This page was called "Oz" then "Warp Agent" at various points; keep both for backward compatibility.
+            "Cast Agent" | "Oz" | "Warp Agent" => Ok(Self::WarpAgent),
             "Profiles" | "AgentProfiles" => Ok(Self::AgentProfiles),
             "MCP servers" | "AgentMCPServers" => Ok(Self::AgentMCPServers),
             "Knowledge" => Ok(Self::Knowledge),

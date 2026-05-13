@@ -2965,7 +2965,7 @@ pub fn render_failed_output(props: FailedOutputProps, app: &AppContext) -> Box<d
             )
         }
         RenderableAIError::ServerOverloaded => {
-            "Warp is currently overloaded. Please try again later.".to_string()
+            "CastCodes is currently overloaded. Please try again later.".to_string()
         }
         RenderableAIError::InternalWarpError => {
             format!("{ERROR_APOLOGY_TEXT}\n\n{INTERNAL_WARP_ERROR}")

@@ -376,7 +376,7 @@ impl PlatformPageWidget {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let text = vec![
-            FormattedTextFragment::plain_text("Create and manage API keys to allow other Oz cloud agents to access your Warp account.\nFor more information, visit the "),
+            FormattedTextFragment::plain_text("Create and manage API keys to allow other Oz cloud agents to access your CastCodes account.\nFor more information, visit the "),
             FormattedTextFragment::hyperlink("Documentation.", API_KEY_DOCS_URL),
         ];
 
@@ -668,7 +668,7 @@ impl PlatformPageWidget {
                     .with_child(
                         Container::new(
                             Text::new(
-                                "Create a key to manage external access to Warp",
+                                "Create a key to manage external access to CastCodes",
                                 appearance.ui_font_family(),
                                 CONTENT_FONT_SIZE,
                             )

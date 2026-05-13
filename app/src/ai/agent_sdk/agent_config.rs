@@ -217,7 +217,7 @@ impl AgentConfigRunner {
         if repo.is_some() {
             println!("Fetching agent skills from the specified repository...");
         } else {
-            println!("Fetching agent skills from your Warp environments...");
+            println!("Fetching agent skills from your CastCodes environments...");
         }
 
         let list_future = async move { ai_client.list_agents(repo).await };

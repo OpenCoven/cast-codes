@@ -8,7 +8,7 @@ use warpui::ViewContext;
 use super::view::Workspace;
 use crate::pane_group::{AnyPaneContent, FilePane};
 
-const WARP_HOME_TITLE: &str = "Welcome to Warp on Web";
+const WARP_HOME_TITLE: &str = "Welcome to CastCodes on Web";
 const WARP_HOME_CONTENT: &str = r#"
 Welcome to Warp on Web - your browser-based home for Warp! 
 Use Warp on Web to:

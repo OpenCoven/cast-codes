@@ -1566,7 +1566,7 @@ fn test_open_or_toggle_warp_drive() {
             );
             assert!(
                 workspace.current_workspace_state.is_warp_drive_open,
-                "Warp Drive should be open"
+                "Cast Drive should be open"
             );
             assert!(
                 !workspace
@@ -1574,7 +1574,7 @@ fn test_open_or_toggle_warp_drive() {
                     .as_ref(ctx)
                     .features_used
                     .contains(&Tip::Action(TipAction::OpenWarpDrive)),
-                "Warp drive welcome tip should not be completed"
+                "Cast drive welcome tip should not be completed"
             );
 
             // Next, toggle warp drive as a user action. WD should be closed and tip should not be filled out.
@@ -1585,7 +1585,7 @@ fn test_open_or_toggle_warp_drive() {
             );
             assert!(
                 !workspace.current_workspace_state.is_warp_drive_open,
-                "Warp Drive should be closed"
+                "Cast Drive should be closed"
             );
             assert!(
                 !workspace
@@ -1593,7 +1593,7 @@ fn test_open_or_toggle_warp_drive() {
                     .as_ref(ctx)
                     .features_used
                     .contains(&Tip::Action(TipAction::OpenWarpDrive)),
-                "Warp drive welcome tip should not be completed"
+                "Cast drive welcome tip should not be completed"
             );
 
             // Finally, toggle warp drive again as a user action. WD should be open and tip filled out.
@@ -1604,7 +1604,7 @@ fn test_open_or_toggle_warp_drive() {
             );
             assert!(
                 workspace.current_workspace_state.is_warp_drive_open,
-                "Warp Drive should be open"
+                "Cast Drive should be open"
             );
             assert!(
                 workspace
@@ -1612,7 +1612,7 @@ fn test_open_or_toggle_warp_drive() {
                     .as_ref(ctx)
                     .features_used
                     .contains(&Tip::Action(TipAction::OpenWarpDrive)),
-                "Warp drive welcome tip should not be completed"
+                "Cast drive welcome tip should not be completed"
             );
         });
     });

@@ -203,7 +203,7 @@ where
             .with_child(
                 appearance
                     .ui_builder()
-                    .span("*Secrets are not sent to Warp's server.")
+                    .span("*Secrets are not sent to CastCodes's server.")
                     .with_style(UiComponentStyles {
                         font_size: Some(12.),
                         margin: Some(Coords::default().top(4.)),
@@ -236,7 +236,7 @@ where
         .finish()
 }
 
-/// Returns whether "Open in Warp" should be offered for the given file path.
+/// Returns whether "Open in CastCodes" should be offered for the given file path.
 ///
 /// This checks:
 /// - Whether Warp is already the default editor (skip if so)

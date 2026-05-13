@@ -124,7 +124,7 @@ pub fn get_additional_keybindings() -> Vec<CommandBinding> {
         ),
         CommandBinding::new(
             "workspace:hide_warp".into(),
-            "Hide Warp".into(),
+            "Hide CastCodes".into(),
             Some(Keystroke::parse("cmd-h").expect("Valid keystroke")),
         ),
         CommandBinding::new(
@@ -134,7 +134,7 @@ pub fn get_additional_keybindings() -> Vec<CommandBinding> {
         ),
         CommandBinding::new(
             "workspace:quit_warp".into(),
-            "Quit Warp".into(),
+            "Quit CastCodes".into(),
             Some(Keystroke::parse("cmd-q").expect("Valid keystroke")),
         ),
         CommandBinding::new(

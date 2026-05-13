@@ -261,7 +261,7 @@ pub fn render_models_section(
         .with_child(render_filterable_dropdown_row(
             appearance,
             "Base model",
-            "This model serves as the primary engine behind the agent. It powers most interactions and invokes other models for tasks like planning or code generation when necessary. Warp may automatically switch to alternate models based on model availability or for auxiliary tasks such as conversation summarization.",
+            "This model serves as the primary engine behind the agent. It powers most interactions and invokes other models for tasks like planning or code generation when necessary. CastCodes may automatically switch to alternate models based on model availability or for auxiliary tasks such as conversation summarization.",
             &view.base_model_dropdown,
         ));
 
@@ -891,7 +891,7 @@ pub fn render_plan_auto_sync_toggle(
     .finish();
 
     let desc_elem = Text::new(
-        "The plans this agent creates will be automatically added and synced to Warp Drive."
+        "The plans this agent creates will be automatically added and synced to Cast Drive."
             .to_string(),
         appearance.ui_font_family(),
         11.,

@@ -104,7 +104,7 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             kind: AgentTipKind::SlashCommands,
         },
         AgentTip {
-            description: "<keybinding> to open the Command Palette and access Warp actions and shortcuts.".to_string(),
+            description: "<keybinding> to open the Command Palette and access CastCodes actions and shortcuts.".to_string(),
             link: Some("https://docs.warp.dev/terminal/command-palette".to_string()),
             binding_name: Some(TOGGLE_COMMAND_PALETTE_KEYBINDING_NAME),
             action: Some(WorkspaceAction::OpenPalette {
@@ -129,7 +129,7 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             kind: AgentTipKind::General,
         },
         AgentTip {
-            description: "`@` to add context from files, blocks, or Warp Drive objects to your prompt.".to_string(),
+            description: "`@` to add context from files, blocks, or Cast Drive objects to your prompt.".to_string(),
             link: Some("https://docs.warp.dev/agent-platform/local-agents/agent-context/using-to-add-context".to_string()),
             binding_name: None,
             action: None,
@@ -418,7 +418,7 @@ impl WorkspaceAction {
     pub fn display_text(&self) -> Option<String> {
         match self {
             WorkspaceAction::OpenPalette { .. } => Some("Open palette".to_string()),
-            WorkspaceAction::OpenWarpDrive => Some("Warp Drive.".to_string()),
+            WorkspaceAction::OpenWarpDrive => Some("Cast Drive.".to_string()),
             WorkspaceAction::ToggleRightPanel => Some("Show diff view".to_string()),
             _ => None,
         }

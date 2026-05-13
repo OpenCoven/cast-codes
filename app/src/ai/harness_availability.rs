@@ -38,7 +38,7 @@ pub struct HarnessAvailability {
 fn default_harnesses() -> Vec<HarnessAvailability> {
     vec![HarnessAvailability {
         harness: Harness::Oz,
-        display_name: "Warp".to_string(),
+        display_name: "CastCodes".to_string(),
         enabled: true,
         available_models: vec![],
     }]

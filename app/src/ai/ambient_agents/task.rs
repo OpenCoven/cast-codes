@@ -177,7 +177,7 @@ impl AgentSource {
             AgentSource::Slack => "Slack",
             AgentSource::Cli => "CLI",
             AgentSource::ScheduledAgent => "Scheduled",
-            AgentSource::Interactive | AgentSource::CloudMode => "Warp App",
+            AgentSource::Interactive | AgentSource::CloudMode => "CastCodes App",
             AgentSource::WebApp => "Oz Web",
             AgentSource::GitHubAction => "GitHub Action",
         }

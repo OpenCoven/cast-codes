@@ -515,7 +515,7 @@ impl BuildPlanMigrationModal {
         let title_text = if is_business {
             "Welcome to the New Business Plan"
         } else {
-            "Welcome to Warp Build"
+            "Welcome to Cast Build"
         };
 
         let title = Self::create_text(
@@ -527,9 +527,9 @@ impl BuildPlanMigrationModal {
         );
 
         let intro_text = if is_business {
-            "Your workspace has been updated to the new Warp Business Plan as the legacy Business plan is sunset."
+            "Your workspace has been updated to the new Cast Business Plan as the legacy Business plan is sunset."
         } else {
-            "Your workspace has been updated to the Warp Build Plan as the legacy Pro, Turbo, and Lightspeed plans are sunset."
+            "Your workspace has been updated to the Cast Build Plan as the legacy Pro, Turbo, and Lightspeed plans are sunset."
         };
 
         let intro = Self::create_text(intro_text.to_string(), font_family, 14., text_color, None);
@@ -538,7 +538,7 @@ impl BuildPlanMigrationModal {
             if is_business {
                 "The new Business plan is a primarily usage-based plan, starting at:"
             } else {
-                "Warp Build is a primarily usage-based plan, starting at:"
+                "Cast Build is a primarily usage-based plan, starting at:"
             }
             .to_string(),
             font_family,

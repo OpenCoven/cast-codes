@@ -82,7 +82,7 @@ use {
 };
 
 const PAGE_TITLE_TEXT: &str = "Environments";
-const PAGE_DESCRIPTION_TEXT: &str = "Environments define where your ambient agents run. Set one up in minutes via GitHub (recommended), Warp-assisted setup, or manual configuration.";
+const PAGE_DESCRIPTION_TEXT: &str = "Environments define where your ambient agents run. Set one up in minutes via GitHub (recommended), CastCodes-assisted setup, or manual configuration.";
 const CARD_BORDER_WIDTH: f32 = 1.;
 const CARD_PADDING: f32 = 16.;
 const CARD_SPACING: f32 = 12.;
@@ -1316,8 +1316,8 @@ impl EnvironmentsPageWidget {
             EnvironmentListScope::Team => {
                 let shared_by_text = UserWorkspaces::as_ref(app)
                     .current_team()
-                    .map(|team| format!("Shared by Warp and {}", team.name))
-                    .unwrap_or_else(|| "Shared by Warp and your team".to_string());
+                    .map(|team| format!("Shared by CastCodes and {}", team.name))
+                    .unwrap_or_else(|| "Shared by CastCodes and your team".to_string());
                 Self::render_overline_header(&shared_by_text, appearance)
             }
         };
