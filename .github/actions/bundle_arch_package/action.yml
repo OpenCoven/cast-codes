@@ -6,7 +6,7 @@ description: Bundles an Arch Linux package for the given release channel.
 inputs:
   channel:
     description: The channel for which we want to build an Arch package.
-    requred: true
+    required: true
   release-tag:
     description: The git release tag.
     required: true

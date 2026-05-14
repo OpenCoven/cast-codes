@@ -1,30 +1,16 @@
-pkgname=oz@@CHANNEL_SUFFIX@@
+pkgname=@@PACKAGE_NAME@@
 pkgver=@@VERSION@@
 pkgrel=@@RELEASE@@
 pkgdesc="The CastCodes terminal and code workspace CLI"
 arch=('@@ARCH@@')
-url="https://warp.dev"
-license=('custom')
+url="https://github.com/OpenCoven/cast-codes"
+license=('AGPL-3.0-only')
 depends=(
 	'curl'
 	'zlib'
 )
-replaces=(
-	'warp-cli@@CHANNEL_SUFFIX@@'
-	'oz=v0.2026.02.09.06.06.stable_00'
-	'oz=v0.2026.02.09.06.06.stable_02'
-	'oz=v0.2026.02.10.11.37.stable_00'
-	'oz=v0.2026.02.10.11.37.stable_01'
-	'oz=v0.2026.02.11.08.23.stable_00'
-)
-conflicts=(
-	'warp-cli@@CHANNEL_SUFFIX@@'
-	'oz=v0.2026.02.09.06.06.stable_00'
-	'oz=v0.2026.02.09.06.06.stable_02'
-	'oz=v0.2026.02.10.11.37.stable_00'
-	'oz=v0.2026.02.10.11.37.stable_01'
-	'oz=v0.2026.02.11.08.23.stable_00'
-)
+replaces=@@PACKAGE_REPLACES@@
+conflicts=@@PACKAGE_CONFLICTS@@
 optdepends=(
 	'org.freedesktop.secrets: for securely storing passwords'
 )
@@ -41,5 +27,5 @@ package() {
 
 	# Create a symlink to the binary in /usr/bin.
 	install -d "$pkgdir"/usr/bin
-	ln -s "/opt/warpdotdev/oz@@CHANNEL_SUFFIX@@/@@BINARY_NAME@@" "$pkgdir/usr/bin/@@BINARY_NAME@@"
+	ln -s "@@OPTDIR@@/@@BINARY_NAME@@" "$pkgdir/usr/bin/@@BINARY_NAME@@"
 }

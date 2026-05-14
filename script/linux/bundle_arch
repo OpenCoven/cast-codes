@@ -15,8 +15,10 @@
 
 set -e
 
-# Extract channel suffix from BINARY_NAME
-if [ "$ARTIFACT" = "cli" ]; then
+# Extract channel suffix from BINARY_NAME.
+if [ "$ARTIFACT" = "cli" ] && [ "$RELEASE_CHANNEL" = "oss" ]; then
+  CHANNEL_SUFFIX=""
+elif [ "$ARTIFACT" = "cli" ]; then
   CHANNEL_SUFFIX="${BINARY_NAME#oz}"
 else
   CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
@@ -30,12 +32,41 @@ fi
 
 if [ "$ARTIFACT" = "app" ]; then
   PACKAGE_NAME="cast-codes$CHANNEL_SUFFIX"
+  PACKAGE_REPLACES=()
+  PACKAGE_CONFLICTS=()
 elif [ "$ARTIFACT" = "cli" ]; then
-  PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+  if [ "$RELEASE_CHANNEL" = "oss" ]; then
+    PACKAGE_NAME="cast-codes-cli"
+    PACKAGE_REPLACES=("cast-codes")
+    PACKAGE_CONFLICTS=("cast-codes")
+  else
+    PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+    PACKAGE_REPLACES=(
+      "warp-cli$CHANNEL_SUFFIX"
+      "oz=v0.2026.02.09.06.06.stable_00"
+      "oz=v0.2026.02.09.06.06.stable_02"
+      "oz=v0.2026.02.10.11.37.stable_00"
+      "oz=v0.2026.02.10.11.37.stable_01"
+      "oz=v0.2026.02.11.08.23.stable_00"
+    )
+    PACKAGE_CONFLICTS=("${PACKAGE_REPLACES[@]}")
+  fi
 else
   echo "::error ::Unknown ARTIFACT: $ARTIFACT (expected 'app' or 'cli')"
   exit 1
 fi
+
+format_bash_array() {
+  local items=("$@")
+  printf '('
+  for item in "${items[@]}"; do
+    printf "'%s' " "$item"
+  done
+  printf ')'
+}
+
+PACKAGE_REPLACES_BLOCK="$(format_bash_array "${PACKAGE_REPLACES[@]:-}")"
+PACKAGE_CONFLICTS_BLOCK="$(format_bash_array "${PACKAGE_CONFLICTS[@]:-}")"
 
 BUILD_ARCH="${BUILD_ARCH:-$(uname -m)}"
 if [ "$BUILD_ARCH" = "aarch64" ]; then
@@ -71,7 +102,7 @@ tar cvf "$PKGDIR/data.tar" -C "$PKGDIR/stage" .
 VERSION="$GIT_RELEASE_TAG"
 RELEASE=1
 sed \
-    "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@VERSION@@#$VERSION#g; s#@@RELEASE@@#$RELEASE#g; s#@@ARCH@@#$ARCH#g; s#@@OUTDIR@@#$OUT_DIR#g; s#@@BINARY_NAME@@#$BINARY_NAME#g" \
+    "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@PACKAGE_NAME@@#$PACKAGE_NAME#g; s#@@PACKAGE_REPLACES@@#$PACKAGE_REPLACES_BLOCK#g; s#@@PACKAGE_CONFLICTS@@#$PACKAGE_CONFLICTS_BLOCK#g; s#@@VERSION@@#$VERSION#g; s#@@RELEASE@@#$RELEASE#g; s#@@ARCH@@#$ARCH#g; s#@@OUTDIR@@#$OUT_DIR#g; s#@@BINARY_NAME@@#$BINARY_NAME#g; s#@@OPTDIR@@#$OPT_DIR#g" \
     < "$WORKSPACE_ROOT_DIR/resources/linux/arch/$ARTIFACT/PKGBUILD.template" \
     > "$PKGDIR/PKGBUILD"
 

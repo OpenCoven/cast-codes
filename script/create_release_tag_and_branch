@@ -41,7 +41,7 @@ latest_semver_tag() {
 next_semver_tag() {
     latest_tag=$(latest_semver_tag)
     if [[ -z "$latest_tag" ]]; then
-        echo "v0.0.0"
+        echo "v0.0.1"
         return
     fi
 

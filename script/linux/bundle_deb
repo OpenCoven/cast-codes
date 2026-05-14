@@ -15,13 +15,14 @@
 
 set -e
 
-# Extract channel suffix from BINARY_NAME
-if [ "$ARTIFACT" = "cli" ]; then
+# Extract channel suffix from BINARY_NAME.
+if [ "$ARTIFACT" = "cli" ] && [ "$RELEASE_CHANNEL" = "oss" ]; then
+  CHANNEL_SUFFIX=""
+elif [ "$ARTIFACT" = "cli" ]; then
   CHANNEL_SUFFIX="${BINARY_NAME#oz}"
 else
   CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
 fi
-REPO_NAME="castcodes$CHANNEL_SUFFIX"
 
 # On Linux, we keep the `-stable` suffix for stable to avoid package conflicts.
 # The binary name is still `oz`, and the repo name is still `castcodes`.
@@ -29,12 +30,22 @@ if [ "$ARTIFACT" = "cli" -a "$RELEASE_CHANNEL" = "stable" ]; then
   CHANNEL_SUFFIX="-stable"
 fi
 
+REPO_NAME="castcodes$CHANNEL_SUFFIX"
+
 case "$ARTIFACT" in
   app)
     PACKAGE_NAME="cast-codes$CHANNEL_SUFFIX"
     ;;
   cli)
-    PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+    if [ "$RELEASE_CHANNEL" = "oss" ]; then
+      PACKAGE_NAME="cast-codes-cli"
+      PACKAGE_REPLACES="cast-codes"
+      PACKAGE_CONFLICTS="cast-codes"
+    else
+      PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+      PACKAGE_REPLACES="warp-cli$CHANNEL_SUFFIX (<< @@VERSION@@), oz (= 0.2026.02.09.06.06.stable.00), oz (= 0.2026.02.09.06.06.stable.02), oz (= 0.2026.02.10.11.37.stable.00), oz (= 0.2026.02.10.11.37.stable.01), oz (= 0.2026.02.11.08.23.stable.00)"
+      PACKAGE_CONFLICTS="warp-cli$CHANNEL_SUFFIX (<< @@VERSION@@), oz (= 0.2026.02.09.06.06.stable.00), oz (= 0.2026.02.09.06.06.stable.02), oz (= 0.2026.02.10.11.37.stable.00), oz (= 0.2026.02.10.11.37.stable.01), oz (= 0.2026.02.11.08.23.stable.00)"
+    fi
     ;;
   *)
     echo "::error ::Unknown ARTIFACT: $ARTIFACT (expected 'app' or 'cli')"
@@ -78,7 +89,7 @@ DEBIAN_DIR="$PKGDIR/DEBIAN"
 VERSION="$(echo "$GIT_RELEASE_TAG" | sed -E "s/^v//; s/([a-z]+)_/\1./")"
 mkdir "$DEBIAN_DIR"
 sed \
-    "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@VERSION@@#$VERSION#g; s#@@ARCH@@#$ARCH#g" \
+    "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@PACKAGE_NAME@@#$PACKAGE_NAME#g; s#@@PACKAGE_REPLACES@@#${PACKAGE_REPLACES:-}#g; s#@@PACKAGE_CONFLICTS@@#${PACKAGE_CONFLICTS:-}#g; s#@@VERSION@@#$VERSION#g; s#@@ARCH@@#$ARCH#g" \
     < "$TEMPLATE_DIR/control.template" \
     > "$DEBIAN_DIR/control"
 sed \
@@ -86,7 +97,7 @@ sed \
     < "$TEMPLATE_DIR/postinst.template" \
     > "$DEBIAN_DIR/postinst"
 sed \
-    "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@OPTDIR@@#$OPT_DIR#g; s#@@REPO_NAME@@#$REPO_NAME#g" \
+    "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; s#@@BINARY_NAME@@#$BINARY_NAME#g; s#@@OPTDIR@@#$OPT_DIR#g; s#@@REPO_NAME@@#$REPO_NAME#g" \
     < "$TEMPLATE_DIR/postrm.template" \
     > "$DEBIAN_DIR/postrm"
 # Make the package scripts executable.

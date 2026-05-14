@@ -15,13 +15,14 @@
 
 set -e
 
-# Extract channel suffix from BINARY_NAME
-if [ "$ARTIFACT" = "cli" ]; then
+# Extract channel suffix from BINARY_NAME.
+if [ "$ARTIFACT" = "cli" ] && [ "$RELEASE_CHANNEL" = "oss" ]; then
+  CHANNEL_SUFFIX=""
+elif [ "$ARTIFACT" = "cli" ]; then
   CHANNEL_SUFFIX="${BINARY_NAME#oz}"
 else
   CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
 fi
-REPO_NAME="castcodes$CHANNEL_SUFFIX"
 
 # On Linux, we keep the `-stable` suffix for stable to avoid package conflicts.
 # The binary name is still `oz`, and the repo name is still `castcodes`.
@@ -29,11 +30,19 @@ if [ "$ARTIFACT" = "cli" -a "$RELEASE_CHANNEL" = "stable" ]; then
   CHANNEL_SUFFIX="-stable"
 fi
 
+REPO_NAME="castcodes$CHANNEL_SUFFIX"
+
 ARTIFACT="${ARTIFACT:-app}"
 if [ "$ARTIFACT" = "app" ]; then
   PACKAGE_NAME="cast-codes$CHANNEL_SUFFIX"
 elif [ "$ARTIFACT" = "cli" ]; then
-  PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+  if [ "$RELEASE_CHANNEL" = "oss" ]; then
+    PACKAGE_NAME="cast-codes-cli"
+    PACKAGE_RELATIONS="Conflicts:   cast-codes"
+  else
+    PACKAGE_NAME="oz$CHANNEL_SUFFIX"
+    PACKAGE_RELATIONS="Obsoletes:   warp-cli$CHANNEL_SUFFIX < %{version}"
+  fi
 else
   echo "::error ::Unknown ARTIFACT: $ARTIFACT (expected 'app' or 'cli')"
   exit 1
@@ -70,6 +79,8 @@ VERSION="$GIT_RELEASE_TAG"
 RELEASE="1"
 sed \
     "s#@@CHANNEL_SUFFIX@@#$CHANNEL_SUFFIX#g; \
+     s#@@PACKAGE_NAME@@#$PACKAGE_NAME#g; \
+     s#@@PACKAGE_RELATIONS@@#$PACKAGE_RELATIONS#g; \
      s#@@BINARY_NAME@@#$BINARY_NAME#g; \
      s#@@VERSION@@#$VERSION#g; \
      s#@@RELEASE@@#$RELEASE#g; \
