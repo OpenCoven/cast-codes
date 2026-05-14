@@ -725,8 +725,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::OpenBrowserPane { url: None },
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging"))
-        .with_key_binding(cmd_or_ctrl_shift("b")),
+        .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging")),
         EditableBinding::new(
             LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME,
             BindingDescription::new("Left Panel: Agent conversations"),

@@ -558,9 +558,9 @@ jobs:
       
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          # Only cache runs on the master branch (caches on feature branches
+          # Only cache runs on the default branch (caches on feature branches
           # are not reusable).
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@dc19f1e48450eefe5a29b8da6c6b00a87d730b37 # v1.18.1
