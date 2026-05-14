@@ -32,42 +32,81 @@ eval set -- "$PARAMS"
 
 RELEASE_BRANCH_PREFIX="${CHANNEL}_release"
 
+SEMVER_TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+latest_semver_tag() {
+    git tag --list 'v*.*.*' | grep -E "$SEMVER_TAG_RE" | sort -V | tail -n1
+}
+
+next_semver_tag() {
+    latest_tag=$(latest_semver_tag)
+    if [[ -z "$latest_tag" ]]; then
+        echo "v0.0.0"
+        return
+    fi
+
+    if [[ "$latest_tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        major="${BASH_REMATCH[1]}"
+        minor="${BASH_REMATCH[2]}"
+        patch="${BASH_REMATCH[3]}"
+        patch=$((10#$patch+1))
+        echo "v$major.$minor.$patch"
+        return
+    fi
+
+    echo >&2 "Could not parse latest semver tag $latest_tag"
+    exit 1
+}
+
 git fetch --all --tags
 
 if [[ "$GIT_BRANCH_NAME" == "$RELEASE_BRANCH_PREFIX/"* ]]; then
     echo >&2  "Already on release branch $GIT_BRANCH_NAME, not creating new one."
-    tag=$(git tag | grep "${GIT_BRANCH_NAME#"$RELEASE_BRANCH_PREFIX/"}" | sort -r --version-sort | head -n1)
-    echo >&2 "Current tag on branch is $tag"
-    if git rev-parse "$tag" >/dev/null 2>&1; then
-        # Tag already exists, increase the RC number
-        suffix=${tag: -2}
-        suffix=$((10#$suffix+1))
-        suffix=$(printf '%02d' $suffix)
-
-        tag_length=${#tag}
-        non_rc=${tag:0:$(($tag_length - 3))}
-        tag="${non_rc}_$suffix"
-
-        echo >&2 "Creating tag $tag"
+    if [[ "$CHANNEL" == "stable" ]]; then
+        tag=$(next_semver_tag)
+        echo >&2 "Creating stable semver tag $tag"
         git tag "$tag"
         git push origin "$tag"
         echo "$tag"
     else
-        echo >&2 "No tag found on release branch, something is wrong"
-        exit 1
+        tag=$(git tag | grep "${GIT_BRANCH_NAME#"$RELEASE_BRANCH_PREFIX/"}" | sort -r --version-sort | head -n1)
+        echo >&2 "Current tag on branch is $tag"
+        if git rev-parse "$tag" >/dev/null 2>&1; then
+        # Tag already exists, increase the RC number
+            suffix=${tag: -2}
+            suffix=$((10#$suffix+1))
+            suffix=$(printf '%02d' $suffix)
+
+            tag_length=${#tag}
+            non_rc=${tag:0:$(($tag_length - 3))}
+            tag="${non_rc}_$suffix"
+
+            echo >&2 "Creating tag $tag"
+            git tag "$tag"
+            git push origin "$tag"
+            echo "$tag"
+        else
+            echo >&2 "No tag found on release branch, something is wrong"
+            exit 1
+        fi
     fi
 else
-    # Creating release branch and new tag and version _00
-    date_formatted=$(date +'%Y.%m.%d.%H.%M')
-    tag="v0.$date_formatted.${CHANNEL}_00"
+    # Creating release branch and new tag.
+    if [[ "$CHANNEL" == "stable" ]]; then
+        tag=$(next_semver_tag)
+        release_branch_name="$tag"
+    else
+        date_formatted=$(date +'%Y.%m.%d.%H.%M')
+        tag="v0.$date_formatted.${CHANNEL}_00"
+        release_branch_name="v0.$date_formatted.${CHANNEL}"
+    fi
     echo >&2 "Creating tag $tag"
     git tag "$tag"
     git push origin "$tag"
 
-    release_branch_name="v0.$date_formatted.${CHANNEL}"
     echo >&2 "Creating release branch $RELEASE_BRANCH_PREFIX/$release_branch_name"
     git checkout -b "$RELEASE_BRANCH_PREFIX/$release_branch_name"
-    git push -u origin "$RELEASE_BRANCH_PREFIX/$release_branch_name"
+    git push -u origin "$RELEASE_BRANCH_PREFIX/$release_branch_name" >&2
     echo "$tag"
 fi
 

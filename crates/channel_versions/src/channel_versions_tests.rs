@@ -8,15 +8,40 @@ fn test_parse_version_string() {
     let parsed_version: ParsedVersion = version_string
         .try_into()
         .expect("version string is parsable");
-    assert_eq!(parsed_version.major, 0);
     assert_eq!(
-        parsed_version.date,
-        NaiveDate::from_ymd_opt(2023, 5, 15)
-            .unwrap()
-            .and_hms_opt(8, 4, 0)
-            .unwrap()
+        parsed_version,
+        ParsedVersion::LegacyDate {
+            major: 0,
+            date: NaiveDate::from_ymd_opt(2023, 5, 15)
+                .unwrap()
+                .and_hms_opt(8, 4, 0)
+                .unwrap(),
+            patch: 1,
+        }
     );
-    assert_eq!(parsed_version.patch, 1);
+}
+
+#[test]
+fn test_parse_semver_version_string() {
+    let version_string = "v0.0.0";
+    let parsed_version: ParsedVersion = version_string
+        .try_into()
+        .expect("semver version string is parsable");
+    assert_eq!(
+        parsed_version,
+        ParsedVersion::Semantic {
+            major: 0,
+            minor: 0,
+            patch: 0,
+        }
+    );
+}
+
+#[test]
+fn test_semver_versions_compare_correctly() {
+    let first_release: ParsedVersion = "v0.0.0".try_into().expect("first release is parsable");
+    let patch_release: ParsedVersion = "v0.0.1".try_into().expect("patch release is parsable");
+    assert!(patch_release > first_release);
 }
 
 #[test]
@@ -28,6 +53,24 @@ fn test_major_versions_compare_correctly() {
         .try_into()
         .expect("newer_version is parsable");
     assert!(newer_version > older_version);
+}
+
+#[test]
+fn test_major_versions_compare_across_version_schemas() {
+    let older_version: ParsedVersion = "v0.2026.05.15.08.04.stable_01"
+        .try_into()
+        .expect("older_version is parsable");
+    let newer_version: ParsedVersion = "v1.0.0".try_into().expect("newer_version is parsable");
+    assert!(newer_version > older_version);
+}
+
+#[test]
+fn test_legacy_date_versions_remain_ahead_of_same_major_semver_versions() {
+    let first_release: ParsedVersion = "v0.0.0".try_into().expect("first_release is parsable");
+    let legacy_internal_build: ParsedVersion = "v0.2026.05.15.08.04.stable_01"
+        .try_into()
+        .expect("legacy_internal_build is parsable");
+    assert!(legacy_internal_build > first_release);
 }
 
 #[test]

@@ -32,17 +32,27 @@ impl std::fmt::Display for ChannelVersions {
 }
 
 lazy_static! {
-    static ref VERSION_RE: Regex = Regex::new(r"v(\d+)\.(.+)\.(.+)_(\d+)").unwrap();
+    static ref LEGACY_DATE_VERSION_RE: Regex =
+        Regex::new(r"^v(\d+)\.(\d{4}\.\d{2}\.\d{2}\.\d{2}\.\d{2})\.[^.]+_(\d+)$")
+            .unwrap();
+    static ref SEMVER_RE: Regex = Regex::new(r"^v(\d+)\.(\d+)\.(\d+)$").unwrap();
 
     // Cached mapping of version strings to semantic versions.
     static ref PARSED_VERSIONS_CACHE: MemoMap<String, ParsedVersion> = Default::default();
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct ParsedVersion {
-    major: usize,
-    date: NaiveDateTime,
-    patch: usize,
+pub enum ParsedVersion {
+    Semantic {
+        major: usize,
+        minor: usize,
+        patch: usize,
+    },
+    LegacyDate {
+        major: usize,
+        date: NaiveDateTime,
+        patch: usize,
+    },
 }
 
 impl TryFrom<&str> for ParsedVersion {
@@ -51,19 +61,48 @@ impl TryFrom<&str> for ParsedVersion {
     fn try_from(value: &str) -> Result<Self> {
         PARSED_VERSIONS_CACHE
             .get_or_try_insert(value, || {
-                VERSION_RE
-                    .captures(value)
-                    .and_then(|captures| {
-                        let date_str = captures.get(2)?.as_str();
-                        let date =
-                            NaiveDateTime::parse_from_str(date_str, "%Y.%m.%d.%H.%M").ok()?;
-                        Some(ParsedVersion {
-                            major: captures.get(1)?.as_str().parse().ok()?,
-                            date,
-                            patch: captures.get(4)?.as_str().parse().ok()?,
-                        })
-                    })
-                    .context("Can't parse string into Version")
+                if let Some(captures) = SEMVER_RE.captures(value) {
+                    return Ok(ParsedVersion::Semantic {
+                        major: captures
+                            .get(1)
+                            .context("Semver major version is missing")?
+                            .as_str()
+                            .parse()?,
+                        minor: captures
+                            .get(2)
+                            .context("Semver minor version is missing")?
+                            .as_str()
+                            .parse()?,
+                        patch: captures
+                            .get(3)
+                            .context("Semver patch version is missing")?
+                            .as_str()
+                            .parse()?,
+                    });
+                }
+
+                if let Some(captures) = LEGACY_DATE_VERSION_RE.captures(value) {
+                    let date_str = captures
+                        .get(2)
+                        .context("Legacy date version timestamp is missing")?
+                        .as_str();
+                    let date = NaiveDateTime::parse_from_str(date_str, "%Y.%m.%d.%H.%M")?;
+                    return Ok(ParsedVersion::LegacyDate {
+                        major: captures
+                            .get(1)
+                            .context("Legacy major version is missing")?
+                            .as_str()
+                            .parse()?,
+                        date,
+                        patch: captures
+                            .get(3)
+                            .context("Legacy patch version is missing")?
+                            .as_str()
+                            .parse()?,
+                    });
+                }
+
+                anyhow::bail!("Can't parse string into Version")
             })
             .cloned()
     }
@@ -71,7 +110,40 @@ impl TryFrom<&str> for ParsedVersion {
 
 impl Ord for ParsedVersion {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.major, self.date, self.patch).cmp(&(other.major, other.date, other.patch))
+        match (self, other) {
+            (
+                ParsedVersion::Semantic {
+                    major,
+                    minor,
+                    patch,
+                },
+                ParsedVersion::Semantic {
+                    major: other_major,
+                    minor: other_minor,
+                    patch: other_patch,
+                },
+            ) => (major, minor, patch).cmp(&(other_major, other_minor, other_patch)),
+            (
+                ParsedVersion::LegacyDate { major, date, patch },
+                ParsedVersion::LegacyDate {
+                    major: other_major,
+                    date: other_date,
+                    patch: other_patch,
+                },
+            ) => (major, date, patch).cmp(&(other_major, other_date, other_patch)),
+            (
+                ParsedVersion::Semantic { major, .. },
+                ParsedVersion::LegacyDate {
+                    major: other_major, ..
+                },
+            ) => major.cmp(other_major).then(std::cmp::Ordering::Less),
+            (
+                ParsedVersion::LegacyDate { major, .. },
+                ParsedVersion::Semantic {
+                    major: other_major, ..
+                },
+            ) => major.cmp(other_major).then(std::cmp::Ordering::Greater),
+        }
     }
 }
 
