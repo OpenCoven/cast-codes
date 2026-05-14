@@ -35,7 +35,7 @@ RELEASE_BRANCH_PREFIX="${CHANNEL}_release"
 SEMVER_TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
 
 latest_semver_tag() {
-    git tag --list 'v*.*.*' | grep -E "$SEMVER_TAG_RE" | sort -V | tail -n1
+    git tag --list 'v*.*.*' | awk -v re="$SEMVER_TAG_RE" '$0 ~ re' | sort -V | tail -n1
 }
 
 next_semver_tag() {
