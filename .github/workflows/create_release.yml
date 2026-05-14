@@ -278,6 +278,42 @@ jobs:
             ${{ steps.bundle_app.outputs.dmg_path }}
             ${{ steps.bundle_app.outputs.dmg_path }}.sha256
 
+      - name: Package arm64 CLI from app build
+        if: ${{ matrix.arch == 'aarch64' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "${{ steps.bundle_app.outputs.binary_path }}" cast-codes
+          tar czf cast-codes-macos-aarch64.tar.gz cast-codes -C "$(dirname "${{ steps.bundle_app.outputs.bundled_resources_dir }}")" resources
+          shasum -a 256 cast-codes-macos-aarch64.tar.gz > cast-codes-macos-aarch64.tar.gz.sha256
+
+      - name: Add arm64 CLI to GitHub release assets
+        if: ${{ matrix.arch == 'aarch64' && needs.prepare_release.outputs.should_publish == 'true' }}
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        with:
+          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
+          files: |
+            cast-codes-macos-aarch64.tar.gz
+            cast-codes-macos-aarch64.tar.gz.sha256
+          token: ${{ github.token }}
+
+      - name: Upload arm64 CLI as workflow artifact
+        if: ${{ matrix.arch == 'aarch64' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-macos-cli-aarch64-${{ needs.prepare_release.outputs.channel }}
+          path: |
+            cast-codes-macos-aarch64.tar.gz
+            cast-codes-macos-aarch64.tar.gz.sha256
+
+      - name: Attest arm64 CLI
+        if: ${{ matrix.arch == 'aarch64' && needs.prepare_release.outputs.should_publish == 'true' }}
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+        with:
+          subject-path: |
+            cast-codes-macos-aarch64.tar.gz
+            cast-codes-macos-aarch64.tar.gz.sha256
+
       - name: Create tar archive with build artifacts
         shell: bash
         run: |
@@ -413,8 +449,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: aarch64
-            runner: macos-26
           - arch: x86_64
             runner: macos-26-intel
     steps:
