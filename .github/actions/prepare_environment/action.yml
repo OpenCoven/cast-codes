@@ -163,3 +163,10 @@ runs:
       if: ${{ inputs.target_os == 'macos' && inputs.is_self_hosted != 'true' }}
       with:
         xcode-version: '26'
+
+    - name: Install selected Xcode Metal toolchain
+      if: ${{ inputs.target_os == 'macos' && inputs.is_self_hosted != 'true' }}
+      shell: bash
+      run: |
+        xcodebuild -downloadComponent MetalToolchain
+        xcrun -f metal
