@@ -194,7 +194,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: prepare_release
     if: ${{ inputs.build_macos != false }}
-    timeout-minutes: 90
+    timeout-minutes: 180
     permissions:
       contents: write
       id-token: write
@@ -302,7 +302,7 @@ jobs:
     runs-on: macos-26
     needs: [prepare_release, release_macos_single_arch]
     if: ${{ inputs.build_macos != false }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: write
       id-token: write
@@ -395,7 +395,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: prepare_release
     if: ${{ inputs.build_macos != false }}
-    timeout-minutes: 90
+    timeout-minutes: 180
     permissions:
       contents: write
       id-token: write
