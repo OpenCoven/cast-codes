@@ -39,6 +39,19 @@
             "changelog_slack_channel": "#release",
             "gcs_cache_control_value": "public, max-age=604800, immutable",
             "web_gcs_bucket_prefix": "warp"
+        },
+        {
+            "channel": "oss",
+            "type": "manual",
+            "is_prerelease": false,
+            "is_autopush": false,
+            "release_base_name": "CastCodes OSS Release",
+            "release_body_text": "CastCodes OSS release. This public fork release is distributed through GitHub release assets without upstream Warp release infrastructure.",
+            "sentry_project": "",
+            "sentry_environment": "",
+            "changelog_slack_channel": "",
+            "gcs_cache_control_value": "public, max-age=604800, immutable",
+            "web_gcs_bucket_prefix": ""
         }
     ]
 }
