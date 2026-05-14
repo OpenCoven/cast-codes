@@ -523,6 +523,19 @@ jobs:
           GIT_RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
         run: script/bundle --channel "$CHANNEL" --packages appimage,deb,rpm
 
+      - name: Free runner space before Arch package
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h
+          docker system prune -af || true
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL
+          df -h
+
       - name: Bundle Arch Linux package
         uses: ./.github/actions/bundle_arch_package
         with:
@@ -609,6 +622,19 @@ jobs:
           set -euo pipefail
           cp "${{ steps.bundle_cli.outputs.executable_path }}" cast-codes
           tar czf cast-codes-linux-x86_64.tar.gz cast-codes -C "$(dirname "${{ steps.bundle_cli.outputs.bundled_resources_dir }}")" resources
+
+      - name: Free runner space before Arch CLI package
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h
+          docker system prune -af || true
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL
+          df -h
 
       - name: Bundle Arch Linux CLI package
         uses: ./.github/actions/bundle_arch_package
