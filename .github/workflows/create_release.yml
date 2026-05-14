@@ -705,13 +705,6 @@ jobs:
           GIT_RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
         run: script/bundle --channel "$CHANNEL" --packages appimage,deb,rpm --arch aarch64
 
-      - name: Bundle Arch Linux app package
-        uses: ./.github/actions/bundle_arch_package
-        with:
-          channel: ${{ needs.prepare_release.outputs.channel }}
-          release-tag: ${{ needs.prepare_release.outputs.release_tag }}
-          arch: aarch64
-
       - name: Bundle CLI
         id: bundle_cli
         shell: bash
@@ -726,14 +719,6 @@ jobs:
           set -euo pipefail
           cp "${{ steps.bundle_cli.outputs.executable_path }}" cast-codes
           tar czf cast-codes-linux-aarch64.tar.gz cast-codes -C "$(dirname "${{ steps.bundle_cli.outputs.bundled_resources_dir }}")" resources
-
-      - name: Bundle Arch Linux CLI package
-        uses: ./.github/actions/bundle_arch_package
-        with:
-          channel: ${{ needs.prepare_release.outputs.channel }}
-          release-tag: ${{ needs.prepare_release.outputs.release_tag }}
-          arch: aarch64
-          artifact: cli
 
       - name: Checksum Linux ARM packages
         shell: bash
