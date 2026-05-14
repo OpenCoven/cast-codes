@@ -38,17 +38,4 @@ jobs:
     with:
       channel: ${{ needs.compute_channel.outputs.channel }}
     secrets: inherit
-
-  update_channel_versions:
-    name: Update channel_versions.json
-    needs:
-      - create_release_candidate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Invoke update workflow in channel-versions repository
-        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
-        with:
-          repository: warpdotdev/channel-versions
-          token: ${{ secrets.CHANNEL_VERSIONS_REPOSITORY_DISPATCH_TOKEN }}
-          event-type: update-channel-versions
     
