@@ -834,9 +834,7 @@ impl MCPServersListPageView {
                     ctx,
                 );
                 // We do not have to update the template, because this update came from a template
-                log::info!(
-                    "Successfully updated server {installation_uuid} with the newest template."
-                );
+                log::info!("Successfully updated server with the newest template.");
 
                 // Show the toast that the server updated, even though we don't update the template in this case
                 let window_id = ctx.window_id();
