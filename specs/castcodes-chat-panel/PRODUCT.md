@@ -2,39 +2,43 @@
 
 ## Summary
 
-Add a chat panel to CastCodes that lets users converse with locally-installed AI coding CLIs (`claude` and `codex` in v1) from inside the app. The panel renders streaming responses, surfaces tool calls and file edits, persists conversations locally, and supports switching CLIs and models. Authentication is delegated to each CLI's existing login flow — CastCodes never sees an API key or OAuth token.
+Add a chat-style panel to CastCodes that renders the conversation flowing between the user and an AI coding CLI (`claude`, `codex`, `gemini`, `opencode` — collectively "supported CLIs") as a navigable, persistent transcript. The CLI itself runs in an ordinary CastCodes terminal pane and emits structured events via its already-supported plugin protocol; the chat panel is a new presentation surface over those events plus a local conversation history. The panel adds nothing to the CLI's auth, billing, or model orchestration — those remain entirely the CLI's concern.
+
+## Background — what already exists
+
+CastCodes inherits a substantial CLI-agent infrastructure from upstream Warp that we are explicitly **not** rebuilding:
+
+- `app/src/terminal/cli_agent_sessions/event/` parses OSC 777 events emitted by vendor plugins into typed `CLIAgentEvent`s.
+- `app/src/terminal/cli_agent_sessions/CLIAgentSessionsModel` tracks per-terminal CLI sessions, status (in-progress / blocked / waiting-permission / idle / stopped), and rich-input draft state.
+- `app/src/terminal/input/cli_agent.rs` provides a rich-input editor opened via Ctrl-G or a footer button that writes prompts into the running CLI's stdin.
+- Per-CLI adapters under `cli_agent_sessions/plugin_manager/` know how to detect installation status and (in upstream) auto-install vendor plugins from Warp-owned marketplace repos.
+
+What is missing is the **chat presentation**. Today the user sees their conversation only as raw terminal scrollback plus small status chips in the vertical-tabs sidebar. There is no transcript view, no cross-restart history, no list of past conversations, and no place to look at a tool call or a file edit in a non-terminal layout. The "chat panel" closes that gap.
 
 ## Why
 
-CastCodes inherits a substantial AI chat surface from upstream Warp, but the entire surface routes through Warp's hosted multi-agent gateway. The fork-local boundary forbids calling upstream-owned infrastructure from the public OSS build, so the inherited chat is dead weight in OSS today. Users who want AI assistance must alt-tab to a separate Claude Code or Codex window.
-
-A native panel that drives the user's existing CLI installs:
-
-- Avoids the hosted-service dependency entirely (fork-local boundary respected by construction).
-- Avoids registering an Anthropic/OpenAI OAuth client, hosting an inference proxy, or maintaining a model catalog — the CLI vendors do all of that.
-- Gives CastCodes a credible, differentiated AI story: "local terminal plus local orchestration of CLIs you already trust."
-- Sidesteps the messy "rip out the hosted agent" path — the inherited surface stays dormant; new panel is additive.
+- Reading multi-turn CLI agent conversations in a terminal is awkward — long responses scroll past prompts, tool calls and file edits blend into ordinary shell output, and there's no record after the terminal closes.
+- A dedicated chat-style view makes the conversation legible the way users expect from a chat UI, while leaving the CLI in charge of model selection, auth, and tool execution (which is exactly the boundary the fork-local OSS build needs).
+- Persistence across restarts lets a user pick up a prior conversation by clicking it in a sidebar list rather than searching terminal scrollback.
 
 ## Goals
 
-- Real-time chat with `claude` and `codex` CLIs from a panel inside CastCodes.
-- Switch between CLIs and between models within a CLI.
-- Surface tool calls, file edits, and shell commands the CLI runs, in-line in the transcript.
-- Persist conversations locally and resume them across app restarts.
-- Honest empty / error states when the required CLI is not installed or not authenticated.
-- Public-surface naming and copy that passes the rebrand guard.
-- Zero calls to Warp-owned infrastructure from this feature.
+- A panel that, when bound to a running CLI session, renders that session's transcript live as chat: user prompts, assistant responses, tool calls, file edits, permission requests, idle prompts, stop events.
+- Persistence: events for every observed CLI session are stored in a local sqlite database so transcripts survive app restart and terminal close.
+- A conversation list (sidebar within the panel) of all past CLI sessions, sortable by recency, openable in read-only "view past" mode.
+- The composer in the panel is wired to the existing rich-input flow so the user can send a follow-up without leaving the panel.
+- Model picker: a button in the panel lets the user launch a new CLI session in a new (or selected) terminal with a chosen model. We do not start subprocesses ourselves — we run the CLI inside a terminal and pass the model flag.
+- Honest empty / error / not-installed states. If the relevant plugin is not present (and therefore no events will arrive), say so clearly. Do not silently fail.
+- Public-surface strings and assets pass `./script/check_rebrand`. No new code paths call Warp-owned infrastructure.
 
 ## Non-goals (v1)
 
-- Bring-your-own-API-key direct provider HTTP paths (Anthropic / OpenAI / Google / OpenRouter SDKs). Tracked as a Shape C follow-up; the architecture leaves room for it via a `ChatBackend` abstraction, but only the CLI backend ships in v1.
-- OAuth with Anthropic / OpenAI directly. Auth lives in the CLIs; CastCodes does not register an OAuth client.
-- Modifying or re-enabling the inherited Warp agent UI. It stays dormant in OSS. A separate cleanup pass may compile-gate it out of OSS builds later.
-- Inline-in-block chat (chat exchanges rendered as terminal blocks). Different paradigm; out of scope.
-- Voice / audio input. The inherited `app/src/ai/voice/` surface stays dormant.
-- Sharing terminal block context into the chat as attachments. Worth a follow-up; v1 is text-only input.
-- Multi-tab parallel sessions in the same panel. One active session per panel in v1.
-- Gemini CLI, aider, opencode, or other backends beyond claude and codex.
+- We do not spawn the CLI as a subprocess from the panel. The CLI runs in the terminal pane as a regular shell command. Removing the terminal hop is a possible future evolution, not in scope.
+- We do not parse stream-JSON directly from the CLI's stdout. The OSC 777 event protocol is the source of truth and is already implemented.
+- We do not modify or re-enable the inherited Warp hosted-agent UI (`app/src/ai/agent_conversations_model.rs`, the inherited conversation_list, etc.). That stays dormant in OSS.
+- We do not implement direct-provider BYOK HTTP paths (Anthropic / OpenAI / Google / OpenRouter SDKs) or OAuth flows. Auth stays in the CLIs.
+- We do not auto-install the vendor plugins via Warp-owned marketplace repos. The fork-local boundary forbids it. We may surface installation instructions, possibly with non-Warp-pointing alternatives where they exist; investigation in TECH.md.
+- We do not ship inline-in-block chat, voice input, terminal-block context attachments, or multi-tab parallel chat sessions in the same panel. All worth follow-ups; out of scope.
 
 ## User flows
 
@@ -42,82 +46,86 @@ A native panel that drives the user's existing CLI installs:
 
 User opens the chat panel for the first time:
 
-- If at least one supported CLI is detected on `PATH`, the panel opens to a blank composer with a model picker primed to the default (claude if available, else codex).
-- If no supported CLI is detected, the panel renders an empty state: each supported CLI listed with its install command, a "Re-check installations" button, and a link to the CLI vendor's install docs. The composer is disabled.
-- If a CLI is detected but reports not-logged-in (claude returns an auth error on first request), the panel surfaces the CLI's auth-failure message verbatim plus a one-line hint pointing to the CLI's login command (`claude /login`, `codex auth login`, etc.). The composer remains enabled so the user can retry after logging in externally.
+- If a supported CLI session is currently active in any terminal, the panel opens to that session's live transcript.
+- If no CLI session is active but past sessions exist in local storage, the panel opens to the conversation list with the most recent at the top.
+- If no past sessions exist and no CLI is detected on `PATH`, the panel opens to an empty state listing the supported CLIs with the canonical install commands and a "Refresh" button. The composer is disabled.
+- If a CLI is on `PATH` but the vendor plugin is not installed (so events won't be emitted), the panel renders a state explaining that the chat panel renders events emitted by the vendor plugin and points the user at vendor documentation. The panel does not auto-install the plugin in OSS (see fork-local boundary).
 
-### New chat
+### Live transcript
 
-1. User selects CLI and model from the model picker (top of the panel).
-2. User types into the composer and presses send.
-3. Subprocess spawns. The transcript shows a "Starting <cli> with <model>…" placeholder for the first send only.
-4. Stream-JSON events from the CLI render in real time:
-   - **Assistant text** streams into a growing assistant message bubble.
-   - **Tool calls** appear as collapsible cards (e.g., "Edit `src/foo.rs`", "Run `cargo check`"). Collapsed by default; expand to see arguments.
-   - **Tool results** attach to the corresponding tool-call card. File-edit cards show a diff preview. Shell-command cards show captured output.
-   - **Errors** show inline in the transcript with the CLI's error text and a "Restart session" button.
-5. When the assistant turn ends, the composer re-enables.
+The user runs `claude` (or `codex`/etc.) in a CastCodes terminal pane. Once an OSC 777 `session_start` event arrives, the chat panel — if open and bound to that terminal — begins rendering:
 
-### Model and CLI switching
+- **`prompt_submit`** events render as a user message bubble.
+- **`tool_complete`** events render as a collapsible tool-call card in the assistant column (collapsed by default; expand to see tool name and input preview).
+- **`permission_request`** events render as a permission card inline in the transcript. The card mirrors what the terminal shows; clicking does not approve here — the user still approves in the terminal. We surface the request so the user knows what's pending without alt-tabbing.
+- **`question_asked`** / **`idle_prompt`** events render as a thin info bar that the agent is waiting on the user.
+- **`stop`** events finalize the assistant turn. If a `response` field is present in the event, it renders as the assistant's final message; if only `query` and tool events appear (no final response captured by the plugin), the transcript shows the tool sequence and a "Turn complete" footer.
 
-Switching the active model or CLI mid-conversation is honest about the constraint: each CLI binds one model per session.
+The transcript streams in real time as events arrive. Existing terminal-side state (vertical-tabs chip, status icons) continues to update as it does today — the panel does not replace those, it complements them.
 
-When the user selects a different model or CLI:
+### Composer
 
-- The current subprocess is asked to close gracefully; if it does not close within a short timeout, it is killed.
-- Two follow-up options are offered:
-  - **Carry forward**: A new session is started with a system-level preamble of the form `[Continued from previous session] <auto-generated summary>`. The summary is produced from the prior transcript by the CLI itself in a one-shot summarization pass.
-  - **Start fresh**: The new session starts with no preamble. The prior transcript remains visible above a divider.
+The panel includes a composer at the bottom wired into the existing rich-input flow:
 
-### Resume across restarts
+- When a CLI session is active, the composer is enabled and typing-then-send delegates to `CLIAgentSessionsModel::open_input` followed by submission. Submission types the prompt into the CLI's terminal stdin, identical to the Ctrl-G / footer-button flow today.
+- When no CLI session is active, the composer is disabled with a hint ("Run `claude` or `codex` in a terminal to start chatting").
 
-Conversations persist to the local sqlite store under `~/.cast-codes/`:
+### Conversation list
 
-- On app launch, the panel sidebar lists prior conversations with title, last-message preview, last-used CLI/model, and timestamp.
-- Opening a conversation restores the transcript from sqlite immediately. The underlying CLI session is not respawned until the user sends another message.
-- On first send after open, if the prior session had a resume token (claude: `--resume <id>`), CastCodes attempts to resume.
-- If resume fails (token expired, CLI uninstalled, model no longer available), CastCodes falls back to a "Start new session from here" affordance: a new subprocess is spawned and the prior transcript is summarized into a `[Continued from previous session] …` preamble, same as the model-switch flow.
+A sidebar within the panel lists all known past sessions, identified by the `session_id` carried in events:
 
-### Stop / cancel
+- Each entry shows: agent (claude/codex/etc.), title (first user prompt or `summary` field), last activity timestamp, cwd / project hint, status badge for the last known state.
+- Opening a past entry switches the panel into read-only "view past" mode: the transcript renders from local storage; the composer is disabled with a note that this is a past session. A "Continue in new terminal…" button opens a new terminal and starts the relevant CLI with the appropriate resume flag (claude: `claude --resume <session_id>`).
 
-The composer's send button toggles to a stop button while a turn is streaming. Pressing stop cancels the in-flight turn by closing the CLI's stdin write half (or sending the CLI's documented cancel signal where applicable). Already-applied tool side effects (e.g., a completed file edit) are not rolled back; the transcript notes the cancellation.
+### Model picker
 
-### CLI crash or disconnect
+A small dropdown in the panel header lets the user start a new CLI session with a chosen model:
 
-If the subprocess exits unexpectedly:
+- The picker offers per-CLI model options (a hand-curated list, refreshed as TECH.md describes).
+- Selecting a model + "New chat" opens a new terminal pane, runs the selected CLI with `--model <id>` (or its equivalent flag), and binds the panel to that new terminal once `session_start` arrives.
+- Selecting a different model on an already-bound session does **not** mutate the running session. The picker either starts a fresh session in a new terminal, or offers an optional "carry-forward summary" flow that runs the CLI with a preamble prompt; the user can opt in.
 
-- The transcript notes "Session ended unexpectedly" with the CLI's exit code and last stderr lines.
-- A "Restart session" button restarts the subprocess and (if supported) resumes the prior session.
-- The full transcript is preserved.
+### Restart and resume
+
+On app restart, the conversation list reloads from sqlite. Opening a past conversation always starts in read-only mode. The "Continue in new terminal" button uses the CLI's own resume flag (claude: `--resume <session_id>`; codex: equivalent rollout-based resume) when available.
+
+### CLI / plugin issues
+
+- **CLI not on PATH**: empty state with install commands; the conversation list still works.
+- **CLI on PATH but plugin not installed**: panel renders a "Plugin required" state pointing at vendor docs.
+- **Terminal closes mid-session**: panel marks the session as ended; transcript remains in the conversation list.
+- **OSC 777 events arrive but cannot be parsed (version mismatch)**: events are logged and skipped, the panel surfaces a one-line "Plugin version may be incompatible" notice.
 
 ## Settings
 
-A new section under the AI / Agent settings page (or a new top-level "CLI Chat" section, TBD during implementation):
+A new section under the AI / Agent settings page:
 
-- **Detected CLIs**: list of supported CLIs with version, status (Ready / Needs login / Not installed), and a "Re-check" button.
-- **Default CLI**: dropdown.
-- **Default model per CLI**: per-CLI dropdown of models the CLI advertises.
-- **Custom path override per CLI**: optional absolute-path override for non-PATH installs.
-- **Allow file edits from chat**: advisory toggle (default on). When off, CastCodes pre-warns the CLI via prompt prefix; the CLI still owns the actual permission decision.
+- **Detected CLIs**: list with version (from `claude --version` etc.), plugin status (installed / missing / unknown), "Refresh" button.
+- **Default model per CLI**: dropdown of curated model IDs per CLI, used when starting a new chat via the model picker.
+- **Show permission cards in the chat transcript**: toggle (default on).
+- **Open chat panel automatically when a CLI session starts**: toggle (default off in v1; we don't surprise the user with a new pane).
+
+The settings section explicitly does not include the plugin auto-installer — see fork-local boundary.
 
 ## Branding and OSS boundary
 
-- All user-visible strings use CastCodes naming, not Warp.
-- The panel is feature-gated to OSS builds (or to all builds with the inherited surface coexisting; final gating decided in TECH.md).
-- No requests leave the machine except the CLI subprocesses themselves (which call their respective vendor endpoints under their own auth).
-- No telemetry is emitted for this feature. Local debug logging only.
+- All new user-visible strings use CastCodes naming. `./script/check_rebrand` passes after the work.
+- The new panel and its sqlite store live entirely on the local machine. Nothing this feature adds reaches the network.
+- We do not call into `plugin_manager/*.rs` from the new panel for installation. We may read from it (`is_installed`, version detection) so long as we do not invoke any code path that consults Warp-owned URLs. If reuse is impractical, we re-implement a minimal "is the plugin installed" check inside the new module.
+- The inherited plugin auto-installer remains compiled but is reachable only through inherited UI surfaces, which themselves are dormant in OSS. Compile-gating it out of OSS builds entirely is a follow-up.
+- No telemetry is emitted from this feature. Local `tracing`/`log` debug spans only.
 
 ## Success criteria
 
-- A user with `claude` installed and logged in can send a message and receive a streaming response inside the panel within 5 seconds end-to-end (on a typical machine, excluding network latency).
-- Tool calls and file edits the CLI performs are visible in the transcript without the user leaving the panel.
-- Conversations survive an app restart and resume successfully via `claude --resume` when the prior session token is still valid.
+- With `claude` installed and the warp plugin present, a user runs `claude` in a CastCodes terminal, opens the chat panel, types a prompt in the panel composer, sends it, and sees the resulting transcript stream into the panel within the same wall-clock window as the terminal shows it.
+- After restart, the user opens the chat panel and sees a list of prior sessions; clicking one reproduces the transcript from local storage.
 - With no CLI installed, the panel renders an actionable empty state and does not silently fail.
 - `./script/check_rebrand` passes for all new public-surface strings.
-- No new code path calls any `*.warp.dev` domain.
+- A CI grep guard confirms no new source file under the new module references `warp_multi_agent_api`, `warp_server_client`, `*.warp.dev`, or `warpdotdev/`.
 
-## Open questions for implementation
+## Open questions
 
-- Final placement: dedicated sidebar vs. tab in existing pane group. Resolved in TECH.md.
-- Whether to ship the codex backend in the initial PR or land claude first and add codex in a follow-up. Tracked as a TECH.md decision.
-- How to encode model capabilities (which models support tool use, which don't) — likely a hand-curated table per CLI, refreshed when the CLI version is detected.
+- Whether the panel binds 1:1 to a terminal pane or to a CLI session identifier (which can outlive a terminal). Likely the latter; TECH.md resolves.
+- Whether to show a per-session pane-link affordance (jump to the terminal that owns the session). Probably yes; small UI work.
+- How to surface multiple parallel CLI sessions in the panel (split view vs. tabs vs. switch). v1 likely shows one active session at a time with a switcher; TECH.md resolves.
+- Whether the model picker's "New chat" should open the new terminal in the current workspace, a new tab, or a split. Probably current workspace, new tab; revisitable during implementation.
