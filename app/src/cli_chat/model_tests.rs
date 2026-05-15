@@ -301,3 +301,36 @@ fn history_loaded_on_construction() {
     assert_eq!(conv.entries.len(), 1);
     assert_eq!(conv.title, "fix the bug");
 }
+
+// ---------------------------------------------------------------------------
+// Skipped event counter (error banner)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn skipped_event_count_starts_at_zero() {
+    let model = ChatModel::new_unwired();
+    assert_eq!(model.skipped_event_count(), 0);
+}
+
+#[test]
+fn prompt_submit_without_query_increments_skipped_count() {
+    let mut model = ChatModel::new_unwired();
+    let tid = EntityId::new();
+
+    // First, seed a conversation so that the early-return for missing
+    // session_id / unknown agent is not hit.
+    let seed = parse_fixture(include_str!("tests/fixtures/claude_prompt_submit.json"));
+    model.apply_event(&seed, tid, Utc::now());
+    assert_eq!(model.skipped_event_count(), 0);
+
+    // A PromptSubmit *without* a query — `from_event` returns None.
+    let no_query = parse_fixture(
+        r#"{"v":1,"agent":"claude","event":"prompt_submit","session_id":"abc"}"#,
+    );
+    model.apply_event(&no_query, tid, Utc::now());
+    assert_eq!(model.skipped_event_count(), 1);
+
+    // Sending another one increments again.
+    model.apply_event(&no_query, tid, Utc::now());
+    assert_eq!(model.skipped_event_count(), 2);
+}

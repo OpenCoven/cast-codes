@@ -46,6 +46,10 @@ pub struct ChatModel {
     next_sequence: HashMap<String, u64>,
     binding: ConversationBinding,
     store: Option<ChatStore>,
+    /// Count of events for which `ChatEntry::from_event` returned `None`
+    /// (unknown/unrecognised event type). When this exceeds the threshold
+    /// defined in `view::error_banner` the UI shows a compatibility warning.
+    skipped_event_count: u64,
 }
 
 impl Entity for ChatModel {
@@ -88,6 +92,7 @@ impl ChatModel {
             next_sequence: HashMap::new(),
             binding: ConversationBinding::None,
             store,
+            skipped_event_count: 0,
         };
         model.load_existing_history();
         model
@@ -104,6 +109,7 @@ impl ChatModel {
             next_sequence: HashMap::new(),
             binding: ConversationBinding::None,
             store: None,
+            skipped_event_count: 0,
         }
     }
 
@@ -119,6 +125,7 @@ impl ChatModel {
             next_sequence: HashMap::new(),
             binding: ConversationBinding::None,
             store: Some(store),
+            skipped_event_count: 0,
         };
         model.load_existing_history();
         model
@@ -139,6 +146,14 @@ impl ChatModel {
         let mut v: Vec<_> = self.conversations.values().collect();
         v.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         v
+    }
+
+    /// Number of events that `ChatEntry::from_event` could not convert.
+    ///
+    /// When this exceeds the threshold in `view::error_banner` the UI shows
+    /// an incompatible-plugin warning banner.
+    pub fn skipped_event_count(&self) -> u64 {
+        self.skipped_event_count
     }
 
     /// Access the underlying store (if any) — exposed for tests.
@@ -328,6 +343,12 @@ impl ChatModel {
                 *next_seq += 1;
             }
             appended = true;
+        } else {
+            // `from_event` returned None — this event type is not
+            // representable in the transcript (e.g. an unknown variant
+            // from a newer plugin version). Track it so the view can
+            // surface a compatibility warning after enough skips.
+            self.skipped_event_count += 1;
         }
 
         // Persist to sqlite (outside the mutable borrow of `conversations`).

@@ -3,7 +3,10 @@
 //! Walks the bound [`ChatConversation`] and produces one row per
 //! [`ChatEntry`] via `message_bubble`. When no conversation is bound
 //! (the panel just opened, or no CLI session has emitted events yet)
-//! we render a single info line so the panel is never visually blank.
+//! we render the appropriate empty state so the panel is never blank.
+//!
+//! When the model's `skipped_event_count` reaches the threshold, an
+//! error banner is rendered above the transcript (see `error_banner`).
 //!
 //! The element-builder pattern (`Flex::column`, `MainAxisSize`) is
 //! mirrored from `app/src/workspace/view/conversation_list/view.rs`
@@ -15,6 +18,8 @@ use warpui::{AppContext, SingletonEntity};
 use crate::appearance::Appearance;
 use crate::cli_chat::conversation::{ChatConversation, ConversationBinding};
 use crate::cli_chat::entry::{ChatEntry, ChatEntryKind};
+use crate::cli_chat::view::empty_state::{self, EmptyKind};
+use crate::cli_chat::view::error_banner;
 use crate::cli_chat::view::message_bubble;
 use crate::cli_chat::view::ChatPanelView;
 
@@ -31,15 +36,30 @@ pub fn render_panel(view: &ChatPanelView, app: &AppContext) -> Box<dyn Element> 
         ConversationBinding::None => None,
     };
 
+    let mut col = Flex::column().with_main_axis_size(MainAxisSize::Max);
+
+    // Show an error banner when enough events have been skipped to suggest
+    // a plugin incompatibility.
+    if chat.skipped_event_count() >= error_banner::SKIPPED_THRESHOLD {
+        col = col.with_child(error_banner::render(font_family, font_size));
+    }
+
     let body: Box<dyn Element> = match conversation {
         Some(conv) => render_transcript(conv, font_family, font_size),
-        None => render_empty_placeholder(font_family, font_size),
+        None => {
+            let has_conversations = !chat.conversations_sorted_by_recency().is_empty();
+            if has_conversations {
+                // Conversations exist but none is bound — show a brief
+                // placeholder. The user can select one from the sidebar.
+                render_empty_placeholder(font_family, font_size)
+            } else {
+                // No conversations at all — render the full empty state.
+                empty_state::render(EmptyKind::NoHistory, font_family, font_size)
+            }
+        }
     };
 
-    Flex::column()
-        .with_main_axis_size(MainAxisSize::Max)
-        .with_child(body)
-        .finish()
+    col.with_child(body).finish()
 }
 
 fn render_transcript(
