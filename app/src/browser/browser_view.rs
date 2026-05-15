@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
@@ -8,10 +9,12 @@ use pathfinder_geometry::{
 };
 use warpui::{
     elements::{
-        AfterLayoutContext, Border, ChildView, Clipped, ConstrainedBox, Container, CornerRadius,
-        CrossAxisAlignment, Element, EventContext, Expanded, Flex, LayoutContext, MainAxisSize,
-        MouseStateHandle, PaintContext, ParentElement as _, Point, Radius, SizeConstraint,
+        AfterLayoutContext, Align, Border, ChildView, Clipped, ConstrainedBox, Container,
+        CornerRadius, CrossAxisAlignment, Element, EventContext, Expanded, Flex, Hoverable,
+        LayoutContext, MainAxisSize, MouseStateHandle, PaintContext, ParentElement as _, Point,
+        Radius, SizeConstraint, Text,
     },
+    text_layout::ClipConfig,
     ui_components::components::UiComponent,
     AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
     ViewHandle, WindowId,
@@ -31,13 +34,21 @@ use crate::{
     ui_components::{blended_colors, buttons::icon_button_with_color, icons::Icon},
 };
 
-use super::BrowserModel;
+use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
 
 const URL_BAR_HEIGHT: f32 = 32.0;
 const TOOLBAR_HEIGHT: f32 = 48.0;
+const TAB_STRIP_HEIGHT: f32 = 32.0;
+const TAB_MAX_WIDTH: f32 = 200.0;
+const TAB_MIN_WIDTH: f32 = 80.0;
+const TAB_HEIGHT: f32 = 26.0;
+const TAB_CHIP_PADDING: f32 = 8.0;
+const TAB_CLOSE_BUTTON_SIZE: f32 = 16.0;
 const TOOLBAR_HORIZONTAL_PADDING: f32 = 10.0;
 const TOOLBAR_BUTTON_GAP: f32 = 6.0;
+const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
+const TAB_BORDER_RADIUS: f32 = 4.0;
 const URL_BAR_PLACEHOLDER: &str = "Enter URL";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,25 +61,43 @@ pub enum BrowserViewAction {
     Back,
     Forward,
     Reload,
+    NewTab,
+    CloseTab(usize),
+    SelectTab(usize),
+}
+
+#[derive(Default, Clone)]
+struct TabUiState {
+    chip_mouse: MouseStateHandle,
+    close_mouse: MouseStateHandle,
 }
 
 struct NativeBrowserWebView {
+    tab_id: TabId,
     #[cfg(not(target_family = "wasm"))]
     webview: Option<wry::WebView>,
-    title_tx: async_channel::Sender<String>,
+    title_tx: async_channel::Sender<(TabId, String)>,
     pending_url: Option<String>,
     bounds: Option<RectF>,
+    desired_visible: bool,
     attach_error_logged: bool,
 }
 
 impl NativeBrowserWebView {
-    fn new(initial_url: impl Into<String>, title_tx: async_channel::Sender<String>) -> Self {
+    fn new(
+        tab_id: TabId,
+        initial_url: impl Into<String>,
+        title_tx: async_channel::Sender<(TabId, String)>,
+        desired_visible: bool,
+    ) -> Self {
         Self {
+            tab_id,
             #[cfg(not(target_family = "wasm"))]
             webview: None,
             title_tx,
             pending_url: Some(initial_url.into()),
             bounds: None,
+            desired_visible,
             attach_error_logged: false,
         }
     }
@@ -111,6 +140,17 @@ impl NativeBrowserWebView {
         }
     }
 
+    fn set_visibility(&mut self, visible: bool) {
+        self.desired_visible = visible;
+
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(webview) = &self.webview {
+            if let Err(err) = webview.set_visible(visible) {
+                log::warn!("failed to update browser pane visibility: {err}");
+            }
+        }
+    }
+
     fn set_bounds(&mut self, window_id: WindowId, bounds: RectF, app: &AppContext) {
         self.bounds = Some(bounds);
         self.attach_if_needed(window_id, bounds, app);
@@ -121,6 +161,11 @@ impl NativeBrowserWebView {
 
             if let Err(err) = webview.set_bounds(rect) {
                 log::warn!("failed to resize browser pane webview: {err}");
+            }
+            if self.desired_visible {
+                if let Err(err) = webview.set_visible(true) {
+                    log::warn!("failed to show browser pane webview: {err}");
+                }
             }
         }
     }
@@ -152,12 +197,14 @@ impl NativeBrowserWebView {
 
             let url = self.pending_url.clone().unwrap_or_default();
             let title_tx = self.title_tx.clone();
+            let tab_id = self.tab_id;
             match wry::WebViewBuilder::new_as_child(&parent)
                 .with_url(url)
                 .with_bounds(Self::wry_rect(bounds))
+                .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
                 .with_document_title_changed_handler(move |title| {
-                    let _ = title_tx.try_send(title);
+                    let _ = title_tx.try_send((tab_id, title));
                 })
                 .build()
             {
@@ -299,12 +346,19 @@ pub struct BrowserView {
     model: BrowserModel,
     window_id: WindowId,
     url_editor: ViewHandle<EditorView>,
-    native_webview: Rc<RefCell<NativeBrowserWebView>>,
     pane_configuration: ModelHandle<PaneConfiguration>,
     focus_handle: Option<PaneFocusHandle>,
+    /// Per-tab native webviews, aligned by index with `model.tabs()`.
+    webviews: Vec<Rc<RefCell<NativeBrowserWebView>>>,
+    /// Channel for tab-tagged document title updates from all webviews.
+    title_tx: async_channel::Sender<(TabId, String)>,
+    /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
+    /// closures (which shift indices).
+    tab_ui_states: HashMap<TabId, TabUiState>,
     back_button_mouse_state: MouseStateHandle,
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
+    new_tab_button_mouse_state: MouseStateHandle,
 }
 
 impl BrowserView {
@@ -312,11 +366,19 @@ impl BrowserView {
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
-        let (title_tx, title_rx) = async_channel::unbounded();
+        let (title_tx, title_rx) = async_channel::unbounded::<(TabId, String)>();
+
+        let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
+            initial_tab_id,
             model.current_url().to_string(),
-            title_tx,
+            title_tx.clone(),
+            true,
         )));
+
+        let mut tab_ui_states = HashMap::new();
+        tab_ui_states.insert(initial_tab_id, TabUiState::default());
+
         let current_url = model.current_url().to_string();
 
         let url_editor = ctx.add_typed_action_view(|ctx| {
@@ -348,12 +410,15 @@ impl BrowserView {
             model,
             window_id: ctx.window_id(),
             url_editor,
-            native_webview,
             pane_configuration,
             focus_handle: None,
+            webviews: vec![native_webview],
+            title_tx,
+            tab_ui_states,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
+            new_tab_button_mouse_state: MouseStateHandle::default(),
         }
     }
 
@@ -369,6 +434,10 @@ impl BrowserView {
         ctx.focus(&self.url_editor);
     }
 
+    fn active_webview(&self) -> Option<&Rc<RefCell<NativeBrowserWebView>>> {
+        self.webviews.get(self.model.active_index())
+    }
+
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
         let url = self.url_editor.as_ref(ctx).buffer_text(ctx);
         self.navigate(url, ctx);
@@ -379,7 +448,9 @@ impl BrowserView {
             self.url_editor.update(ctx, |editor, ctx| {
                 editor.set_buffer_text_with_base_buffer(&url, ctx);
             });
-            self.native_webview.borrow_mut().load_url(&url);
+            if let Some(webview) = self.active_webview() {
+                webview.borrow_mut().load_url(&url);
+            }
             self.sync_pane_title(ctx);
             ctx.notify();
         }
@@ -390,7 +461,9 @@ impl BrowserView {
             self.url_editor.update(ctx, |editor, ctx| {
                 editor.set_buffer_text_with_base_buffer(&url, ctx);
             });
-            self.native_webview.borrow().go_back();
+            if let Some(webview) = self.active_webview() {
+                webview.borrow().go_back();
+            }
             self.sync_pane_title(ctx);
             ctx.notify();
         }
@@ -401,7 +474,9 @@ impl BrowserView {
             self.url_editor.update(ctx, |editor, ctx| {
                 editor.set_buffer_text_with_base_buffer(&url, ctx);
             });
-            self.native_webview.borrow().go_forward();
+            if let Some(webview) = self.active_webview() {
+                webview.borrow().go_forward();
+            }
             self.sync_pane_title(ctx);
             ctx.notify();
         }
@@ -409,14 +484,139 @@ impl BrowserView {
 
     fn reload(&mut self, ctx: &mut ViewContext<Self>) {
         self.model.reload();
-        self.native_webview.borrow().reload();
+        if let Some(webview) = self.active_webview() {
+            webview.borrow().reload();
+        }
         self.sync_pane_title(ctx);
         ctx.notify();
     }
 
-    fn handle_document_title(&mut self, title: String, ctx: &mut ViewContext<Self>) {
-        if self.model.set_title(title) {
+    fn new_tab(&mut self, ctx: &mut ViewContext<Self>) {
+        // Hide the currently active tab before adding the new one.
+        if let Some(prev_active) = self.webviews.get(self.model.active_index()) {
+            prev_active.borrow_mut().set_visibility(false);
+        }
+
+        let (tab_id, _idx) = self.model.add_tab(DEFAULT_BROWSER_URL);
+        let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
+            tab_id,
+            DEFAULT_BROWSER_URL.to_string(),
+            self.title_tx.clone(),
+            true,
+        )));
+        self.webviews.push(webview);
+        self.tab_ui_states.insert(tab_id, TabUiState::default());
+
+        self.sync_active_tab_into_editor(ctx);
+        self.sync_pane_title(ctx);
+        ctx.notify();
+    }
+
+    fn close_tab(&mut self, idx: usize, ctx: &mut ViewContext<Self>) {
+        let prior_active_idx = self.model.active_index();
+        let Some(result) = self.model.close_tab(idx) else {
+            return;
+        };
+
+        // Drop the removed tab's webview (this detaches the native view).
+        if result.removed_index < self.webviews.len() {
+            let removed = self.webviews.remove(result.removed_index);
+            removed.borrow_mut().set_visibility(false);
+            // Removed is dropped here, which destroys the wry::WebView.
+            drop(removed);
+        }
+
+        // Also clean up its UI state.
+        if let Some(removed_tab_id) = self.tab_ui_states_remove_for_index(result.removed_index) {
+            let _ = removed_tab_id;
+        }
+
+        // If we replaced the last tab with a fresh default tab, create a matching webview.
+        if let Some(new_tab_id) = result.new_tab_id {
+            let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
+                new_tab_id,
+                DEFAULT_BROWSER_URL.to_string(),
+                self.title_tx.clone(),
+                true,
+            )));
+            self.webviews.push(webview);
+            self.tab_ui_states.insert(new_tab_id, TabUiState::default());
+        }
+
+        // If the active tab changed, surface the new tab's URL & title; if the
+        // previously-active webview is still around (e.g. we closed a non-active
+        // tab), leave it as-is.
+        if self.model.active_index() != prior_active_idx
+            || result.removed_index == prior_active_idx
+        {
+            if let Some(webview) = self.active_webview() {
+                webview.borrow_mut().set_visibility(true);
+            }
+            self.sync_active_tab_into_editor(ctx);
             self.sync_pane_title(ctx);
+        }
+
+        ctx.notify();
+    }
+
+    fn select_tab(&mut self, idx: usize, ctx: &mut ViewContext<Self>) {
+        let prior_active_idx = self.model.active_index();
+        if !self.model.select_tab(idx) {
+            return;
+        }
+
+        if let Some(prev) = self.webviews.get(prior_active_idx) {
+            prev.borrow_mut().set_visibility(false);
+        }
+        if let Some(next) = self.active_webview() {
+            next.borrow_mut().set_visibility(true);
+        }
+
+        self.sync_active_tab_into_editor(ctx);
+        self.sync_pane_title(ctx);
+        ctx.notify();
+    }
+
+    /// Removes a tab UI state entry given its current index in `model.tabs()`
+    /// *before* removal happened. The model has already removed the tab; we
+    /// can't look it up there, so we identify it by scanning for an entry not
+    /// in the remaining tabs.
+    fn tab_ui_states_remove_for_index(&mut self, _removed_index: usize) -> Option<TabId> {
+        let live: std::collections::HashSet<TabId> =
+            self.model.tabs().iter().map(|t| t.id()).collect();
+        let mut stale: Option<TabId> = None;
+        for &id in self.tab_ui_states.keys() {
+            if !live.contains(&id) {
+                stale = Some(id);
+                break;
+            }
+        }
+        if let Some(id) = stale {
+            self.tab_ui_states.remove(&id);
+            Some(id)
+        } else {
+            None
+        }
+    }
+
+    fn sync_active_tab_into_editor(&mut self, ctx: &mut ViewContext<Self>) {
+        let url = self.model.current_url().to_string();
+        self.url_editor.update(ctx, |editor, ctx| {
+            editor.set_buffer_text_with_base_buffer(&url, ctx);
+        });
+    }
+
+    fn handle_document_title(
+        &mut self,
+        msg: (TabId, String),
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let (tab_id, title) = msg;
+        if self.model.set_title_for(tab_id, title) {
+            // Only resync the pane title if the active tab's title changed.
+            if self.model.active_tab().id() == tab_id {
+                self.sync_pane_title(ctx);
+            }
             ctx.notify();
         }
     }
@@ -537,6 +737,162 @@ impl BrowserView {
         .with_height(TOOLBAR_HEIGHT)
         .finish()
     }
+
+    fn render_tab_strip(&self, app: &AppContext) -> Box<dyn Element> {
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let active = self.model.active_index();
+
+        let mut row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_main_axis_size(MainAxisSize::Max);
+
+        for (idx, tab) in self.model.tabs().iter().enumerate() {
+            let title = tab.display_title().to_string();
+            let tab_id = tab.id();
+            let ui_state = self
+                .tab_ui_states
+                .get(&tab_id)
+                .cloned()
+                .unwrap_or_default();
+            let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
+            let chip_with_margin = if idx == 0 {
+                chip
+            } else {
+                Container::new(chip).with_margin_left(TAB_GAP).finish()
+            };
+            row.add_child(chip_with_margin);
+        }
+
+        row.add_child(
+            Container::new(self.render_new_tab_button(app))
+                .with_margin_left(TAB_GAP * 2.0)
+                .finish(),
+        );
+
+        let _ = appearance;
+
+        ConstrainedBox::new(
+            Container::new(row.finish())
+                .with_horizontal_padding(TOOLBAR_HORIZONTAL_PADDING)
+                .with_background(theme.surface_1())
+                .finish(),
+        )
+        .with_height(TAB_STRIP_HEIGHT)
+        .finish()
+    }
+
+    fn render_tab_chip(
+        &self,
+        idx: usize,
+        _tab_id: TabId,
+        title: &str,
+        is_active: bool,
+        ui_state: TabUiState,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let active_bg = theme.background();
+        let active_text = theme.main_text_color(theme.background());
+        let inactive_text = theme.sub_text_color(theme.background());
+        let hover_bg = theme.surface_2();
+        let chip_text_color = if is_active { active_text } else { inactive_text };
+        let title_text = title.to_string();
+        let font_family = appearance.ui_font_family();
+        let close_mouse = ui_state.close_mouse.clone();
+
+        let close_button_color = chip_text_color;
+        let close_button = Hoverable::new(close_mouse, move |hover_state| {
+            let icon_color = if hover_state.is_hovered() {
+                active_text
+            } else {
+                close_button_color
+            };
+            let icon = ConstrainedBox::new(Icon::X.to_warpui_icon(icon_color).finish())
+                .with_width(TAB_CLOSE_BUTTON_SIZE)
+                .with_height(TAB_CLOSE_BUTTON_SIZE)
+                .finish();
+            let mut container = Container::new(icon)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.0)));
+            if hover_state.is_hovered() {
+                container = container.with_background(hover_bg);
+            }
+            container.finish()
+        })
+        .on_click(move |ctx, _, _| {
+            ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx))
+        })
+        .finish();
+
+        let title_element = ConstrainedBox::new(
+            Text::new_inline(title_text, font_family, 12.0)
+                .with_color(chip_text_color.into())
+                .with_clip(ClipConfig::end())
+                .finish(),
+        )
+        .with_max_width(TAB_MAX_WIDTH - TAB_CLOSE_BUTTON_SIZE - TAB_CHIP_PADDING * 2.0 - 4.0)
+        .finish();
+
+        let row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_main_axis_size(MainAxisSize::Min)
+            .with_child(Expanded::new(1.0, title_element).finish())
+            .with_child(
+                Container::new(close_button)
+                    .with_margin_left(4.0)
+                    .finish(),
+            )
+            .finish();
+
+        let chip_mouse = ui_state.chip_mouse.clone();
+        let chip = Hoverable::new(chip_mouse, move |hover_state| {
+            let background = if is_active {
+                Some(active_bg)
+            } else if hover_state.is_hovered() {
+                Some(hover_bg)
+            } else {
+                None
+            };
+
+            let mut container = Container::new(row)
+                .with_horizontal_padding(TAB_CHIP_PADDING)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(TAB_BORDER_RADIUS)));
+            if let Some(bg) = background {
+                container = container.with_background(bg);
+            }
+            container.finish()
+        })
+        .on_click(move |ctx, _, _| {
+            ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx))
+        })
+        .finish();
+
+        ConstrainedBox::new(Align::new(chip).finish())
+            .with_min_width(TAB_MIN_WIDTH)
+            .with_max_width(TAB_MAX_WIDTH)
+            .with_height(TAB_HEIGHT)
+            .finish()
+    }
+
+    fn render_new_tab_button(&self, app: &AppContext) -> Box<dyn Element> {
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let ui_builder = appearance.ui_builder().clone();
+        let color = blended_colors::text_main(theme, theme.background()).into();
+
+        icon_button_with_color(
+            appearance,
+            Icon::Plus,
+            false,
+            self.new_tab_button_mouse_state.clone(),
+            color,
+        )
+        .with_tooltip(move || ui_builder.tool_tip("New Tab".to_string()).build().finish())
+        .build()
+        .on_click(|ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::NewTab))
+        .finish()
+    }
 }
 
 impl Entity for BrowserView {
@@ -550,16 +906,25 @@ impl View for BrowserView {
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let theme = Appearance::as_ref(app).theme();
-        let webview = Container::new(
-            NativeWebViewElement::new(self.native_webview.clone(), self.window_id).finish(),
-        )
-        .with_background(theme.background())
-        .finish();
+
+        // Only the active tab's webview is rendered into the layout tree.
+        // Inactive tabs keep their native views hidden via set_visibility(false).
+        let webview_element: Box<dyn Element> = match self.active_webview() {
+            Some(webview) => Container::new(
+                NativeWebViewElement::new(webview.clone(), self.window_id).finish(),
+            )
+            .with_background(theme.background())
+            .finish(),
+            None => Container::new(Container::new(Flex::row().finish()).finish())
+                .with_background(theme.background())
+                .finish(),
+        };
 
         Flex::column()
             .with_main_axis_size(MainAxisSize::Max)
+            .with_child(self.render_tab_strip(app))
             .with_child(self.render_toolbar(app))
-            .with_child(Expanded::new(1.0, webview).finish())
+            .with_child(Expanded::new(1.0, webview_element).finish())
             .finish()
     }
 }
@@ -572,6 +937,9 @@ impl TypedActionView for BrowserView {
             BrowserViewAction::Back => self.go_back(ctx),
             BrowserViewAction::Forward => self.go_forward(ctx),
             BrowserViewAction::Reload => self.reload(ctx),
+            BrowserViewAction::NewTab => self.new_tab(ctx),
+            BrowserViewAction::CloseTab(idx) => self.close_tab(*idx, ctx),
+            BrowserViewAction::SelectTab(idx) => self.select_tab(*idx, ctx),
         }
     }
 }

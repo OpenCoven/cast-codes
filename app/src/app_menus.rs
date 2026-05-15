@@ -391,6 +391,15 @@ fn make_new_view_menu(ctx: &AppContext) -> Menu {
         updateable_custom_item_without_checkmark(CustomAction::Workflows, ctx),
         MenuItem::Separator,
         MenuItem::Custom(CustomMenuItem::new(
+            "Open Browser",
+            move |ctx| {
+                ctx.dispatch_global_action("workspace:open_browser_pane", &());
+            },
+            no_updates,
+            None,
+        )),
+        MenuItem::Separator,
+        MenuItem::Custom(CustomMenuItem::new(
             "Toggle Mouse Reporting",
             move |ctx| {
                 ctx.dispatch_global_action("workspace:toggle_mouse_reporting", &());
