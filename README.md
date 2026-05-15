@@ -22,7 +22,7 @@ For a static packaging check:
 
 ```bash
 ./script/check_rebrand
-cargo check -p warp --bin cast-codes --features gui
+cargo check -p warp-app --bin cast-codes --features gui
 ./script/bundle --channel oss --check-only
 ```
 

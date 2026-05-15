@@ -40,7 +40,7 @@
             "is_prerelease": false,
             "is_autopush": false,
             "release_base_name": "CastCodes OSS Release",
-            "release_body_text": "CastCodes OSS release. This public fork release is distributed through GitHub release assets without upstream Warp release infrastructure.",
+            "release_body_text": "CastCodes OSS release. This public fork release is distributed through GitHub release assets without upstream Warp release infrastructure. Standard assets: macOS arm64 DMG and CLI tarball, Linux x86_64 app and CLI packages, Windows x64 installer, and web bundle.",
             "sentry_project": "",
             "sentry_environment": "",
             "changelog_slack_channel": ""
