@@ -29,3 +29,5 @@ mod entry_tests;
 mod model_tests;
 #[cfg(test)]
 mod store_schema_tests;
+#[cfg(test)]
+mod store_tests;
