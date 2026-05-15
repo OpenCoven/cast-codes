@@ -261,7 +261,7 @@ Two candidates considered:
 - **Right-side panel slot** (mirroring `app/src/workspace/view/right_panel.rs` patterns). This is the chosen placement: it lives next to the active terminal pane, the user can keep both visible, and it does not contend with the existing left-side vertical-tabs sidebar where session chips already live.
 - Top-tab in the pane group: rejected. Tabs there are for editors/terminals; a chat panel does not fit that mental model and would hide the terminal.
 
-The panel is registered in `app/src/workspace/view.rs` similarly to how other right-panel content is registered. Showing/hiding is controlled by a workspace action (`ToggleCliChatPanel`) bound to a default keybinding (e.g., `Cmd+Shift+J`; final binding chosen during implementation to avoid conflicts).
+The panel is registered in `app/src/workspace/view.rs` similarly to how other right-panel content is registered. Showing/hiding is controlled by a workspace action (`ToggleCliChatPanel`) bound to a default keybinding of `Cmd+Shift+H` on macOS / `Ctrl+Shift+H` on Linux/Windows. (`Cmd+Shift+J`, the original placeholder in this doc, is already bound to `TerminalAction::ToggleQueueNextPrompt`.)
 
 ## Feature gating
 
@@ -316,7 +316,7 @@ A `specs/castcodes-chat-panel/CHECKLIST.md` captures the end-to-end manual verif
 - **Codex's non-JSON notification format**: the listener has an agent-specific parser override for codex. The chat model treats whatever the listener forwards as authoritative; if a `tool_complete` arrives without rich fields, the entry is rendered minimally.
 - **Database growth**: chat history is unbounded. Mitigation: include a settings toggle "Auto-delete chats older than 90 days" disabled by default in v1; add a "Delete all" affordance in settings. v1 is acceptable without pruning; this is documented.
 - **Fork-local-boundary in the inherited plugin manager**: addressed above with a CI grep guard and an explicit no-go list of functions the panel may not call.
-- **Keybinding collisions**: `Cmd+Shift+J` is a placeholder; before shipping, run the keybindings audit against existing bindings.
+- **Keybinding collisions**: the default is `Cmd+Shift+H` / `Ctrl+Shift+H` (after `Cmd+Shift+J` was found to collide with `TerminalAction::ToggleQueueNextPrompt`); run the keybindings audit again before shipping to confirm no further collisions.
 - **Inherited `ai/` types coupling**: `CLIAgentSessionStatus::to_conversation_status` references `crate::ai::agent::conversation::ConversationStatus`. We use the source enum directly (not the inherited mapping) and do not pull anything else from `app/src/ai/`.
 
 ## Out-of-scope follow-ups

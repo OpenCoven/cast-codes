@@ -105,6 +105,12 @@ A new section under the AI / Agent settings page:
 - **Show permission cards in the chat transcript**: toggle (default on).
 - **Open chat panel automatically when a CLI session starts**: toggle (default off in v1; we don't surprise the user with a new pane).
 
+The panel is also exposed via a "Toggle Chat Panel" menu item in the View menu and a
+default keybinding of `Cmd+Shift+H` on macOS / `Ctrl+Shift+H` on Linux and Windows.
+(`Cmd+Shift+J`, which TECH.md previously listed as a placeholder, is already bound to
+`TerminalAction::ToggleQueueNextPrompt`.) The binding is editable from the keybindings
+settings page.
+
 The settings section explicitly does not include the plugin auto-installer — see fork-local boundary.
 
 ## Branding and OSS boundary

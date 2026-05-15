@@ -628,6 +628,7 @@ pub(crate) const TOGGLE_NOTIFICATION_MAILBOX_BINDING_NAME: &str =
 pub(crate) const TOGGLE_PROJECT_EXPLORER_BINDING_NAME: &str = "workspace:toggle_project_explorer";
 pub(crate) const TOGGLE_WARP_DRIVE_BINDING_NAME: &str = "workspace:toggle_warp_drive";
 pub(crate) const TOGGLE_RIGHT_PANEL_BINDING_NAME: &str = "workspace:toggle_right_panel";
+pub(crate) const TOGGLE_CLI_CHAT_PANEL_BINDING_NAME: &str = "workspace:toggle_cli_chat_panel";
 pub(crate) const TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME: &str =
     "workspace:toggle_vertical_tabs_panel";
 pub(crate) const OPEN_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:open_global_search";
@@ -20987,6 +20988,18 @@ impl TypedActionView for Workspace {
             ToggleRightPanel => {
                 let pane_group_handle = self.active_tab_pane_group().clone();
                 self.toggle_right_panel(&pane_group_handle, ctx);
+            }
+            ToggleCliChatPanel => {
+                // TODO(castcodes-chat-panel Task 2.3): wire this up to the
+                // actual chat panel view once it exists. For now we keep the
+                // action and its menu/keybinding registered so we can confirm
+                // dispatch end-to-end. The feature flag is enforced at the
+                // binding/menu registration sites; this handler is only
+                // reachable when `FeatureFlag::CastCodesChatPanel` is enabled.
+                log::debug!(
+                    "WorkspaceAction::ToggleCliChatPanel dispatched; \
+                     panel view not yet implemented (Task 2.3)"
+                );
             }
             #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {
