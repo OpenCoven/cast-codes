@@ -23,3 +23,5 @@ pub use view::ChatPanelView;
 
 #[cfg(test)]
 mod conversation_tests;
+#[cfg(test)]
+mod entry_tests;
