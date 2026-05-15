@@ -869,6 +869,11 @@ pub enum FeatureFlag {
     /// (`~/.git-credentials`, `~/.config/gh/hosts.yaml`) and runs the
     /// background refresh loop that keeps them fresh during a task run.
     GitCredentialRefresh,
+
+    /// Gates the CastCodes chat panel: a fork-local, offline chat surface
+    /// that observes terminal state and renders alongside the workspace.
+    /// CastCodes-only; never enabled in upstream Warp builds.
+    CastCodesChatPanel,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =
