@@ -229,15 +229,43 @@ jobs:
       - name: Install create-dmg
         run: brew install create-dmg
 
-      - name: Build arm64 bundle
+      - name: Build, sign, and notarize arm64 bundle
         id: bundle_app
         shell: bash
         env:
           CHANNEL: ${{ needs.prepare_release.outputs.channel }}
           GIT_RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
+          WARP_APPLE_TEAM_ID: 9LR8Z8UQ9X
+          WARP_CODESIGN_IDENTITY: "Developer ID Application: Soul Protocol LLC (9LR8Z8UQ9X)"
+          WARP_DEVELOPER_ID_CERT: ${{ secrets.WARP_DEVELOPER_ID_CERT }}
+          WARP_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.WARP_DEVELOPER_ID_CERT_PASSWORD }}
+          WARP_CODESIGN_KEYCHAIN_PASSWORD: ${{ secrets.WARP_CODESIGN_KEYCHAIN_PASSWORD }}
+          WARP_NOTARIZATION_APPLE_ID: ${{ secrets.WARP_NOTARIZATION_APPLE_ID }}
+          WARP_NOTARIZATION_PASSWORD: ${{ secrets.WARP_NOTARIZATION_PASSWORD }}
         run: |
           set -euo pipefail
-          script/bundle --nosign --channel "$CHANNEL" --arch aarch64 --dmg-name-suffix arm64
+          required=(
+            WARP_DEVELOPER_ID_CERT
+            WARP_DEVELOPER_ID_CERT_PASSWORD
+            WARP_CODESIGN_KEYCHAIN_PASSWORD
+            WARP_NOTARIZATION_APPLE_ID
+            WARP_NOTARIZATION_PASSWORD
+          )
+          for var in "${required[@]}"; do
+            if [[ -z "${!var:-}" ]]; then
+              echo "::error::${var} is required to publish a Gatekeeper-valid macOS DMG"
+              exit 1
+            fi
+          done
+          script/bundle --read-passwords-from-env --channel "$CHANNEL" --arch aarch64 --dmg-name-suffix arm64
+
+      - name: Verify notarized DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          hdiutil verify "${{ steps.bundle_app.outputs.dmg_path }}"
+          xcrun stapler validate "${{ steps.bundle_app.outputs.dmg_path }}"
+          spctl -a -vv --context context:primary-signature -t open "${{ steps.bundle_app.outputs.dmg_path }}"
 
       - name: Checksum DMG
         shell: bash

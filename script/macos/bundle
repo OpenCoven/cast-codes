@@ -606,14 +606,25 @@ fi
 
 if [[ $CODESIGN = true ]]; then
   # TODO - does this need to change per user?  Seems like it's tied to the WARP_NOTARIZATION_PASSWORD password.
-  APPLE_TEAM_ID="2BBY89MBSN"
+  APPLE_TEAM_ID="${WARP_APPLE_TEAM_ID:-9LR8Z8UQ9X}"
+  CODESIGN_IDENTITY="${WARP_CODESIGN_IDENTITY:-$APPLE_TEAM_ID}"
   CODESIGN_KEYCHAIN_NAME="warp-codesign-keychain"
 
   echo "Starting codesigning..."
 
   if [[ $READ_PASSWORDS_FROM_ENV = true ]]; then
+    if [ -z "$WARP_DEVELOPER_ID_CERT" ] ; then
+      echo "WARP_DEVELOPER_ID_CERT must be set for code signing"
+      exit 1
+    fi
+
     if [ -z "$WARP_NOTARIZATION_PASSWORD" ] ; then
       echo "WARP_NOTARIZATION_PASSWORD must be set for code signing"
+      exit 1
+    fi
+
+    if [ -z "$WARP_NOTARIZATION_APPLE_ID" ] ; then
+      echo "WARP_NOTARIZATION_APPLE_ID must be set for code signing"
       exit 1
     fi
 
@@ -664,10 +675,10 @@ elif [[ $CODESIGN = true ]]; then
   if [[ "$ARTIFACT" == app ]]; then
     echo "Codesigning $BUNDLE_DIR/$WARP_APP_NAME.app..."
     # Use --deep so we sign bundled frameworks as well
-    codesign --deep -f -o runtime --timestamp -s "$APPLE_TEAM_ID" "$BUNDLE_DIR/$WARP_APP_NAME.app" --entitlements script/Entitlements.plist
+    codesign --deep -f -o runtime --timestamp -s "$CODESIGN_IDENTITY" "$BUNDLE_DIR/$WARP_APP_NAME.app" --entitlements script/Entitlements.plist
   elif [[ "$ARTIFACT" == cli ]]; then
     echo "Codesigning $OUT_DIR/$WARP_BIN..."
-    codesign -f -o runtime --timestamp -s "$APPLE_TEAM_ID" "$OUT_DIR/$WARP_BIN" --entitlements script/Entitlements.plist
+    codesign -f -o runtime --timestamp -s "$CODESIGN_IDENTITY" "$OUT_DIR/$WARP_BIN" --entitlements script/Entitlements.plist
 
     # Create the .zip for notarization in a separate location - otherwise, Apple's codesigning
     # tools decide that it's a sealed resource that belongs to the binary and needs to also be signed.
@@ -739,7 +750,7 @@ if [[ "$ARTIFACT" = app ]]; then
     create_warp_dmg "$DMG_DIR"
 
     echo "Codesigning $DMG_DIR/$DMG_NAME..."
-    codesign -s "$APPLE_TEAM_ID" --timestamp "$DMG_DIR/$DMG_NAME"
+    codesign -s "$CODESIGN_IDENTITY" --timestamp "$DMG_DIR/$DMG_NAME"
 
     NOTARIZATION_ARTIFACT="$DMG_DIR/$DMG_NAME"
     STAPLE_TICKET=true
