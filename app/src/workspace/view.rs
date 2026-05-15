@@ -21065,6 +21065,37 @@ impl TypedActionView for Workspace {
                 }
                 ctx.notify();
             }
+            SubmitChatPrompt { text } => {
+                // Phase 5: route user text from the chat panel composer to the
+                // bound live CLI agent's terminal PTY.
+                #[cfg(feature = "local_tty")]
+                {
+                    use crate::cli_chat::conversation::ConversationBinding;
+                    let binding = crate::cli_chat::model::ChatModel::handle(ctx)
+                        .read(ctx, |model, _| model.binding().clone());
+                    if let ConversationBinding::Live {
+                        terminal_view_id, ..
+                    } = binding
+                    {
+                        let text = text.clone();
+                        // Search across all tabs / pane groups for the matching
+                        // terminal view and submit the prompt to its PTY.
+                        let found = self.tabs.iter().find_map(|tab| {
+                            let views =
+                                tab.pane_group.read(ctx, |pg, ctx| pg.terminal_views(ctx));
+                            views
+                                .into_iter()
+                                .find(|tv| tv.id() == terminal_view_id)
+                        });
+                        if let Some(tv) = found {
+                            tv.update(ctx, |view, ctx| {
+                                view.submit_text_to_cli_agent_pty(text, ctx);
+                            });
+                        }
+                    }
+                }
+                let _ = text; // Suppress unused warning when local_tty is absent.
+            }
             #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {
                 let pane_group_handle = self

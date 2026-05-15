@@ -269,6 +269,10 @@ pub enum WorkspaceAction {
     /// Opens a past CLI chat session in the chat panel transcript.
     /// Dispatched from the conversation-list sidebar when a user clicks a row.
     OpenChatSession { session_id: String },
+    /// Submits a user prompt from the chat panel composer to the bound
+    /// live CLI agent session by writing the text to the terminal's PTY.
+    /// Dispatched by the chat panel's `SubmittableTextInput` on Enter.
+    SubmitChatPrompt { text: String },
     /// Opens the code review panel (right panel) without toggling. If already open,
     /// switches to the target pane's repo. Used by vertical tabs diff stats chip.
     OpenCodeReviewPanel(PaneViewLocator),
@@ -857,6 +861,7 @@ impl WorkspaceAction {
             | ToggleRightPanel
             | ToggleCliChatPanel
             | OpenChatSession { .. }
+            | SubmitChatPrompt { .. }
             | OpenCodeReviewPanel(..)
             | ToggleVerticalTabsSettingsPopup
             | SetVerticalTabsDisplayGranularity(_)
