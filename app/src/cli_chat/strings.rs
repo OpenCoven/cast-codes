@@ -24,5 +24,7 @@ pub const COMPOSER_PLACEHOLDER_INACTIVE: &str = "Run a CLI agent in a terminal t
 pub const TRANSCRIPT_TURN_COMPLETE: &str = "Turn complete";
 pub const TRANSCRIPT_SESSION_ENDED: &str = "Session ended";
 
+pub const NEW_CHAT_BUTTON_LABEL: &str = "New chat";
+
 pub const ERROR_INCOMPATIBLE_PLUGIN: &str =
     "Plugin version may be incompatible — some events were skipped.";

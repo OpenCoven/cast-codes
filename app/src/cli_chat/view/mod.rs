@@ -110,6 +110,7 @@ impl View for ChatPanelView {
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
+        let header = model_picker::render(self, app);
         let list = conversation_list::render_list(self, app);
         let transcript = transcript::render_panel(self, app);
         let composer = composer::render_composer(self, app);
@@ -122,11 +123,20 @@ impl View for ChatPanelView {
             .with_child(composer)
             .finish();
 
-        Flex::row()
+        // Main body: conversation list on the left, right column fills remaining space.
+        let body = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
             .with_child(list)
             .with_child(Expanded::new(1.0, right_column).finish())
+            .finish();
+
+        // Overall layout: header bar at top, body fills remaining space.
+        Flex::column()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(header)
+            .with_child(Expanded::new(1.0, body).finish())
             .finish()
     }
 }

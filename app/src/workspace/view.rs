@@ -21096,6 +21096,31 @@ impl TypedActionView for Workspace {
                 }
                 let _ = text; // Suppress unused warning when local_tty is absent.
             }
+            CliChatNewChat { command } => {
+                // Phase 6: open a new terminal tab and write the CLI agent
+                // launch command to the PTY once the shell is ready.
+                #[cfg(feature = "local_tty")]
+                {
+                    let options = NewTerminalOptions::default().with_homepage_hidden();
+                    self.add_tab_with_pane_layout(
+                        PanesLayout::SingleTerminal(Box::new(options)),
+                        Arc::new(HashMap::new()),
+                        None,
+                        ctx,
+                    );
+                    // Write the command + Enter (CR) to the new tab's terminal.
+                    let mut bytes = command.as_bytes().to_vec();
+                    bytes.push(b'\r'); // carriage return = Enter
+                    self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+                        if let Some(tv) = pane_group.active_session_view(ctx) {
+                            tv.update(ctx, |view, ctx| {
+                                view.write_to_pty(bytes, ctx);
+                            });
+                        }
+                    });
+                }
+                let _ = command; // Suppress unused warning when local_tty is absent.
+            }
             #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {
                 let pane_group_handle = self
