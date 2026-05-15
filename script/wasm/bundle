@@ -20,7 +20,7 @@ CARGO_TARGET_DIR="$WORKSPACE_ROOT_DIR/target/wasm32-unknown-unknown"
 
 # By default we build dev bundles.
 RELEASE_CHANNEL="dev"
-# TODO: We should enable crash_reporting and before enabling for trusted testers.
+# TODO: We should enable crash_reporting before enabling for trusted testers.
 # https://linear.app/warpdotdev/issue/PLAT-428/crash-reporting-on-web
 FEATURES="release_bundle,gui"
 DEBUG=false
@@ -165,9 +165,7 @@ fi
 # If this is being run within a GitHub action, set an output variable with the
 # directory containing all built packages.
 if [ "${GITHUB_ACTIONS}" == "true" ]; then
-  echo "::echo::on"
   echo "packages_dir=$OUT_DIR" >> "$GITHUB_OUTPUT"
   echo "assets_dir=$ASSET_TARGET_DIR" >> "$GITHUB_OUTPUT"
   echo "debug_executable_path=$WASM_BINARY_DEBUG" >> "$GITHUB_OUTPUT"
-  echo "::echo::off"
 fi

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Script to install cargo-bundle for CI.
 
@@ -8,7 +9,6 @@ cargo_location=$(dirname "$(which cargo)")
 if test -f "$cargo_location/cargo-bundle"; then
     echo "cargo-bundle already exists, not installing."
 else
-    set -e
     cargo install cargo-bundle --git=https://github.com/burtonageo/cargo-bundle --rev ae4c76e92c08774bf54ff077b1c52e3d1cd6c16d
     echo "Successfully installed cargo-bundle to location $cargo_location"
 fi

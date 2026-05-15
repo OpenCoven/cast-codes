@@ -797,7 +797,6 @@ fi
 # If this is being run within a GitHub action, set an output variable with the
 # location of the artifacts so they can be referenced by subsequent actions.
 if [ "${GITHUB_ACTIONS}" == "true" ]; then
-  echo "::echo::on"
 
   # For individual architecture builds, output binary information
   if [[ -n "$TARGET_ARCH" ]]; then
@@ -833,7 +832,6 @@ if [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "bundled_resources_dir=$BUNDLED_RESOURCES_DIR" >> "$GITHUB_OUTPUT"
   fi
   
-  echo "::echo::off"
 fi
 
 if [[ $OPEN_AFTER_BUNDLE = true ]]; then

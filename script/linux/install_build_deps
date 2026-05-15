@@ -13,7 +13,7 @@ reset="\033[0m"
 # Install some development libraries that will be needed in the compilation
 # process.
 UNAME="$(uname -a)"
-if [[ "$(source /etc/os-release; echo $ID $ID_LIKE)" = *"debian"* ]]; then
+if [[ -f /etc/os-release ]] && [[ "$(source /etc/os-release; echo $ID $ID_LIKE)" = *"debian"* ]]; then
   echo "⬇️  Installing build-time dependencies..."
   # Define the packages to install as a bash array so we can include
   # comments between lines.
