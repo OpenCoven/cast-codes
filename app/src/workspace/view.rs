@@ -1045,6 +1045,10 @@ pub struct Workspace {
     left_panel_view: ViewHandle<LeftPanelView>,
     left_panel_views: Vec<ToolPanelView>,
     right_panel_view: ViewHandle<RightPanelView>,
+    /// CastCodes chat panel view. Only constructed when
+    /// `FeatureFlag::CastCodesChatPanel` is enabled at workspace init
+    /// time; otherwise stays `None` and the toggle action is a no-op.
+    cli_chat_panel_view: Option<ViewHandle<crate::cli_chat::ChatPanelView>>,
     working_directories_model: ModelHandle<pane_group::WorkingDirectoriesModel>,
     agent_management_view: ViewHandle<AgentManagementView>,
     notification_mailbox_view: Option<ViewHandle<NotificationMailboxView>>,
@@ -2768,6 +2772,14 @@ impl Workspace {
             me.handle_right_panel_event(event.clone(), ctx);
         });
 
+        // CastCodes chat panel view — gated by the feature flag at
+        // construction time so the disabled build path costs nothing.
+        let cli_chat_panel_view = if crate::cli_chat::feature_flag::is_enabled() {
+            Some(ctx.add_view(crate::cli_chat::ChatPanelView::new))
+        } else {
+            None
+        };
+
         // Get persisted filters from window snapshot if restoring.
         let agent_management_filters = match workspace_setting {
             NewWorkspaceSource::Restored {
@@ -3168,6 +3180,7 @@ impl Workspace {
             left_panel_view,
             left_panel_views,
             right_panel_view,
+            cli_chat_panel_view,
             working_directories_model,
             shown_staging_banner_count: 0,
 
@@ -19584,6 +19597,26 @@ impl Workspace {
             }
         }
 
+        // CastCodes chat panel. Renders alongside (right of) any other
+        // right-side panels so the user can keep the AI assistant or
+        // resource center visible at the same time. Phase 2 places the
+        // panel at a fixed minimum width; later phases (Phase 7+) wire
+        // up resizing and richer chrome.
+        if self.current_workspace_state.is_cli_chat_panel_open {
+            if let Some(chat_panel_view) = &self.cli_chat_panel_view {
+                let chat_panel_content = self.render_panel(
+                    app,
+                    ChildView::new(chat_panel_view).finish(),
+                    &PanelPosition::Right,
+                );
+                panels_view = panels_view.with_child(
+                    ConstrainedBox::new(chat_panel_content)
+                        .with_width(360.0)
+                        .finish(),
+                );
+            }
+        }
+
         panels_view.finish()
     }
 
@@ -20990,16 +21023,32 @@ impl TypedActionView for Workspace {
                 self.toggle_right_panel(&pane_group_handle, ctx);
             }
             ToggleCliChatPanel => {
-                // TODO(castcodes-chat-panel Task 2.3): wire this up to the
-                // actual chat panel view once it exists. For now we keep the
-                // action and its menu/keybinding registered so we can confirm
-                // dispatch end-to-end. The feature flag is enforced at the
-                // binding/menu registration sites; this handler is only
-                // reachable when `FeatureFlag::CastCodesChatPanel` is enabled.
-                log::debug!(
-                    "WorkspaceAction::ToggleCliChatPanel dispatched; \
-                     panel view not yet implemented (Task 2.3)"
-                );
+                // Phase 2: toggle the panel visibility flag. The actual
+                // panel content (transcript, composer, etc.) renders
+                // inside `render_panels` when the flag is set.
+                //
+                // The action and its menu/keybinding are gated by
+                // `FeatureFlag::CastCodesChatPanel` at registration time
+                // (see `app/src/workspace/mod.rs` and `app/src/app_menus.rs`),
+                // so this handler is only reachable when the feature is on.
+                if self.cli_chat_panel_view.is_none() {
+                    log::debug!(
+                        "WorkspaceAction::ToggleCliChatPanel dispatched but \
+                         no ChatPanelView exists (feature flag was disabled \
+                         at workspace init); ignoring"
+                    );
+                } else {
+                    self.current_workspace_state.is_cli_chat_panel_open =
+                        !self.current_workspace_state.is_cli_chat_panel_open;
+                    if let Some(view) = &self.cli_chat_panel_view {
+                        if self.current_workspace_state.is_cli_chat_panel_open {
+                            ctx.focus(view);
+                        } else {
+                            self.focus_active_tab(ctx);
+                        }
+                    }
+                    ctx.notify();
+                }
             }
             #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {

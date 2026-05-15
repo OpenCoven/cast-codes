@@ -1653,6 +1653,11 @@ pub(crate) fn initialize_app(
     }
     ctx.add_singleton_model(move |_| RestoredAgentConversations::new(multi_agent_conversations));
     ctx.add_singleton_model(|_| CLIAgentSessionsModel::new());
+    // The CastCodes chat panel observes CLI agent events. Register the
+    // singleton unconditionally so callers can grab it via
+    // `ChatModel::handle(ctx)`; the flag-gated UI in `workspace::view`
+    // decides whether to actually render a `ChatPanelView`.
+    ctx.add_singleton_model(crate::cli_chat::ChatModel::new);
     // ActiveAgentViewsModel is used to track active agent conversations and notify listeners when they change.
     ctx.add_singleton_model(|_| ActiveAgentViewsModel::new());
     ctx.add_singleton_model(AgentNotificationsModel::new);
