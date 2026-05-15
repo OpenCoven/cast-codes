@@ -20,6 +20,7 @@ use warpui::EntityId;
 use super::conversation::ConversationBinding;
 use super::entry::{ChatEntryKind, StopReason};
 use super::model::ChatModel;
+use super::store::ChatStore;
 use crate::terminal::cli_agent_sessions::event::{parse_event, CLIAgentEvent};
 
 const SENTINEL: &str = "warp://cli-agent";
@@ -181,4 +182,122 @@ fn sequence_monotonic_across_multiple_events() {
     assert_eq!(conv.entries.len(), 2);
     assert_eq!(conv.entries[0].sequence, 0);
     assert_eq!(conv.entries[1].sequence, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Persistence (ChatStore integration)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn events_persist_to_store() {
+    let store = ChatStore::open_in_memory().unwrap();
+    let mut model = ChatModel::with_store_for_testing(store);
+    let tid = EntityId::new();
+
+    let event = parse_fixture(include_str!("tests/fixtures/claude_prompt_submit.json"));
+    model.apply_event(&event, tid, Utc::now());
+
+    // The in-memory conversation is present.
+    let conv = model.conversation("abc").expect("conversation exists in memory");
+    assert_eq!(conv.entries.len(), 1);
+
+    // The store also has it persisted.
+    let stored = model
+        .store()
+        .unwrap()
+        .load_conversation("abc")
+        .expect("store query succeeds")
+        .expect("conversation persisted in store");
+    assert_eq!(stored.session_id, "abc");
+    assert_eq!(stored.title, "fix the bug");
+    assert_eq!(stored.entries.len(), 1);
+    assert!(matches!(
+        stored.entries[0].kind,
+        ChatEntryKind::UserPrompt { .. }
+    ));
+}
+
+#[test]
+fn stop_with_response_persists_both_entries() {
+    let store = ChatStore::open_in_memory().unwrap();
+    let mut model = ChatModel::with_store_for_testing(store);
+    let tid = EntityId::new();
+
+    // Seed with a prompt.
+    let prompt = parse_fixture(include_str!("tests/fixtures/claude_prompt_submit.json"));
+    model.apply_event(&prompt, tid, Utc::now());
+
+    // Fire the stop-with-response event.
+    let stop = parse_fixture(include_str!(
+        "tests/fixtures/claude_stop_with_response.json"
+    ));
+    model.apply_event(&stop, tid, Utc::now());
+
+    let stored = model
+        .store()
+        .unwrap()
+        .load_conversation("abc")
+        .expect("store query succeeds")
+        .expect("conversation persisted");
+
+    // UserPrompt + AssistantResponse + Stop = 3 entries.
+    assert_eq!(
+        stored.entries.len(),
+        3,
+        "expected 3 persisted entries, got {:#?}",
+        stored.entries
+    );
+    assert!(matches!(
+        stored.entries[0].kind,
+        ChatEntryKind::UserPrompt { .. }
+    ));
+    assert!(matches!(
+        stored.entries[1].kind,
+        ChatEntryKind::AssistantResponse { .. }
+    ));
+    assert!(matches!(stored.entries[2].kind, ChatEntryKind::Stop { .. }));
+}
+
+#[test]
+fn history_loaded_on_construction() {
+    // Phase 1: Build a model, push an event, then drop the model.
+    let store = ChatStore::open_in_memory().unwrap();
+    let mut model = ChatModel::with_store_for_testing(store);
+    let tid = EntityId::new();
+
+    let event = parse_fixture(include_str!("tests/fixtures/claude_prompt_submit.json"));
+    model.apply_event(&event, tid, Utc::now());
+
+    // Grab the raw sqlite connection out of the model so we can re-use it.
+    // We can't move the store out, but we can verify by creating a second
+    // model from the *same* store. Since ChatStore wraps a rusqlite
+    // Connection we instead just verify the first model's store has the
+    // data, then construct a fresh in-memory store and manually insert to
+    // simulate "re-open from disk".
+    //
+    // Alternatively: open a second model from the same store reference.
+    // For this test, we'll verify that `with_store_for_testing` loads
+    // existing data at construction time.
+    let stored = model
+        .store()
+        .unwrap()
+        .load_conversation("abc")
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.entries.len(), 1);
+
+    // Now create a *new* in-memory store, seed it manually, and construct
+    // a ChatModel from it to verify load_existing_history works.
+    let store2 = ChatStore::open_in_memory().unwrap();
+    store2.upsert_conversation(&stored).unwrap();
+    for entry in &stored.entries {
+        store2.insert_entry("abc", entry).unwrap();
+    }
+
+    let model2 = ChatModel::with_store_for_testing(store2);
+    let conv = model2
+        .conversation("abc")
+        .expect("history loaded from store on construction");
+    assert_eq!(conv.entries.len(), 1);
+    assert_eq!(conv.title, "fix the bug");
 }

@@ -8,10 +8,12 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use tracing::warn;
 use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
 
 use crate::cli_chat::conversation::{AgentKind, ChatConversation, ConversationBinding};
 use crate::cli_chat::entry::{ChatEntry, ChatEntryKind};
+use crate::cli_chat::store::ChatStore;
 use crate::terminal::cli_agent_sessions::{
     event::CLIAgentEvent, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
 };
@@ -36,11 +38,14 @@ pub enum ChatModelEvent {
 /// In-memory model that aggregates `CLIAgentEvent`s into per-session
 /// [`ChatConversation`]s for rendering in the CastCodes chat panel.
 ///
-/// Persistence to sqlite is wired in Phase 3 (see PLAN.md).
+/// When a [`ChatStore`] is present, events are persisted to sqlite as they
+/// arrive, and prior conversation history is loaded on construction. If the
+/// store cannot be opened, the model degrades gracefully to in-memory only.
 pub struct ChatModel {
     conversations: HashMap<String, ChatConversation>,
     next_sequence: HashMap<String, u64>,
     binding: ConversationBinding,
+    store: Option<ChatStore>,
 }
 
 impl Entity for ChatModel {
@@ -52,6 +57,10 @@ impl SingletonEntity for ChatModel {}
 impl ChatModel {
     /// Construct a `ChatModel` and subscribe to `CLIAgentSessionsModel`.
     ///
+    /// Opens the sqlite store at the platform database path and loads any
+    /// persisted conversation history. If the store cannot be opened the
+    /// model degrades gracefully to in-memory only.
+    ///
     /// The subscription pattern mirrors `AgentNotificationsModel::new` in
     /// `app/src/ai/agent_management/agent_management_model.rs:44`.
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
@@ -59,24 +68,60 @@ impl ChatModel {
         ctx.subscribe_to_model(&sessions, |me, event, ctx| {
             me.handle_sessions_event(event, ctx);
         });
-        Self {
+
+        let store = match crate::cli_chat::paths::cli_chat_db_path() {
+            Ok(path) => match ChatStore::open(&path) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    warn!("cli_chat: failed to open store at {}: {e}", path.display());
+                    None
+                }
+            },
+            Err(e) => {
+                warn!("cli_chat: failed to resolve database path: {e}");
+                None
+            }
+        };
+
+        let mut model = Self {
             conversations: HashMap::new(),
             next_sequence: HashMap::new(),
             binding: ConversationBinding::None,
-        }
+            store,
+        };
+        model.load_existing_history();
+        model
     }
 
     /// Construct a `ChatModel` without subscribing to any session source.
     ///
     /// Used by unit tests that drive [`ChatModel::apply_event`] directly
-    /// without standing up a warpui app harness.
+    /// without standing up a warpui app harness. Has no store (in-memory only).
     #[cfg(test)]
     pub(crate) fn new_unwired() -> Self {
         Self {
             conversations: HashMap::new(),
             next_sequence: HashMap::new(),
             binding: ConversationBinding::None,
+            store: None,
         }
+    }
+
+    /// Construct a `ChatModel` with an explicit [`ChatStore`] for testing.
+    ///
+    /// No subscription wiring and no path resolution — the caller provides a
+    /// pre-opened store (typically `ChatStore::open_in_memory()`). Loads any
+    /// existing history from the store on construction.
+    #[cfg(test)]
+    pub(crate) fn with_store_for_testing(store: ChatStore) -> Self {
+        let mut model = Self {
+            conversations: HashMap::new(),
+            next_sequence: HashMap::new(),
+            binding: ConversationBinding::None,
+            store: Some(store),
+        };
+        model.load_existing_history();
+        model
     }
 
     /// The currently bound conversation, if any.
@@ -94,6 +139,39 @@ impl ChatModel {
         let mut v: Vec<_> = self.conversations.values().collect();
         v.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         v
+    }
+
+    /// Access the underlying store (if any) — exposed for tests.
+    #[cfg(test)]
+    pub(crate) fn store(&self) -> Option<&ChatStore> {
+        self.store.as_ref()
+    }
+
+    /// Load all conversations from the store into the in-memory maps.
+    ///
+    /// Called once during construction. Populates `conversations` and
+    /// `next_sequence` so the chat panel shows prior history on startup.
+    fn load_existing_history(&mut self) {
+        let Some(store) = self.store.as_ref() else {
+            return;
+        };
+        match store.list_conversations() {
+            Ok(convs) => {
+                for conv in convs {
+                    let next_seq = conv
+                        .entries
+                        .last()
+                        .map(|e| e.sequence + 1)
+                        .unwrap_or(0);
+                    let sid = conv.session_id.clone();
+                    self.conversations.insert(sid.clone(), conv);
+                    self.next_sequence.insert(sid, next_seq);
+                }
+            }
+            Err(e) => {
+                warn!("cli_chat: failed to load conversation history: {e}");
+            }
+        }
     }
 
     /// Bind the panel to a live (active) session.
@@ -201,6 +279,10 @@ impl ChatModel {
 
         let next_seq = self.next_sequence.entry(session_id.clone()).or_insert(0);
         let mut appended = false;
+        // Entries that need to be persisted to the store after in-memory
+        // mutation is complete (collected here to avoid borrow conflicts).
+        let mut entries_to_persist: Vec<ChatEntry> = Vec::new();
+
         if let Some(entry) = ChatEntry::from_event(event, *next_seq, now) {
             // Auto-derive title from the first user prompt.
             if conv.title.is_empty() {
@@ -228,6 +310,7 @@ impl ChatModel {
                     created_at: now,
                     kind: ChatEntryKind::AssistantResponse { text },
                 };
+                entries_to_persist.push(assistant_entry.clone());
                 conv.entries.push(assistant_entry);
                 *next_seq += 1;
 
@@ -236,16 +319,34 @@ impl ChatModel {
                     created_at: now,
                     kind: entry.kind,
                 };
+                entries_to_persist.push(stop_entry.clone());
                 conv.entries.push(stop_entry);
                 *next_seq += 1;
             } else {
+                entries_to_persist.push(entry.clone());
                 conv.entries.push(entry);
                 *next_seq += 1;
             }
             appended = true;
         }
 
+        // Persist to sqlite (outside the mutable borrow of `conversations`).
         if appended || is_new {
+            if let Some(store) = self.store.as_ref() {
+                if let Some(conv) = self.conversations.get(&session_id) {
+                    if let Err(e) = store.upsert_conversation(conv) {
+                        warn!("cli_chat: failed to persist conversation {session_id}: {e}");
+                    }
+                }
+                for entry in &entries_to_persist {
+                    if let Err(e) = store.insert_entry(&session_id, entry) {
+                        warn!(
+                            "cli_chat: failed to persist entry seq={} for {session_id}: {e}",
+                            entry.sequence,
+                        );
+                    }
+                }
+            }
             outcome.updated_session_id = Some(session_id.clone());
         }
 
@@ -262,6 +363,7 @@ impl ChatModel {
 
         outcome
     }
+
 }
 
 /// Result of [`ChatModel::apply_event`].
