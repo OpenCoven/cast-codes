@@ -18,6 +18,10 @@ on:
 jobs:
   close-fix-prs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     if: contains(github.event.pull_request.labels.*.name, 'auto-fix-ci')
     steps:
       - name: Close Dependent Fix PRs
