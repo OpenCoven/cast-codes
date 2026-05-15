@@ -14,6 +14,7 @@ mod banner;
 mod billing;
 mod changelog_model;
 mod chip_configurator;
+mod cli_chat;
 mod cloud_object;
 mod code;
 mod code_review;
@@ -1652,6 +1653,12 @@ pub(crate) fn initialize_app(
     }
     ctx.add_singleton_model(move |_| RestoredAgentConversations::new(multi_agent_conversations));
     ctx.add_singleton_model(|_| CLIAgentSessionsModel::new());
+    // The CastCodes chat panel observes and persists CLI agent events.
+    // Keep the model behind the same feature flag as the UI so a disabled
+    // feature cannot create local chat history in the background.
+    if crate::cli_chat::feature_flag::is_enabled() {
+        ctx.add_singleton_model(crate::cli_chat::ChatModel::new);
+    }
     // ActiveAgentViewsModel is used to track active agent conversations and notify listeners when they change.
     ctx.add_singleton_model(|_| ActiveAgentViewsModel::new());
     ctx.add_singleton_model(AgentNotificationsModel::new);

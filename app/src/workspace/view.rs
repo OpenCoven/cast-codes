@@ -628,6 +628,7 @@ pub(crate) const TOGGLE_NOTIFICATION_MAILBOX_BINDING_NAME: &str =
 pub(crate) const TOGGLE_PROJECT_EXPLORER_BINDING_NAME: &str = "workspace:toggle_project_explorer";
 pub(crate) const TOGGLE_WARP_DRIVE_BINDING_NAME: &str = "workspace:toggle_warp_drive";
 pub(crate) const TOGGLE_RIGHT_PANEL_BINDING_NAME: &str = "workspace:toggle_right_panel";
+pub(crate) const TOGGLE_CLI_CHAT_PANEL_BINDING_NAME: &str = "workspace:toggle_cli_chat_panel";
 pub(crate) const TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME: &str =
     "workspace:toggle_vertical_tabs_panel";
 pub(crate) const OPEN_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:open_global_search";
@@ -1044,6 +1045,10 @@ pub struct Workspace {
     left_panel_view: ViewHandle<LeftPanelView>,
     left_panel_views: Vec<ToolPanelView>,
     right_panel_view: ViewHandle<RightPanelView>,
+    /// CastCodes chat panel view. Only constructed when
+    /// `FeatureFlag::CastCodesChatPanel` is enabled at workspace init
+    /// time; otherwise stays `None` and the toggle action is a no-op.
+    cli_chat_panel_view: Option<ViewHandle<crate::cli_chat::ChatPanelView>>,
     working_directories_model: ModelHandle<pane_group::WorkingDirectoriesModel>,
     agent_management_view: ViewHandle<AgentManagementView>,
     notification_mailbox_view: Option<ViewHandle<NotificationMailboxView>>,
@@ -2767,6 +2772,14 @@ impl Workspace {
             me.handle_right_panel_event(event.clone(), ctx);
         });
 
+        // CastCodes chat panel view — gated by the feature flag at
+        // construction time so the disabled build path costs nothing.
+        let cli_chat_panel_view = if crate::cli_chat::feature_flag::is_enabled() {
+            Some(ctx.add_view(crate::cli_chat::ChatPanelView::new))
+        } else {
+            None
+        };
+
         // Get persisted filters from window snapshot if restoring.
         let agent_management_filters = match workspace_setting {
             NewWorkspaceSource::Restored {
@@ -3167,6 +3180,7 @@ impl Workspace {
             left_panel_view,
             left_panel_views,
             right_panel_view,
+            cli_chat_panel_view,
             working_directories_model,
             shown_staging_banner_count: 0,
 
@@ -3403,10 +3417,11 @@ impl Workspace {
     ) {
         if matches!(
             event,
-            CLIAgentSessionsModelEvent::Started { .. }
+                CLIAgentSessionsModelEvent::Started { .. }
                 | CLIAgentSessionsModelEvent::StatusChanged { .. }
                 | CLIAgentSessionsModelEvent::Ended { .. }
                 | CLIAgentSessionsModelEvent::SessionUpdated { .. }
+                | CLIAgentSessionsModelEvent::EventParseFailed { .. }
         ) && self.workspace_contains_terminal_view(event.terminal_view_id(), ctx)
         {
             ctx.notify();
@@ -19583,6 +19598,26 @@ impl Workspace {
             }
         }
 
+        // CastCodes chat panel. Renders alongside (right of) any other
+        // right-side panels so the user can keep the AI assistant or
+        // resource center visible at the same time. Phase 2 places the
+        // panel at a fixed minimum width; later phases (Phase 7+) wire
+        // up resizing and richer chrome.
+        if self.current_workspace_state.is_cli_chat_panel_open {
+            if let Some(chat_panel_view) = &self.cli_chat_panel_view {
+                let chat_panel_content = self.render_panel(
+                    app,
+                    ChildView::new(chat_panel_view).finish(),
+                    &PanelPosition::Right,
+                );
+                panels_view = panels_view.with_child(
+                    ConstrainedBox::new(chat_panel_content)
+                        .with_width(360.0)
+                        .finish(),
+                );
+            }
+        }
+
         panels_view.finish()
     }
 
@@ -20987,6 +21022,105 @@ impl TypedActionView for Workspace {
             ToggleRightPanel => {
                 let pane_group_handle = self.active_tab_pane_group().clone();
                 self.toggle_right_panel(&pane_group_handle, ctx);
+            }
+            ToggleCliChatPanel => {
+                // Phase 2: toggle the panel visibility flag. The actual
+                // panel content (transcript, composer, etc.) renders
+                // inside `render_panels` when the flag is set.
+                //
+                // The action and its menu/keybinding are gated by
+                // `FeatureFlag::CastCodesChatPanel` at registration time
+                // (see `app/src/workspace/mod.rs` and `app/src/app_menus.rs`),
+                // so this handler is only reachable when the feature is on.
+                if self.cli_chat_panel_view.is_none() {
+                    log::debug!(
+                        "WorkspaceAction::ToggleCliChatPanel dispatched but \
+                         no ChatPanelView exists (feature flag was disabled \
+                         at workspace init); ignoring"
+                    );
+                } else {
+                    self.current_workspace_state.is_cli_chat_panel_open =
+                        !self.current_workspace_state.is_cli_chat_panel_open;
+                    if let Some(view) = &self.cli_chat_panel_view {
+                        if self.current_workspace_state.is_cli_chat_panel_open {
+                            ctx.focus(view);
+                        } else {
+                            self.focus_active_tab(ctx);
+                        }
+                    }
+                    ctx.notify();
+                }
+            }
+            OpenChatSession { session_id } => {
+                // Phase 4: bind the chat panel transcript to a past session.
+                let sid = session_id.clone();
+                crate::cli_chat::model::ChatModel::handle(ctx).update(ctx, |model, ctx| {
+                    model.bind_past(sid, ctx);
+                });
+                // Ensure the chat panel is visible.
+                if !self.current_workspace_state.is_cli_chat_panel_open {
+                    self.current_workspace_state.is_cli_chat_panel_open = true;
+                    if let Some(view) = &self.cli_chat_panel_view {
+                        ctx.focus(view);
+                    }
+                }
+                ctx.notify();
+            }
+            SubmitChatPrompt { text } => {
+                // Phase 5: route user text from the chat panel composer to the
+                // bound live CLI agent's terminal PTY.
+                #[cfg(feature = "local_tty")]
+                {
+                    use crate::cli_chat::conversation::ConversationBinding;
+                    let binding = crate::cli_chat::model::ChatModel::handle(ctx)
+                        .read(ctx, |model, _| model.binding().clone());
+                    if let ConversationBinding::Live {
+                        terminal_view_id, ..
+                    } = binding
+                    {
+                        let text = text.clone();
+                        // Search across all tabs / pane groups for the matching
+                        // terminal view and submit the prompt to its PTY.
+                        let found = self.tabs.iter().find_map(|tab| {
+                            let views =
+                                tab.pane_group.read(ctx, |pg, ctx| pg.terminal_views(ctx));
+                            views
+                                .into_iter()
+                                .find(|tv| tv.id() == terminal_view_id)
+                        });
+                        if let Some(tv) = found {
+                            tv.update(ctx, |view, ctx| {
+                                view.submit_text_to_cli_agent_pty(text, ctx);
+                            });
+                        }
+                    }
+                }
+                let _ = text; // Suppress unused warning when local_tty is absent.
+            }
+            CliChatNewChat { command } => {
+                // Phase 6: open a new terminal tab and write the CLI agent
+                // launch command to the PTY once the shell is ready.
+                #[cfg(feature = "local_tty")]
+                {
+                    let options = NewTerminalOptions::default().with_homepage_hidden();
+                    self.add_tab_with_pane_layout(
+                        PanesLayout::SingleTerminal(Box::new(options)),
+                        Arc::new(HashMap::new()),
+                        None,
+                        ctx,
+                    );
+                    // Write the command + Enter (CR) to the new tab's terminal.
+                    let mut bytes = command.as_bytes().to_vec();
+                    bytes.push(b'\r'); // carriage return = Enter
+                    self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+                        if let Some(tv) = pane_group.active_session_view(ctx) {
+                            tv.update(ctx, |view, ctx| {
+                                view.write_to_pty(bytes, ctx);
+                            });
+                        }
+                    });
+                }
+                let _ = command; // Suppress unused warning when local_tty is absent.
             }
             #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {

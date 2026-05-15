@@ -72,10 +72,10 @@ use crate::workspace::view::{
     LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME, LEFT_PANEL_WARP_DRIVE_BINDING_NAME,
     NEW_AGENT_TAB_BINDING_NAME, NEW_AMBIENT_AGENT_TAB_BINDING_NAME, NEW_TAB_BINDING_NAME,
     NEW_TERMINAL_TAB_BINDING_NAME, OPEN_GLOBAL_SEARCH_BINDING_NAME,
-    TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME, TOGGLE_NOTIFICATION_MAILBOX_BINDING_NAME,
-    TOGGLE_PROJECT_EXPLORER_BINDING_NAME, TOGGLE_RIGHT_PANEL_BINDING_NAME,
-    TOGGLE_TAB_CONFIGS_MENU_BINDING_NAME, TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME,
-    TOGGLE_WARP_DRIVE_BINDING_NAME,
+    TOGGLE_CLI_CHAT_PANEL_BINDING_NAME, TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME,
+    TOGGLE_NOTIFICATION_MAILBOX_BINDING_NAME, TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
+    TOGGLE_RIGHT_PANEL_BINDING_NAME, TOGGLE_TAB_CONFIGS_MENU_BINDING_NAME,
+    TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME, TOGGLE_WARP_DRIVE_BINDING_NAME,
 };
 pub use one_time_modal_model::OneTimeModalModel;
 pub use registry::WorkspaceRegistry;
@@ -719,6 +719,21 @@ pub fn init(app: &mut AppContext) {
         .with_group(bindings::BindingGroup::Navigation.as_str())
         .with_enabled(|| FeatureFlag::VerticalTabs.is_enabled())
         .with_key_binding(cmd_or_ctrl_shift("b")),
+        EditableBinding::new(
+            TOGGLE_CLI_CHAT_PANEL_BINDING_NAME,
+            BindingDescription::new(crate::cli_chat::strings::TOGGLE_MENU_ITEM)
+                .with_custom_description(
+                    bindings::MAC_MENUS_CONTEXT,
+                    crate::cli_chat::strings::TOGGLE_MENU_ITEM,
+                ),
+            WorkspaceAction::ToggleCliChatPanel,
+        )
+        .with_context_predicate(id!("Workspace"))
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_enabled(crate::cli_chat::feature_flag::is_enabled)
+        .with_custom_action(CustomAction::ToggleCliChatPanel)
+        .with_mac_key_binding("cmd-shift-H")
+        .with_linux_or_windows_key_binding("ctrl-shift-H"),
         EditableBinding::new(
             "workspace:open_browser_pane",
             BindingDescription::new("Open Browser Pane"),

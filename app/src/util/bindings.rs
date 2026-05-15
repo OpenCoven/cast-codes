@@ -137,6 +137,7 @@ pub enum CustomAction {
     GoToLine,
     ToggleGlobalSearch,
     ToggleConversationListView,
+    ToggleCliChatPanel,
 }
 
 lazy_static! {
@@ -431,6 +432,17 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
                 Keystroke::parse("ctrl-1").ok()
             } else {
                 Keystroke::parse("alt-1").ok()
+            }
+        }
+        // `cmd-shift-J` (the placeholder in the spec) is already bound to
+        // `TerminalAction::ToggleQueueNextPrompt` in `terminal/view/init.rs`,
+        // so the chat panel uses `cmd-shift-H` on mac / `ctrl-shift-H`
+        // elsewhere.
+        CustomAction::ToggleCliChatPanel => {
+            if OperatingSystem::get().is_mac() {
+                Keystroke::parse("cmd-shift-H").ok()
+            } else {
+                Keystroke::parse("ctrl-shift-H").ok()
             }
         }
         CustomAction::NewTerminalTab

@@ -386,6 +386,17 @@ fn make_new_view_menu(ctx: &AppContext) -> Menu {
         updateable_custom_item_without_checkmark(CustomAction::ToggleProjectExplorer, ctx),
         updateable_custom_item_without_checkmark(CustomAction::ToggleGlobalSearch, ctx),
         MenuItem::Separator,
+    ];
+
+    if crate::cli_chat::feature_flag::is_enabled() {
+        items.push(updateable_custom_item_without_checkmark(
+            CustomAction::ToggleCliChatPanel,
+            ctx,
+        ));
+        items.push(MenuItem::Separator);
+    }
+
+    items.extend([
         updateable_custom_item_without_checkmark(CustomAction::History, ctx),
         updateable_custom_item_without_checkmark(CustomAction::CommandSearch, ctx),
         updateable_custom_item_without_checkmark(CustomAction::Workflows, ctx),
@@ -445,7 +456,7 @@ fn make_new_view_menu(ctx: &AppContext) -> Menu {
             },
             None,
         )),
-    ];
+    ]);
 
     let is_compact_mode = matches!(
         TerminalSettings::handle(ctx)

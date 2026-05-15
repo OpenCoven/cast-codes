@@ -261,6 +261,21 @@ pub enum CLIAgentSessionsModelEvent {
         terminal_view_id: EntityId,
         agent: CLIAgent,
     },
+    /// A raw `CLIAgentEvent` was received from the listener. Carries the
+    /// full parsed event payload so subscribers (e.g. the CastCodes chat
+    /// panel) can build a per-event transcript without re-deriving it from
+    /// cumulative `session_context` state.
+    ///
+    /// Emitted from [`CLIAgentSessionsModel::update_from_event`] for every
+    /// parsed event, regardless of whether the session's status changed.
+    EventReceived {
+        terminal_view_id: EntityId,
+        agent: CLIAgent,
+        event: Box<CLIAgentEvent>,
+    },
+    /// A structured CLI-agent notification used the expected sentinel but
+    /// could not be parsed by this build.
+    EventParseFailed { terminal_view_id: EntityId },
 }
 
 impl CLIAgentSessionsModelEvent {
@@ -280,7 +295,13 @@ impl CLIAgentSessionsModelEvent {
             }
             | CLIAgentSessionsModelEvent::SessionUpdated {
                 terminal_view_id, ..
-            } => *terminal_view_id,
+            }
+            | CLIAgentSessionsModelEvent::EventReceived {
+                terminal_view_id, ..
+            }
+            | CLIAgentSessionsModelEvent::EventParseFailed { terminal_view_id } => {
+                *terminal_view_id
+            }
         }
     }
 }
@@ -404,8 +425,8 @@ impl CLIAgentSessionsModel {
         };
 
         let event_type = &event.event;
+        let agent = session.agent;
         if let Some(new_status) = session.apply_event(event) {
-            let agent = session.agent;
             ctx.emit(CLIAgentSessionsModelEvent::StatusChanged {
                 terminal_view_id,
                 agent,
@@ -422,9 +443,27 @@ impl CLIAgentSessionsModel {
         ) {
             ctx.emit(CLIAgentSessionsModelEvent::SessionUpdated {
                 terminal_view_id,
-                agent: session.agent,
+                agent,
             });
         }
+
+        // Forward the raw event so per-event subscribers (e.g. the CastCodes
+        // chat panel) can build a transcript without re-deriving entries
+        // from cumulative `session_context` state. Emitted after the
+        // status-derived events so subscribers see the new status first.
+        ctx.emit(CLIAgentSessionsModelEvent::EventReceived {
+            terminal_view_id,
+            agent,
+            event: Box::new(event.clone()),
+        });
+    }
+
+    pub fn notify_event_parse_failed(
+        &mut self,
+        terminal_view_id: EntityId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        ctx.emit(CLIAgentSessionsModelEvent::EventParseFailed { terminal_view_id });
     }
 
     pub fn open_input(

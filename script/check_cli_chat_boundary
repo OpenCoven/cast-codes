@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PATTERN='warp_multi_agent_api|warp_server_client|app\.warp\.dev|api\.warp\.dev|MARKETPLACE_REPO|PLATFORM_MARKETPLACE_REPO|EXTENSION_REPO|warpdotdev/'
+TARGET='app/src/cli_chat'
+
+if ! [ -d "$TARGET" ]; then
+    echo "cli_chat module not present; skipping guard."
+    exit 0
+fi
+
+if grep -rnE "$PATTERN" "$TARGET" --include='*.rs'; then
+    echo
+    echo "ERROR: cli_chat must not reference Warp-owned infrastructure."
+    echo "       See specs/castcodes-chat-panel/TECH.md for the boundary policy."
+    exit 1
+fi
+
+echo "cli_chat boundary check: OK"
