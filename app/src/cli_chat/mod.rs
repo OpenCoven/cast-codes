@@ -20,3 +20,6 @@ pub use conversation::{AgentKind, ChatConversation, ConversationBinding};
 pub use entry::{ChatEntry, ChatEntryKind};
 pub use model::{ChatModel, ChatModelEvent};
 pub use view::ChatPanelView;
+
+#[cfg(test)]
+mod conversation_tests;
