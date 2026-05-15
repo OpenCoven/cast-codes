@@ -702,6 +702,37 @@ fi
 ########################
 
 if [[ "$ARTIFACT" = app ]]; then
+  function create_hdiutil_dmg() {
+    local source_folder="$1"
+    local target_dmg="$2"
+    local stage_dir
+    local rw_dmg
+    local mount_point
+
+    stage_dir="$(mktemp -d "$DMG_DIR/hdiutil-stage.XXXXXX")"
+    rw_dmg="$DMG_DIR/rw.$(basename "$target_dmg")"
+
+    rm -f "$target_dmg" "$rw_dmg"
+    cp -R "$source_folder/$WARP_APP_NAME.app" "$stage_dir/"
+    ln -s /Applications "$stage_dir/Applications"
+
+    # Avoid the create-dmg APFS mount path on macOS 26.x, where hdiutil can
+    # fail while trying to access /Volumes/CastCodes/<app>. Build a read-write
+    # image with a temporary volume name, rename it after attach, then convert.
+    hdiutil create -srcfolder "$stage_dir" -volname CastCodesTmp -fs APFS -format UDRW -ov "$rw_dmg"
+    mount_point="$(hdiutil attach -readwrite -noverify -nobrowse "$rw_dmg" | awk -F '\t' '/\/Volumes\// {print $NF; exit}')"
+    if [[ -z "$mount_point" ]]; then
+      echo "Failed to mount fallback DMG image"
+      exit 1
+    fi
+
+    diskutil rename "$mount_point" CastCodes
+    hdiutil detach "$mount_point"
+    hdiutil convert "$rw_dmg" -format UDZO -imagekey zlib-level=9 -o "$target_dmg"
+
+    rm -rf "$stage_dir" "$rw_dmg"
+  }
+
   function create_warp_dmg() {
     echo "Creating $DMG_DIR/$DMG_NAME..."
     rm "$DMG_DIR/$DMG_NAME" || true
@@ -733,7 +764,11 @@ if [[ "$ARTIFACT" = app ]]; then
 
     args+=("$DMG_DIR/$DMG_NAME" "$source_folder")
 
-    create-dmg "${args[@]}"
+    if ! create-dmg "${args[@]}"; then
+      echo "create-dmg failed; falling back to direct hdiutil DMG creation."
+      cleanup_dmg_files "$DMG_DIR"
+      create_hdiutil_dmg "$source_folder" "$DMG_DIR/$DMG_NAME"
+    fi
   }
 
   # If we're codesigning, stage the signed app and use that to create the DMG.

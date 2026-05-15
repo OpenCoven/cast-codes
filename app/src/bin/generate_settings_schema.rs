@@ -2,7 +2,7 @@
 //!
 //! Usage:
 //! ```
-//! cargo run --bin generate_settings_schema -- [--channel dev|preview|stable] [output_path]
+//! cargo run --bin generate_settings_schema -- [--channel dev|preview|stable|oss] [output_path]
 //! ```
 
 use std::collections::HashSet;
@@ -89,7 +89,7 @@ fn active_flags_for_channel(channel: &str) -> HashSet<FeatureFlag> {
     let mut flags = HashSet::new();
 
     let flag_lists: &[&[FeatureFlag]] = match channel {
-        "stable" => &[RELEASE_FLAGS],
+        "stable" | "oss" => &[RELEASE_FLAGS],
         "preview" => &[RELEASE_FLAGS, PREVIEW_FLAGS],
         "dev" => &[RELEASE_FLAGS, PREVIEW_FLAGS, DOGFOOD_FLAGS, DEBUG_FLAGS],
         other => {
