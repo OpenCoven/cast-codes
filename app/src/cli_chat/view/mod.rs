@@ -1,8 +1,10 @@
-//! CastCodes Chat Panel view layer (Phase 2 — transcript-only).
+//! CastCodes Chat Panel view layer (Phase 4 — transcript + conversation list).
 //!
-//! The panel is intentionally minimal in v1: a column of `ChatEntry`
-//! rows derived from the bound [`ChatConversation`]. Later phases add
-//! the composer, conversation list, model picker, settings, and polish.
+//! The panel is a two-column layout:
+//! - Left column (~200px): conversation list sidebar
+//! - Right column (remaining): transcript of the bound conversation
+//!
+//! Later phases add the composer, model picker, settings, and polish.
 //! See `specs/castcodes-chat-panel/PLAN.md`.
 
 pub mod composer; // stub for now; Phase 5
@@ -17,7 +19,7 @@ pub mod settings_section; // stub for now; Phase 8
 pub mod tool_call_card; // stub for now
 pub mod transcript;
 
-use warpui::elements::Element;
+use warpui::elements::{CrossAxisAlignment, Element, Expanded, Flex, MainAxisSize, ParentElement};
 use warpui::{AppContext, Entity, ModelHandle, SingletonEntity, View, ViewContext};
 
 use crate::cli_chat::model::{ChatModel, ChatModelEvent};
@@ -64,6 +66,14 @@ impl View for ChatPanelView {
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
-        transcript::render_panel(self, app)
+        let list = conversation_list::render_list(self, app);
+        let transcript = transcript::render_panel(self, app);
+
+        Flex::row()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(list)
+            .with_child(Expanded::new(1.0, transcript).finish())
+            .finish()
     }
 }

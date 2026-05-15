@@ -266,6 +266,9 @@ pub enum WorkspaceAction {
     /// The actual panel rendering is wired up in a later task; this variant exists
     /// so the menu item and keybinding can be registered now.
     ToggleCliChatPanel,
+    /// Opens a past CLI chat session in the chat panel transcript.
+    /// Dispatched from the conversation-list sidebar when a user clicks a row.
+    OpenChatSession { session_id: String },
     /// Opens the code review panel (right panel) without toggling. If already open,
     /// switches to the target pane's repo. Used by vertical tabs diff stats chip.
     OpenCodeReviewPanel(PaneViewLocator),
@@ -853,6 +856,7 @@ impl WorkspaceAction {
             | ClosePanel
             | ToggleRightPanel
             | ToggleCliChatPanel
+            | OpenChatSession { .. }
             | OpenCodeReviewPanel(..)
             | ToggleVerticalTabsSettingsPopup
             | SetVerticalTabsDisplayGranularity(_)

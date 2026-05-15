@@ -21050,6 +21050,21 @@ impl TypedActionView for Workspace {
                     ctx.notify();
                 }
             }
+            OpenChatSession { session_id } => {
+                // Phase 4: bind the chat panel transcript to a past session.
+                let sid = session_id.clone();
+                crate::cli_chat::model::ChatModel::handle(ctx).update(ctx, |model, ctx| {
+                    model.bind_past(sid, ctx);
+                });
+                // Ensure the chat panel is visible.
+                if !self.current_workspace_state.is_cli_chat_panel_open {
+                    self.current_workspace_state.is_cli_chat_panel_open = true;
+                    if let Some(view) = &self.cli_chat_panel_view {
+                        ctx.focus(view);
+                    }
+                }
+                ctx.notify();
+            }
             #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {
                 let pane_group_handle = self
