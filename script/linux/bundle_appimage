@@ -90,9 +90,7 @@ APPIMAGE_PATH="$OUT_DIR/$APPIMAGE_NAME"
 # If this is being run within a GitHub action, set an output variable with the
 # location of the AppImage so it can be referenced by subsequent actions.
 if [ "${GITHUB_ACTIONS}" == "true" ]; then
-  echo "::echo::on"
   echo "appimage_path=$APPIMAGE_PATH" >> "$GITHUB_OUTPUT"
-  echo "::echo::off"
 fi
 
 echo "Successfully built AppImage at $APPIMAGE_PATH!"

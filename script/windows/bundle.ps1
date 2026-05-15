@@ -79,8 +79,6 @@ if ($CARGO_PROFILE -eq 'dev') {
 } else {
     $CARGO_TARGET_OUTPUT_DIR = "$CARGO_TARGET_DIR" + '\' + $PLATFORM_TARGET + '\' + "$CARGO_PROFILE"
 }
-$BUNDLE_ID = "dev.castcodes.$app_name"
-
 # Update parameters based on the target release channel.
 #
 # APP_NAME here must match the value used in Rust as the
@@ -167,10 +165,8 @@ if ($SKIP_BUILD_INSTALLER) {
     # If this is being run within a GitHub action, set an output variable with the
     # location of the binary so it can be referenced by subsequent actions.
     if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Output '::echo::on'
         "target_profile_dir=$CARGO_TARGET_OUTPUT_DIR" >> "$env:GITHUB_OUTPUT"
         "binary_path=$BINARY_PATH" >> "$env:GITHUB_OUTPUT"
-        Write-Output '::echo::off'
     }
     exit 0
 }
@@ -214,9 +210,7 @@ if (-Not $?) {
 # If this is being run within a GitHub action, set an output variable with the
 # location of the installer so it can be referenced by subsequent actions.
 if ($env:GITHUB_ACTIONS -eq 'true') {
-    Write-Output '::echo::on'
     $INSTALLER_PATH = $INSTALLER_PATH -replace '\\', '/'
     "installer_path=$INSTALLER_PATH" >> "$env:GITHUB_OUTPUT"
     "pdb_file_path=$PDB_PATH" >> "$env:GITHUB_OUTPUT"
-    Write-Output '::echo::off'
 }
