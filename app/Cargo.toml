@@ -164,6 +164,7 @@ rayon.workspace = true
 regex-automata = "0.4.6"
 regex.workspace = true
 reqwest.workspace = true
+rusqlite.workspace = true
 rust-embed.workspace = true
 sentry-log = { workspace = true, optional = true }
 inventory = "0.3"
