@@ -815,14 +815,12 @@ impl Action {
                     primary_window_id.or_else(|| Some(open_new_window_get_handles(None, ctx).0));
 
                 let Some(window_id) = window_id else {
-                    log::warn!("unable to determine window for cloud agent setup action");
+                    log::warn!("unable to determine window for agent setup action");
                     return;
                 };
 
                 let Some(mut workspaces) = ctx.views_of_type::<Workspace>(window_id) else {
-                    log::warn!(
-                        "no workspace found in window {window_id} for cloud agent setup action"
-                    );
+                    log::warn!("no workspace found in window {window_id} for agent setup action");
                     return;
                 };
 
@@ -831,9 +829,7 @@ impl Action {
                         workspace.handle_action(&WorkspaceAction::OpenCloudAgentSetupGuide, ctx);
                     });
                 } else {
-                    log::warn!(
-                        "no workspace views in window {window_id} for cloud agent setup action"
-                    );
+                    log::warn!("no workspace views in window {window_id} for agent setup action");
                 }
             }
             Action::NewCloudAgentConversation => {
@@ -841,15 +837,13 @@ impl Action {
                     primary_window_id.or_else(|| Some(open_new_window_get_handles(None, ctx).0));
 
                 let Some(window_id) = window_id else {
-                    log::warn!(
-                        "unable to determine window for new cloud agent conversation action"
-                    );
+                    log::warn!("unable to determine window for new agent conversation action");
                     return;
                 };
 
                 let Some(mut workspaces) = ctx.views_of_type::<Workspace>(window_id) else {
                     log::warn!(
-                        "no workspace found in window {window_id} for new cloud agent conversation action"
+                        "no workspace found in window {window_id} for new agent conversation action"
                     );
                     return;
                 };
@@ -860,7 +854,7 @@ impl Action {
                     });
                 } else {
                     log::warn!(
-                        "no workspace views in window {window_id} for new cloud agent conversation action"
+                        "no workspace views in window {window_id} for new agent conversation action"
                     );
                 }
             }

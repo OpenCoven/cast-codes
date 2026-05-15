@@ -264,7 +264,7 @@ pub enum AuthSource {
     /// Auth initiated from the settings page (default behavior: redirect to settings)
     #[default]
     Settings,
-    /// Auth initiated from cloud agent setup (skip redirect, just refresh in place)
+    /// Auth initiated from agent setup (skip redirect, just refresh in place)
     CloudSetup,
 }
 
@@ -3068,7 +3068,8 @@ impl UpdateEnvironmentForm {
             "Suggest image"
         };
 
-        let tooltip_text = "CastCodes will suggest a Docker image based on your selected repositories.";
+        let tooltip_text =
+            "CastCodes will suggest a Docker image based on your selected repositories.";
 
         let button = Hoverable::new(
             self.suggest_image_button_mouse_state.clone(),

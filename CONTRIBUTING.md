@@ -23,7 +23,7 @@ For rebrand-sensitive work:
 cargo check -p warp --bin cast-codes --features gui
 ```
 
-Add focused tests when changing path behavior, channel identity, app IDs, URL schemes, or cloud-gating logic.
+Add focused tests when changing path behavior, channel identity, app IDs, URL schemes, or service-gating logic.
 
 ## Pull Requests
 

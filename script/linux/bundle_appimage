@@ -16,12 +16,8 @@
 STAGE_DIR="$DIST_DIR/appimagepkg"
 APP_DIR="$DIST_DIR/AppDir"
 
-# Extract channel suffix from BINARY_NAME
-if [ "$ARTIFACT" = "cli" ]; then
-  CHANNEL_SUFFIX="${BINARY_NAME#oz}"
-else
-  CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
-fi
+# Extract channel suffix from BINARY_NAME.
+CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
 PACKAGE_NAME="cast-codes$CHANNEL_SUFFIX"
 
 

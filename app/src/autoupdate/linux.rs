@@ -245,7 +245,9 @@ mod package_manager {
             lines.push(FormattedTextLine::Line(vec![
                 FormattedTextFragment::plain_text("\nReview the command below, then "),
                 FormattedTextFragment::bold("press enter"),
-                FormattedTextFragment::plain_text(" to install the update and re-launch CastCodes.  "),
+                FormattedTextFragment::plain_text(
+                    " to install the update and re-launch CastCodes.  ",
+                ),
                 FormattedTextFragment::hyperlink(
                     "Please report any issues",
                     links::GITHUB_ISSUES_URL,

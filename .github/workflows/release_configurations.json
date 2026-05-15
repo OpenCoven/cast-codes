@@ -10,9 +10,7 @@
             "release_body_text": "Nightly Warp Dev release",
             "sentry_project": "warp-client-dev",
             "sentry_environment": "dev_release",
-            "changelog_slack_channel": "#dev-beta-changelogs",
-            "gcs_cache_control_value": "private, max-age=604800, immutable",
-            "web_gcs_bucket_prefix": "warp-server-staging"
+            "changelog_slack_channel": "#dev-beta-changelogs"
         },
         {
             "channel": "preview",
@@ -23,9 +21,7 @@
             "release_body_text": "Warp Preview release",
             "sentry_project": "warp-client-beta-stable",
             "sentry_environment": "preview_release",
-            "changelog_slack_channel": "#dev-beta-changelogs",
-            "gcs_cache_control_value": "public, max-age=604800, immutable",
-            "web_gcs_bucket_prefix": "warp"
+            "changelog_slack_channel": "#dev-beta-changelogs"
         },
         {
             "channel": "stable",
@@ -36,9 +32,7 @@
             "release_body_text": "Warp Stable release",
             "sentry_project": "warp-client-beta-stable",
             "sentry_environment": "stable_release",
-            "changelog_slack_channel": "#release",
-            "gcs_cache_control_value": "public, max-age=604800, immutable",
-            "web_gcs_bucket_prefix": "warp"
+            "changelog_slack_channel": "#release"
         },
         {
             "channel": "oss",
@@ -49,9 +43,7 @@
             "release_body_text": "CastCodes OSS release. This public fork release is distributed through GitHub release assets without upstream Warp release infrastructure.",
             "sentry_project": "",
             "sentry_environment": "",
-            "changelog_slack_channel": "",
-            "gcs_cache_control_value": "public, max-age=604800, immutable",
-            "web_gcs_bucket_prefix": ""
+            "changelog_slack_channel": ""
         }
     ]
 }

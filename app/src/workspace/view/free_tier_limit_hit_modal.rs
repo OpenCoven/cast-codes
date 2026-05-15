@@ -273,8 +273,8 @@ impl FreeTierLimitHitModal {
                             Container::new({
                                 let formatted_text = FormattedText::new([FormattedTextLine::Line(vec![
                                     FormattedTextFragment::hyperlink(
-                                        "Extended cloud agents access".to_string(),
-                                        "https://www.warp.dev/oz".to_string(),
+                                        "Extended agent access".to_string(),
+                                        "https://github.com/OpenCoven/cast-codes".to_string(),
                                     ),
                                 ])]);
                                 Flex::row()

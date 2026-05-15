@@ -104,7 +104,7 @@
 /app/src/ai/agent_management/notifications/ @harryalbert
 /app/src/terminal/view/inline_banner/ @harryalbert
 
-# Blocklist UX / modality and cloud mode UI / shell compatibility / completions and bootstrap / warpifying
+# Blocklist UX / modality and agent UI / shell compatibility / completions and bootstrap / warpifying
 /app/src/ai/blocklist/ @zachbai
 /app/src/root_view.rs @zachbai
 /app/src/terminal/bootstrap.rs @zachbai

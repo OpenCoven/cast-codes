@@ -1,7 +1,7 @@
 # Builds CastCodes OSS release assets and optionally publishes them to GitHub.
 #
 # The public fork does not depend on upstream Warp release infrastructure. This
-# workflow intentionally avoids Sentry, GCS, Slack, Azure signing, and private
+# workflow intentionally avoids Sentry, external artifact storage, Slack, Azure signing, and private
 # channel configuration for OSS releases.
 
 name: Create Release

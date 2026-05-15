@@ -14,7 +14,7 @@ pub struct ChannelConfig {
 
     /// Configuration for talking to Warp's servers.
     pub server_config: WarpServerConfig,
-    /// Configuration for Oz/ambient agents.
+    /// Configuration for ambient agents.
     pub oz_config: OzConfig,
     /// Configuration for telemetry sending, or [`None`] if telemetry should be
     /// disabled for this build.
@@ -62,7 +62,7 @@ impl WarpServerConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OzConfig {
-    /// Root URL for the Oz (ambient agent management) dashboard.
+    /// Root URL for the ambient agent management dashboard.
     pub oz_root_url: Cow<'static, str>,
 
     /// URL to use as the audience when issuing workload identity tokens. If [`None`], falls back
@@ -74,7 +74,7 @@ pub struct OzConfig {
 impl OzConfig {
     pub fn production() -> Self {
         Self {
-            oz_root_url: "https://oz.warp.dev".into(),
+            oz_root_url: brand::UNAVAILABLE_LOCALHOST_HTTP_URL.into(),
             workload_audience_url: None,
         }
     }

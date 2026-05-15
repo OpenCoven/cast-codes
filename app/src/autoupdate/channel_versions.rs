@@ -48,15 +48,14 @@ pub async fn fetch_channel_versions(
     }
 }
 
-// Synchronously fetches updated Warp [`ChannelVersions`] from GCP JSON storage. This will soon
-// be deprecated in favor of retrieving updated channel versions from the Warp Server.
-// Note, in order to run against a test file you can use the "channel_versions_test.json" file
-// and update the file using gsutil cp channel_versions_test.json gs://warp-releases/channel_versions_test.json
+// Synchronously fetches updated CastCodes [`ChannelVersions`] from remote JSON storage.
+// This will soon be deprecated in favor of retrieving updated channel versions from the server.
+// Note, in order to run against a test file you can use the "channel_versions_test.json" file.
 async fn fetch_channel_versions_from_json_storage(
     client: &http_client::Client,
     nonce: &str,
 ) -> Result<ChannelVersions> {
-    log::info!("Fetching channel versions from GCP JSON storage");
+    log::info!("Fetching channel versions from remote JSON storage");
     let res = client
         .get(
             format!(
@@ -70,6 +69,6 @@ async fn fetch_channel_versions_from_json_storage(
         .send()
         .await?;
     let versions: ChannelVersions = res.json().await?;
-    log::info!("Received channel versions from GCP JSON storage: {versions}");
+    log::info!("Received channel versions from remote JSON storage: {versions}");
     Ok(versions)
 }

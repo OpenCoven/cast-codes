@@ -192,20 +192,16 @@ fn subpage_display_names_are_correct() {
     );
     assert_eq!(
         SettingsSection::OzCloudAPIKeys.to_string(),
-        "Oz Cloud API Keys"
+        "Agent API Keys"
     );
 }
 
 #[test]
 fn subpage_from_str_parses_display_names() {
-    // The legacy "Oz" and "Warp Agent" names plus the new "Cast Agent" display name must
+    // The legacy "Warp Agent" name plus the new "Cast Agent" display name must
     // resolve to SettingsSection::WarpAgent so existing deep links, persisted
     // telemetry strings, and external callers continue to work after the
     // user-facing rename (see specs/GH1063/product.md, Behavior #8).
-    assert_eq!(
-        SettingsSection::from_str("Oz"),
-        Ok(SettingsSection::WarpAgent)
-    );
     assert_eq!(
         SettingsSection::from_str("Warp Agent"),
         Ok(SettingsSection::WarpAgent)
@@ -227,7 +223,7 @@ fn subpage_from_str_parses_display_names() {
         Ok(SettingsSection::EditorAndCodeReview)
     );
     assert_eq!(
-        SettingsSection::from_str("Oz Cloud API Keys"),
+        SettingsSection::from_str("Agent API Keys"),
         Ok(SettingsSection::OzCloudAPIKeys)
     );
 }
@@ -504,7 +500,7 @@ fn auto_select_jumps_away_from_filtered_out_subpage() {
         "Knowledge should not be visible when it has 0 matches"
     );
 
-    // The nav order: Oz, Profiles, ..., Knowledge, ThirdPartyCLI
+    // The nav order: Agent, Profiles, ..., Knowledge, ThirdPartyCLI
     let nav_order = SettingsSection::ai_subpages();
     let first = first_visible_section(nav_order, &filter, &[]);
     assert_eq!(
@@ -612,8 +608,8 @@ fn auto_select_with_no_matches_anywhere() {
 // ── Backward compatibility ──────────────────────────────────────────────────
 
 #[test]
-fn legacy_ai_section_maps_to_oz_default() {
-    // SettingsSection::AI should be treated as backward-compat and map to Oz
+fn legacy_ai_section_maps_to_agent_default() {
+    // SettingsSection::AI should be treated as backward-compat and map to the agent page
     // via the code in set_and_refresh_current_page_internal.
     // Here we just verify the parent_page_section is still AI (for page lookup).
     assert_eq!(
@@ -646,7 +642,7 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
             SettingsSection::code_subpages().to_vec(),
         )),
         SettingsNavItem::Umbrella(SettingsUmbrella::new(
-            "Cloud platform",
+            "Platform",
             SettingsSection::cloud_platform_subpages().to_vec(),
         )),
         SettingsNavItem::Page(SettingsSection::Teams),
@@ -669,7 +665,7 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // Expect: Account, <Agents umbrella>, BillingAndUsage, <Code umbrella>,
-    // <Cloud platform umbrella>, Teams.
+    // <Platform umbrella>, Teams.
     assert_eq!(stops.len(), 6);
     assert!(matches!(
         stops[0],
@@ -716,7 +712,7 @@ fn expanded_umbrella_produces_section_stop_per_subpage() {
 
     // Expect: Account, WarpAgent, AgentProfiles, AgentMCPServers, Knowledge,
     // ThirdPartyCLIAgents, BillingAndUsage, <Code umbrella>,
-    // <Cloud platform umbrella>, Teams.
+    // <Platform umbrella>, Teams.
     let sections: Vec<_> = stops
         .iter()
         .map(|s| match s {
@@ -792,7 +788,7 @@ fn umbrella_with_no_visible_subpages_is_skipped_entirely() {
             .all(|s| !matches!(s, NavStop::CollapsedUmbrella { nav_index: 1, .. })),
         "Agents umbrella should not appear when none of its subpages are visible"
     );
-    // The still-visible Code / Cloud platform umbrellas remain as stops.
+    // The still-visible Code / Platform umbrellas remain as stops.
     assert!(stops
         .iter()
         .any(|s| matches!(s, NavStop::CollapsedUmbrella { nav_index: 3, .. })));
@@ -985,7 +981,7 @@ fn arrow_down_from_expanded_last_subpage_leaves_umbrella() {
 #[test]
 fn arrow_down_across_adjacent_collapsed_umbrellas() {
     let nav_items = realistic_nav_items();
-    // Both Code and Cloud platform umbrellas are collapsed.
+    // Both Code and Platform umbrellas are collapsed.
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // From BillingAndUsage, Down should land on the first Code subpage
@@ -1000,7 +996,7 @@ fn arrow_down_across_adjacent_collapsed_umbrellas() {
 
     // From the Code umbrella stop (i.e. the user is "on" CodeIndexing which
     // maps back to the collapsed umbrella), pressing Down again should land
-    // on the Cloud platform umbrella's first subpage.
+    // on the Platform umbrella's first subpage.
     let next_after_code = simulate_cycle(
         &nav_items,
         &stops,

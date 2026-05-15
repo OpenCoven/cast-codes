@@ -833,12 +833,12 @@ impl MCPServersListPageView {
                     latest_templatable_mcp_server,
                     ctx,
                 );
-                // We do not have to update the cloud template, because this update came from a cloud template
+                // We do not have to update the template, because this update came from a template
                 log::info!(
-                    "Successfully updated server {installation_uuid} with the newest cloud template."
+                    "Successfully updated server {installation_uuid} with the newest template."
                 );
 
-                // Show the toast that the server updated, even though we don't update the cloud template in this case
+                // Show the toast that the server updated, even though we don't update the template in this case
                 let window_id = ctx.window_id();
                 ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                     let toast = DismissibleToast::success(String::from("MCP server updated"));
@@ -887,7 +887,7 @@ impl MCPServersListPageView {
                     return;
                 };
 
-                // We need to update both the cloud template and the installation
+                // We need to update both the template and the installation
                 let new_template = TemplatableMCPServer {
                     uuid: installation.template_uuid(),
                     ..gallery_templatable_mcp_server.clone()
@@ -903,7 +903,7 @@ impl MCPServersListPageView {
                 log::info!(
                     "Successfully updated server {installation_uuid} with the newest gallery template."
                 );
-                // We don't need to manually show a toast, because it will appear once the cloud template update goes through
+                // We don't need to manually show a toast, because it will appear once the template update goes through
             }
         };
     }

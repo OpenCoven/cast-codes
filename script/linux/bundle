@@ -181,16 +181,6 @@ elif [[ $RELEASE_CHANNEL = "oss" ]]; then
   FEATURES="release_bundle"
 fi
 
-# Artifact-specific binary naming
-if [[ "$ARTIFACT" == "cli" ]]; then
-  # For CLI artifacts, use oz instead of cast-codes as the binary name.  The OSS
-  # channel is an exception: its CLI command name is `cast-codes`, matching
-  # `Channel::cli_command_name` in the Rust source.
-  if [[ $RELEASE_CHANNEL != "oss" ]]; then
-    BINARY_NAME="${BINARY_NAME/cast-codes/oz}"
-  fi
-fi
-
 # Artifact-specific configuration
 if [[ "$ARTIFACT" == "cli" ]]; then
   FEATURES="$FEATURES,standalone"

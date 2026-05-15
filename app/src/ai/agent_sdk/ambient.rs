@@ -512,7 +512,7 @@ impl AmbientAgentRunner {
                                 spawned_task_id = Some(task_id);
                             }
                             AmbientAgentEvent::AtCapacity => {
-                                println!("Concurrent cloud agent limit reached. This agent run will begin when one of your current cloud runs completes.");
+                                println!("Concurrent agent limit reached. This agent run will begin when one of your current runs completes.");
                                 if let Some(url) = &upgrade_link {
                                     println!("To increase your concurrent agent limit, upgrade your plan: {}", url);
                                 }
@@ -835,8 +835,8 @@ impl AmbientAgentRunner {
             let header = format!("{} {} ({:?})", state_emoji, task.task_id, task.state);
             table.add_row(vec![header]);
 
-            // Oz webapp link
-            table.add_row(vec![format!("Oz: {oz_root_url}/runs/{}", task.task_id)]);
+            // Agent run link
+            table.add_row(vec![format!("Run: {oz_root_url}/runs/{}", task.task_id)]);
 
             // Title (wrapped, single cell)
             if !task.title.is_empty() {

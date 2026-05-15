@@ -74,7 +74,7 @@ prepare_install_script() {
         template="$INSTALL_SCRIPT_PATH"
     fi
     local install_dir="~/.warp-test/remote-server"
-    local binary_name="oz-test"
+    local binary_name="cast-codes-test"
     local channel="dev"
     local download_base_url="http://127.0.0.1:${FAKE_DOWNLOAD_PORT}/download/cli"
 
@@ -144,10 +144,10 @@ start_fake_download_server() {
     # Create a minimal tarball containing a fake binary
     local tarball_dir
     tarball_dir=$(mktemp -d)
-    echo '#!/bin/sh' > "$tarball_dir/oz-test"
-    echo 'echo "fake oz binary running"' >> "$tarball_dir/oz-test"
-    chmod +x "$tarball_dir/oz-test"
-    tar -czf "$server_dir/download/oz.tar.gz" -C "$tarball_dir" oz-test
+    echo '#!/bin/sh' > "$tarball_dir/cast-codes-test"
+    echo 'echo "fake CastCodes binary running"' >> "$tarball_dir/cast-codes-test"
+    chmod +x "$tarball_dir/cast-codes-test"
+    tar -czf "$server_dir/download/cast-codes.tar.gz" -C "$tarball_dir" cast-codes-test
     rm -rf "$tarball_dir"
 
     # Start Python HTTP server
@@ -160,7 +160,7 @@ import time
 import threading
 
 PORT = int(sys.argv[1])
-TARBALL_PATH = os.path.join(os.path.dirname(__file__), "download", "oz.tar.gz")
+TARBALL_PATH = os.path.join(os.path.dirname(__file__), "download", "cast-codes.tar.gz")
 # Profile-specific behaviors loaded from env or config
 BEHAVIOR = os.environ.get("FAKE_SERVER_BEHAVIOR", "normal")
 

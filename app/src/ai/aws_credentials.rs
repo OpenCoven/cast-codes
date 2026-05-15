@@ -86,7 +86,7 @@ const AWS_BEDROCK_STS_AUDIENCE: &str = "sts.amazonaws.com";
 const BEDROCK_IDENTITY_TOKEN_DURATION: Duration = Duration::from_secs(60 * 60);
 
 pub(crate) fn aws_role_session_name(run_id: &str) -> String {
-    format!("Oz_Run_{run_id}")
+    format!("CastCodes_Run_{run_id}")
 }
 
 /// Cached STS client for OIDC credential refreshes.

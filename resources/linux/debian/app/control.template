@@ -8,5 +8,5 @@ Architecture: @@ARCH@@
 Maintainer: CastCodes Maintainers
 Homepage: https://github.com/OpenCoven/cast-codes
 Description: CastCodes, the open-source agentic terminal and code workspace
- CastCodes keeps local terminal and code workflows available while hosted
- cloud services are disabled until CastCodes infrastructure exists.
+ CastCodes keeps local terminal and code workflows available in a local-only
+ public build.

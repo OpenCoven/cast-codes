@@ -24,7 +24,7 @@
 #
 # Once the stapling is done, the app can be shared.
 #
-# Three passwords are read from GCP Secret Manager (or from env if --read-passwords-from-env is set) if you are codesigning.
+# Codesigning passwords are read from the environment when codesigning is enabled.
 # 1) WARP_NOTARIZATION_PASSWORD:  This is an app-specific password for notarization.
 # 2) WARP_DEVELOPER_ID_CERT_PASSWORD: This is a password tied to the private key
 #    of our cert - it is needed to use the cert to sign our binary.
@@ -204,7 +204,7 @@ while (( "$#" )); do
         exit 1
       fi
       ;;
-    # Read codesigning passwords from environment variables instead of GCP secret manager
+    # Read codesigning passwords from environment variables.
     --read-passwords-from-env)
         echo "Reading codesigning passwords from env."
         READ_PASSWORDS_FROM_ENV=true
@@ -527,12 +527,10 @@ if [[ "$ARTIFACT" == "app" ]]; then
 
   # Determine CLI wrapper script path based on release channel.  Each channel's
   # value here must match `Channel::cli_command_name` in the Rust source.
-  if [[ $RELEASE_CHANNEL = "stable" ]]; then
-    CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/oz"
-  elif [[ $RELEASE_CHANNEL = "oss" ]]; then
+  if [[ $RELEASE_CHANNEL = "stable" || $RELEASE_CHANNEL = "oss" ]]; then
     CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/cast-codes"
   else
-    CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/oz-$RELEASE_CHANNEL"
+    CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/cast-codes-$RELEASE_CHANNEL"
   fi
 
   echo "Creating Resources/bin directory and CLI wrapper script..."

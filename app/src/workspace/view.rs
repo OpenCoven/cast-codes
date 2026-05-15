@@ -823,7 +823,7 @@ pub enum BannerSeverity {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum BannerButtonVariant {
     /// No fill, no border, just text (and optional icon). Used for the primary
-    /// action in the Figma design (e.g. "Fix with Oz").
+    /// action in the Figma design (e.g. "Fix with Agent").
     Naked,
     /// Border-only, no fill (e.g. "Open file").
     Outlined,
@@ -2118,7 +2118,7 @@ impl Workspace {
         // Save and open the tab config. The user's `default_session_mode`
         // is intentionally left untouched: creating a tab config should not
         // change the global default for new tabs.
-        // Agent view entry for Oz is handled by PaneMode::Agent in the tab config,
+        // Agent view entry is handled by PaneMode::Agent in the tab config,
         // so no manual enter_agent_view call is needed.
         let dir = crate::user_config::tab_configs_dir();
         if let Err(e) = write_tab_config(&config, &dir, "startup_config") {
@@ -2228,7 +2228,7 @@ impl Workspace {
     }
 
     pub(crate) fn show_session_config_modal(&mut self, ctx: &mut ViewContext<Self>) {
-        // Configure the modal to hide Oz when AI is disabled.
+        // Configure the modal to hide the agent when AI is disabled.
         let show_oz = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
         self.session_config_modal.view.update(ctx, |modal, ctx| {
             modal.body().update(ctx, |body, ctx| {
@@ -3988,7 +3988,7 @@ impl Workspace {
         self.activate_tab_internal(self.tab_count() - 1, ctx);
     }
 
-    /// Opens a cloud conversation by server token.
+    /// Opens an agent conversation by server token.
     /// If the current user owns or created it, navigate to its open pane or restore it
     /// into a new tab. Otherwise, open the read-only transcript viewer.
     pub fn open_cloud_conversation_from_server_token(
@@ -6069,7 +6069,7 @@ impl Workspace {
     /// Builds the unified new-session menu items
     /// tab bar chevron and the vertical tab bar `+` button.
     ///
-    /// Order: Agent → Terminal (sidecar) → Cloud Oz → [tab configs] → separator → New worktree config (sidecar) → New tab config → separator → Reopen closed session.
+    /// Order: Agent → Terminal (sidecar) → Agent handoff → [tab configs] → separator → New worktree config (sidecar) → New tab config → separator → Reopen closed session.
     fn unified_new_session_menu_items(
         &self,
         ctx: &mut ViewContext<Self>,
@@ -6151,12 +6151,12 @@ impl Workspace {
             }
         }
 
-        // 3. Cloud Oz (if flags enabled)
+        // 3. Agent handoff mode (if flags enabled)
         if is_any_ai_enabled
             && FeatureFlag::AgentView.is_enabled()
             && FeatureFlag::CloudMode.is_enabled()
         {
-            let mut cloud_item = MenuItemFields::new("Cloud Oz")
+            let mut cloud_item = MenuItemFields::new("Agent")
                 .with_on_select_action(WorkspaceAction::AddAmbientAgentTab)
                 .with_icon(icons::Icon::LayoutAlt01);
             if effective_default == DefaultSessionMode::CloudAgent {
@@ -7660,7 +7660,7 @@ impl Workspace {
             match result {
                 Ok(_) => {
                     let command_name = ChannelState::channel().cli_command_name();
-                    let message = format!("Successfully installed the Oz CLI! You can now run '{command_name}' from the command line.");
+                    let message = format!("Successfully installed the CastCodes CLI! You can now run '{command_name}' from the command line.");
                     view.toast_stack.update(ctx, |toast_stack, ctx| {
                         let toast = DismissibleToast::success(message.to_string())
                             .with_link(
@@ -7672,7 +7672,7 @@ impl Workspace {
                     });
                 }
                 Err(error) => {
-                    let error_message = format!("Failed to install Oz command: {error}");
+                    let error_message = format!("Failed to install CastCodes command: {error}");
                     log::error!("{error_message}");
                     view.toast_stack.update(ctx, |toast_stack, ctx| {
                         let toast = DismissibleToast::error(error_message);
@@ -7690,14 +7690,14 @@ impl Workspace {
             async { cli_install::uninstall_cli() },
             |view, result, ctx| match result {
                 Ok(_) => {
-                    let message = "Successfully uninstalled the Oz command.";
+                    let message = "Successfully uninstalled the CastCodes command.";
                     view.toast_stack.update(ctx, |toast_stack, ctx| {
                         let toast = DismissibleToast::success(message.to_string());
                         toast_stack.add_ephemeral_toast(toast, ctx);
                     });
                 }
                 Err(error) => {
-                    let error_message = format!("Failed to uninstall Oz command: {error}");
+                    let error_message = format!("Failed to uninstall CastCodes command: {error}");
                     log::error!("{error_message}");
                     view.toast_stack.update(ctx, |toast_stack, ctx| {
                         let toast = DismissibleToast::error(error_message);
@@ -11666,7 +11666,7 @@ impl Workspace {
 
         ctx.spawn(future, move |workspace, source_conversation, ctx| {
             let Some(CloudConversationData::Oz(source_conversation)) = source_conversation else {
-                log::error!("Failed to load Oz conversation {conversation_id} for forking.");
+                log::error!("Failed to load agent conversation {conversation_id} for forking.");
                 WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                     let toast = DismissibleToast::error(
                         "Failed to load conversation for forking.".to_owned(),
@@ -12772,8 +12772,9 @@ impl Workspace {
                                 link = link.with_keystroke(keystroke);
                             }
 
-                            let toast = DismissibleToast::default(String::from("CastCodes updated!"))
-                                .with_link(link);
+                            let toast =
+                                DismissibleToast::default(String::from("CastCodes updated!"))
+                                    .with_link(link);
 
                             stack.add_ephemeral_toast(toast, ctx);
                         });
@@ -13078,7 +13079,7 @@ impl Workspace {
         let window_id = ctx.window_id();
         WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
             toast_stack.add_ephemeral_toast(
-                DismissibleToast::success("Handing off to cloud".to_owned()),
+                DismissibleToast::success("Handing off".to_owned()),
                 window_id,
                 ctx,
             );
@@ -13098,7 +13099,7 @@ impl Workspace {
         let Some((_new_pane_view, model_handle)) = source_view.update(ctx, |view, view_ctx| {
             view.start_local_to_cloud_handoff_pane(view_ctx)
         }) else {
-            log::warn!("start_local_to_cloud_handoff: failed to push fresh cloud-mode pane");
+            log::warn!("start_local_to_cloud_handoff: failed to push fresh handoff pane");
             Self::restore_source_handoff_draft(&source_view, launch, explicit_environment_id, ctx);
             Self::show_handoff_prepare_failed_toast(ctx.window_id(), ctx);
             return;
@@ -13226,7 +13227,7 @@ impl Workspace {
         let Some((new_pane_view, model_handle)) = source_view.update(ctx, |view, view_ctx| {
             view.start_local_to_cloud_handoff_pane(view_ctx)
         }) else {
-            log::warn!("start_local_to_cloud_handoff: failed to push cloud-mode pane");
+            log::warn!("start_local_to_cloud_handoff: failed to push handoff pane");
             Self::show_handoff_prepare_failed_toast(ctx.window_id(), ctx);
             return;
         };
@@ -16347,7 +16348,7 @@ impl Workspace {
                     model.mark_oz_launch_modal_dismissed(ctx);
                 });
 
-                // Clear the "Introducing Oz" custom tab name so normal tab naming rules apply.
+                // Clear the "Introducing Cast Agent" custom tab name so normal tab naming rules apply.
                 if let Some(pane_group_id) = self.oz_launch_modal.tab_pane_group_id.take() {
                     if let Some(tab) = self
                         .tabs
@@ -17016,7 +17017,8 @@ impl Workspace {
         let body = appearance
             .ui_builder()
             .wrappable_text(
-                "Ask the Cast Agent to explain errors, suggest commands or write scripts.".to_owned(),
+                "Ask the Cast Agent to explain errors, suggest commands or write scripts."
+                    .to_owned(),
                 true,
             )
             .with_style(UiComponentStyles {
@@ -17585,7 +17587,7 @@ impl Workspace {
             .finish();
             tab_bar.add_child(warp_logo);
 
-            // Right: Info button + "View all cloud runs" button (for ambient agent sessions) + "Open in CastCodes" button
+            // Right: Info button + "View all runs" button (for ambient agent sessions) + "Open in CastCodes" button
             let mut right_row = Flex::row()
                 .with_cross_axis_alignment(CrossAxisAlignment::Center)
                 .with_main_axis_size(MainAxisSize::Min);
@@ -17615,7 +17617,7 @@ impl Workspace {
                         .finish(),
                 );
 
-                // Add "View all cloud runs" button when task_id exists (with 4px gap)
+                // Add "View all runs" button when task_id exists (with 4px gap)
                 if task_id.is_some() {
                     right_row.add_child(
                         Container::new(ChildView::new(&self.view_cloud_runs_button).finish())
@@ -18465,20 +18467,59 @@ impl Workspace {
     }
 
     fn render_settings_button(&self, appearance: &Appearance) -> Box<dyn Element> {
-        Align::new(
-            self.render_tab_bar_icon_button(
-                appearance,
-                icons::Icon::Gear,
-                &self.mouse_states.settings_icon,
-                WorkspaceAction::ShowSettings,
-                "Settings".to_string(),
-                self.cached_keybindings[SHOW_SETTINGS_KEYBINDING_NAME].clone(),
-                false,
-                false,
-            )
-            .finish(),
+        let theme = appearance.theme();
+        let sub_text = theme.sub_text_color(theme.background());
+        let main_text = theme.main_text_color(theme.background());
+        let ui_builder = appearance.ui_builder().clone();
+        let tooltip_sublabel = self.cached_keybindings[SHOW_SETTINGS_KEYBINDING_NAME].clone();
+
+        let button = Hoverable::new(
+            self.mouse_states.settings_icon.clone(),
+            move |hover_state| {
+                let icon_color = if hover_state.is_hovered() {
+                    main_text
+                } else {
+                    sub_text
+                };
+                let icon = ConstrainedBox::new(
+                    Container::new(icons::Icon::Gear.to_warpui_icon(icon_color).finish())
+                        .with_uniform_padding(3.)
+                        .finish(),
+                )
+                .with_width(icons::ICON_DIMENSIONS)
+                .with_height(icons::ICON_DIMENSIONS)
+                .finish();
+
+                if hover_state.is_hovered() {
+                    let tooltip = if let Some(sublabel) = tooltip_sublabel.clone() {
+                        ui_builder
+                            .tool_tip_with_sublabel("Settings".to_string(), sublabel)
+                            .build()
+                            .finish()
+                    } else {
+                        ui_builder.tool_tip("Settings".to_string()).build().finish()
+                    };
+                    let mut stack = Stack::new().with_child(icon);
+                    stack.add_positioned_overlay_child(
+                        tooltip,
+                        OffsetPositioning::offset_from_parent(
+                            vec2f(0., 4.),
+                            ParentOffsetBounds::WindowByPosition,
+                            ParentAnchor::BottomMiddle,
+                            ChildAnchor::TopMiddle,
+                        ),
+                    );
+                    stack.finish()
+                } else {
+                    icon
+                }
+            },
         )
-        .finish()
+        .with_cursor(Cursor::PointingHand)
+        .on_click(|ctx, _, _| ctx.dispatch_typed_action(WorkspaceAction::ShowSettings))
+        .finish();
+
+        Align::new(button).finish()
     }
 
     fn render_web_anonymous_user_sign_in_button(
@@ -18927,12 +18968,12 @@ impl Workspace {
             AISettings::as_ref(app)
                 .is_any_ai_enabled(app)
                 .then(|| WorkspaceBannerButtonDetails {
-                    text: "Fix with Oz".to_owned(),
+                    text: "Fix with Agent".to_owned(),
                     action: WorkspaceAction::FixSettingsWithOz {
                         error_description: error.to_string(),
                     },
                     variant: BannerButtonVariant::Naked,
-                    icon: Some(Icon::Oz),
+                    icon: Some(Icon::Stars),
                     more_info_button_action: None,
                 });
         Some(WorkspaceBannerFields {
@@ -18969,7 +19010,7 @@ impl Workspace {
             banner_type: WorkspaceBanner::Reauth,
             severity: BannerSeverity::Warning,
             heading: Some("Your login has expired.".into()),
-            description: "Please sign in again to restore access to cloud-based features.".into(),
+            description: "Please sign in again to restore access to connected features.".into(),
             secondary_button: None,
             button: Some(WorkspaceBannerButtonDetails {
                 text: "Sign in".into(),
@@ -18987,13 +19028,14 @@ impl Workspace {
                 AutoupdateStage::UnableToUpdateToNewVersion { new_version }
                     if !self.autoupdate_unable_to_update_banner_dismissed =>
                 {
-                    let description =
-                        if is_incoming_version_past_current(new_version.soft_cutoff.as_deref()) {
-                            VERSION_DEPRECATION_WITHOUT_PERMISSIONS_BANNER_TEXT.to_owned()
-                        } else {
-                            "A new version is available but CastCodes is unable to perform the update."
-                                .to_owned()
-                        };
+                    let description = if is_incoming_version_past_current(
+                        new_version.soft_cutoff.as_deref(),
+                    ) {
+                        VERSION_DEPRECATION_WITHOUT_PERMISSIONS_BANNER_TEXT.to_owned()
+                    } else {
+                        "A new version is available but CastCodes is unable to perform the update."
+                            .to_owned()
+                    };
 
                     Some(WorkspaceBannerFields {
                         banner_type: WorkspaceBanner::UnableToUpdateToNewVersion,
@@ -20169,7 +20211,7 @@ impl Workspace {
     }
 
     fn open_tab_and_focus_oz_launch_modal(&mut self, ctx: &mut ViewContext<Self>) {
-        // Create a new tab with one terminal session titled "Introducing Oz"
+        // Create a new tab with one terminal session titled "Introducing Cast Agent"
         self.add_tab_with_pane_layout(
             PanesLayout::SingleTerminal(Box::new(NewTerminalOptions {
                 shell: None,
@@ -20178,7 +20220,7 @@ impl Workspace {
                 ..Default::default()
             })),
             Arc::new(HashMap::new()),
-            Some("Introducing Oz".to_string()),
+            Some("Introducing Cast Agent".to_string()),
             ctx,
         );
         self.oz_launch_modal.tab_pane_group_id = self
@@ -21518,7 +21560,7 @@ impl TypedActionView for Workspace {
             }
             RunAISuggestedCommand(code) => {
                 let command = code.trim().to_string();
-                let workflow = Workflow::new("Command from Oz", command);
+                let workflow = Workflow::new("Command from Agent", command);
                 self.run_workflow_in_active_input(
                     &WorkflowType::AIGenerated {
                         workflow,
@@ -21969,7 +22011,7 @@ impl TypedActionView for Workspace {
             }
             #[cfg(debug_assertions)]
             OpenOzLaunchModal => {
-                // Force open the Oz launch modal for debugging
+                // Force open the agent launch modal for debugging
                 OneTimeModalModel::handle(ctx).update(ctx, |model, ctx| {
                     model.force_open_oz_launch_modal(ctx);
                 });
@@ -21977,19 +22019,19 @@ impl TypedActionView for Workspace {
             }
             #[cfg(debug_assertions)]
             ResetOzLaunchModalState => {
-                // Reset the Oz launch modal dismissed state for debugging
+                // Reset the agent launch modal dismissed state for debugging
                 let old_value = *AISettings::as_ref(ctx).did_check_to_trigger_oz_launch_modal;
                 AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
                     if let Err(e) = ai_settings
                         .did_check_to_trigger_oz_launch_modal
                         .set_value(false, ctx)
                     {
-                        log::warn!("Failed to reset Oz launch modal dismissed setting: {e}");
+                        log::warn!("Failed to reset agent launch modal dismissed setting: {e}");
                     }
                 });
                 let new_value = *AISettings::as_ref(ctx).did_check_to_trigger_oz_launch_modal;
                 log::info!(
-                    "Oz launch modal state: old={}, new={}, feature_flag_enabled={}",
+                    "Agent launch modal state: old={}, new={}, feature_flag_enabled={}",
                     old_value,
                     new_value,
                     FeatureFlag::OzLaunchModal.is_enabled()
@@ -22970,7 +23012,7 @@ impl View for Workspace {
                 }
             }
 
-            // Action sidecar for actionable items (Terminal, Agent, Cloud Oz, tab configs).
+            // Action sidecar for actionable items (Terminal, Agent, tab configs).
             if let Some(sidecar_item) = &self.tab_config_action_sidecar_item {
                 let anchor_label = self.new_session_dropdown_menu.read(app, |menu, _| {
                     menu.hovered_index().and_then(|idx| {

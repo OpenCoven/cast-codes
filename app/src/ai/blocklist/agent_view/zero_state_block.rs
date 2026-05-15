@@ -53,7 +53,7 @@ use crate::{
     util::time_format::format_approx_duration_from_now_utc,
 };
 
-const CLOUD_AGENT_DOCS_URL: &str = "https://docs.warp.dev/agent-platform/cloud-agents/overview";
+const CLOUD_AGENT_DOCS_URL: &str = "https://github.com/OpenCoven/cast-codes/blob/main/README.md";
 const OZ_UPDATES_SECTION_HEADER: &str = "What's new in agent orchestration";
 
 // The maximum number of orchestration updates rendered inline in the zero-state section.
@@ -406,7 +406,7 @@ impl View for AgentViewZeroStateBlock {
 
         let header_props = if self.origin.is_cloud_agent() {
             HeaderProps {
-                title: "New Oz cloud agent conversation".into(),
+                title: "New agent conversation".into(),
                 description: AgentViewDescription::CloudModeWithDocsLink,
                 icon: Icon::OzCloud,
             }
@@ -649,7 +649,7 @@ fn render_title_and_description(props: HeaderProps, app: &AppContext) -> Vec<Box
             items.push(
                 Container::new(
                     Text::new(
-                        "Run your agent task in an isolated cloud environment.",
+                        "Run your agent task in an isolated environment.",
                         appearance.ui_font_family(),
                         appearance.monospace_font_size(),
                     )
@@ -663,7 +663,7 @@ fn render_title_and_description(props: HeaderProps, app: &AppContext) -> Vec<Box
             // Second line: text with "Visit docs" hyperlink.
             let description_with_link = FormattedText::new([FormattedTextLine::Line(vec![
                 FormattedTextFragment::plain_text(
-                    "Use cloud agents to run parallel agents, build agents that run autonomously, and check in on your agents from anywhere. ",
+                    "Use agents to run parallel work, keep tasks organized, and review progress from CastCodes. ",
                 ),
                 FormattedTextFragment::hyperlink("Visit docs", CLOUD_AGENT_DOCS_URL),
             ])]);
@@ -750,7 +750,7 @@ fn render_body(props: ZeroStateBodyProps<'_>, app: &AppContext) -> Vec<Box<dyn E
                         MessageItem::keystroke(
                             ENTER_CLOUD_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE.clone(),
                         ),
-                        MessageItem::text("start a new cloud agent conversation"),
+                        MessageItem::text("start a new agent conversation"),
                     ],
                     |ctx| {
                         ctx.dispatch_typed_action(TerminalAction::EnterCloudAgentView);
@@ -1218,8 +1218,7 @@ fn render_oz_updates(props: OzUpdatesProps<'_>, app: &AppContext) -> Option<Box<
     )
 }
 
-/// Renders the ambient credits banner showing free cloud credits.
-/// If `link_mouse_state` is provided, a "Launch cloud agent" link is shown.
+/// Renders the ambient credits banner.
 pub fn render_ambient_credits_banner(credits: i32, app: &AppContext) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
     let theme = appearance.theme();
@@ -1229,7 +1228,7 @@ pub fn render_ambient_credits_banner(credits: i32, app: &AppContext) -> Box<dyn 
     // Use ANSI terminal colors for the pill styling.
     let text_color = theme.terminal_colors().normal.blue;
 
-    let credits_text = format!("{credits} free cloud agent credits");
+    let credits_text = format!("{credits} free agent credits");
     let text = Text::new(credits_text, font_family, font_size)
         .with_color(text_color.into())
         .with_style(Properties::default().weight(Weight::Semibold))

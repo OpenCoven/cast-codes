@@ -16,16 +16,9 @@
 set -e
 
 # Extract channel suffix from BINARY_NAME.
-if [ "$ARTIFACT" = "cli" ] && [ "$RELEASE_CHANNEL" = "oss" ]; then
-  CHANNEL_SUFFIX=""
-elif [ "$ARTIFACT" = "cli" ]; then
-  CHANNEL_SUFFIX="${BINARY_NAME#oz}"
-else
-  CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
-fi
+CHANNEL_SUFFIX="${BINARY_NAME#cast-codes}"
 
 # On Linux, we keep the `-stable` suffix for stable to avoid package conflicts.
-# The binary name is still `oz`, and the repo name is still `castcodes`.
 if [ "$ARTIFACT" = "cli" -a "$RELEASE_CHANNEL" = "stable" ]; then
   CHANNEL_SUFFIX="-stable"
 fi
@@ -37,15 +30,9 @@ case "$ARTIFACT" in
     PACKAGE_NAME="cast-codes$CHANNEL_SUFFIX"
     ;;
   cli)
-    if [ "$RELEASE_CHANNEL" = "oss" ]; then
-      PACKAGE_NAME="cast-codes-cli"
-      PACKAGE_REPLACES="cast-codes"
-      PACKAGE_CONFLICTS="cast-codes"
-    else
-      PACKAGE_NAME="oz$CHANNEL_SUFFIX"
-      PACKAGE_REPLACES="warp-cli$CHANNEL_SUFFIX (<< @@VERSION@@), oz (= 0.2026.02.09.06.06.stable.00), oz (= 0.2026.02.09.06.06.stable.02), oz (= 0.2026.02.10.11.37.stable.00), oz (= 0.2026.02.10.11.37.stable.01), oz (= 0.2026.02.11.08.23.stable.00)"
-      PACKAGE_CONFLICTS="warp-cli$CHANNEL_SUFFIX (<< @@VERSION@@), oz (= 0.2026.02.09.06.06.stable.00), oz (= 0.2026.02.09.06.06.stable.02), oz (= 0.2026.02.10.11.37.stable.00), oz (= 0.2026.02.10.11.37.stable.01), oz (= 0.2026.02.11.08.23.stable.00)"
-    fi
+    PACKAGE_NAME="cast-codes-cli$CHANNEL_SUFFIX"
+    PACKAGE_REPLACES="cast-codes$CHANNEL_SUFFIX"
+    PACKAGE_CONFLICTS="cast-codes$CHANNEL_SUFFIX"
     ;;
   *)
     echo "::error ::Unknown ARTIFACT: $ARTIFACT (expected 'app' or 'cli')"

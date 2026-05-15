@@ -88,16 +88,9 @@ jobs:
     name: Run ${{ matrix.name }} tests
     timeout-minutes: 25
     env:
-      # When CI runs on a PR from a fork, the GCP OIDC auth used by
-      # `google-github-actions/auth` fails because our Workload Identity
-      # Federation provider is configured to only trust the base repository.
-      # We skip the auth + gcloud install steps in those runs and exclude SSH
-      # integration tests (which require gcloud to tunnel into a GCP test VM)
-      # via the filter suffix below. Tests that need gcloud all have `_ssh_`
-      # in their name. Fork PRs lose SSH integration test coverage; those
-      # tests still run post-merge against `master`.
-      HAS_GCP_AUTH: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-      EXCLUDE_SSH_TESTS_FILTER: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && ' and not test(/_ssh_/)' || '' }}
+      # The public CastCodes repo does not provision hosted SSH test fixtures.
+      # Tests that need those fixtures include `_ssh_` in their name.
+      EXCLUDE_SSH_TESTS_FILTER: " and not test(/_ssh_/)"
     strategy:
       fail-fast: false
       matrix:
@@ -125,11 +118,8 @@ jobs:
             extra_test_args: "--exclude command-signatures-v2 --exclude warp_js"
     runs-on: ${{ matrix.runner }}
     needs: params
-    # Make sure an ID token is created with the necessary permissions to use
-    # GCP's Workload Identity Federation (for service account authentication).
     permissions:
       contents: 'read'
-      id-token: 'write'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
@@ -220,21 +210,6 @@ jobs:
           # Persist the SSH_AUTH_SOCK and SSH_AGENT_PID for future steps
           echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
           echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
-
-      - name: Set up gcloud authentication for SSH tests
-        # Skipped for fork PRs - see HAS_GCP_AUTH definition above.
-        if: env.HAS_GCP_AUTH == 'true'
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
-        with:
-          workload_identity_provider: projects/63595664881/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: github-ci-workflow@warp-ssh-integration-testing.iam.gserviceaccount.com
-
-      - name: Install gcloud CLI tool
-        # Skipped for fork PRs - see HAS_GCP_AUTH definition above.
-        if: env.HAS_GCP_AUTH == 'true'
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
-        with:
-          version: '>= 397.0.0'
 
       - name: Install vim for richer alt-screen tests
         if: ${{ matrix.is_self_hosted == false }}

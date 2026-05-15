@@ -130,7 +130,7 @@ const SIDEBAR_WIDTH_DEFAULT: f32 = 200.;
 /// Wider sidebar used when the settings-file footer is enabled. Sized to
 /// match Figma's settings nav rail (223px alert + 12px horizontal padding
 /// on each side + 1px right border), giving the error-alert footer enough
-/// room to render its "Open file" and "Fix with Oz" buttons side-by-side
+/// room to render its "Open file" and "Fix with Agent" buttons side-by-side
 /// with the designed 24px indent and 8px internal padding.
 const SIDEBAR_WIDTH_WITH_FOOTER: f32 = 248.;
 
@@ -219,7 +219,7 @@ pub enum SettingsSection {
     // ── Code umbrella subpages ──
     CodeIndexing,
     EditorAndCodeReview,
-    // ── Cloud platform umbrella subpages ──
+    // ── Platform umbrella subpages ──
     CloudEnvironments,
     OzCloudAPIKeys,
 }
@@ -243,7 +243,7 @@ impl Display for SettingsSection {
             SettingsSection::CodeIndexing => write!(f, "Indexing and projects"),
             SettingsSection::EditorAndCodeReview => write!(f, "Editor and Code Review"),
             SettingsSection::CloudEnvironments => write!(f, "Environments"),
-            SettingsSection::OzCloudAPIKeys => write!(f, "Oz Cloud API Keys"),
+            SettingsSection::OzCloudAPIKeys => write!(f, "Agent API Keys"),
             _ => write!(f, "{self:?}"),
         }
     }
@@ -272,7 +272,7 @@ impl SettingsSection {
         matches!(self, Self::CodeIndexing | Self::EditorAndCodeReview)
     }
 
-    /// Returns true if this section is a subpage under the "Cloud platform" umbrella.
+    /// Returns true if this section is a subpage under the "Platform" umbrella.
     pub fn is_cloud_platform_subpage(&self) -> bool {
         matches!(self, Self::CloudEnvironments | Self::OzCloudAPIKeys)
     }
@@ -287,7 +287,7 @@ impl SettingsSection {
             s if s.is_ai_subpage() => Self::AI,
             // Code subpages render within the Code page.
             s if s.is_code_subpage() => Self::Code,
-            // CloudEnvironments and OzCloudAPIKeys ARE their own backing pages
+            // Environment and API-key sections ARE their own backing pages
             // (1:1 mapping), so they return themselves.
             other => *other,
         }
@@ -309,7 +309,7 @@ impl SettingsSection {
         &[Self::CodeIndexing, Self::EditorAndCodeReview]
     }
 
-    /// The ordered list of Cloud platform subpage sections.
+    /// The ordered list of Platform subpage sections.
     pub fn cloud_platform_subpages() -> &'static [Self] {
         &[Self::CloudEnvironments, Self::OzCloudAPIKeys]
     }
@@ -337,8 +337,8 @@ impl FromStr for SettingsSection {
             "Castify" | "Warpify" => Ok(Self::Warpify),
             // "Warp Drive" kept for backward compatibility with persisted user settings.
             "Cast Drive" | "WarpDrive" | "Warp Drive" => Ok(Self::WarpDrive),
-            // This page was called "Oz" then "Warp Agent" at various points; keep both for backward compatibility.
-            "Cast Agent" | "Oz" | "Warp Agent" => Ok(Self::WarpAgent),
+            // "Warp Agent" kept for backward compatibility with persisted user settings.
+            "Cast Agent" | "Warp Agent" => Ok(Self::WarpAgent),
             "Profiles" | "AgentProfiles" => Ok(Self::AgentProfiles),
             "MCP servers" | "AgentMCPServers" => Ok(Self::AgentMCPServers),
             "Knowledge" => Ok(Self::Knowledge),
@@ -346,7 +346,7 @@ impl FromStr for SettingsSection {
             "Indexing and projects" | "CodeIndexing" => Ok(Self::CodeIndexing),
             "Editor and Code Review" | "EditorAndCodeReview" => Ok(Self::EditorAndCodeReview),
             "CloudEnvironments" => Ok(Self::CloudEnvironments),
-            "Oz Cloud API Keys" | "OzCloudAPIKeys" => Ok(Self::OzCloudAPIKeys),
+            "Agent API Keys" => Ok(Self::OzCloudAPIKeys),
             _ => Err(()),
         }
     }
@@ -429,7 +429,7 @@ pub mod flags {
     pub const USE_AUDIBLE_BELL_CONTEXT_FLAG: &str = "Use_Audible_Terminal_Bell";
     pub const SHOW_INPUT_HINT_TEXT_CONTEXT_FLAG: &str = "Show_Input_Hint_text";
     pub const SHOW_AGENT_TIPS_FLAG: &str = "Show_Agent_Tips";
-    pub const SHOW_OZ_UPDATES_IN_ZERO_STATE_FLAG: &str = "Show_Oz_Updates_In_Zero_State";
+    pub const SHOW_OZ_UPDATES_IN_ZERO_STATE_FLAG: &str = "Show_Agent_Updates_In_Zero_State";
     pub const USE_AGENT_FOOTER_FLAG: &str = "Use_Agent_Footer";
     pub const THINKING_DISPLAY_SHOW_AND_COLLAPSE: &str = "Thinking_Display_ShowAndCollapse";
     pub const THINKING_DISPLAY_ALWAYS_SHOW: &str = "Thinking_Display_AlwaysShow";
@@ -1203,7 +1203,7 @@ impl SettingsView {
                 ],
             )),
             SettingsNavItem::Umbrella(SettingsUmbrella::new(
-                "Cloud platform",
+                "Platform",
                 vec![
                     SettingsSection::CloudEnvironments,
                     SettingsSection::OzCloudAPIKeys,
@@ -1905,7 +1905,7 @@ impl SettingsView {
                     view.set_active_subpage(subpage, ctx);
                 });
             }
-            // Cloud platform subpages render their backing pages directly
+            // Platform subpages render their backing pages directly
             // (no subpage mode switch needed — the full page is shown).
 
             // Auto-expand the umbrella containing this subpage.
@@ -2273,7 +2273,7 @@ impl View for SettingsView {
         let appearance = Appearance::as_ref(app);
 
         // For AI subpages, the backing SettingsPage has a different section
-        // (e.g. Oz -> AI, AgentMCPServers -> MCPServers).
+        // (e.g. legacy agent pages -> AI, AgentMCPServers -> MCPServers).
         let content_page_section = self.current_settings_page.parent_page_section();
         let (page, current_page_handle) = if settings_pages.is_empty() {
             (self.render_search_zero_state(appearance), None)

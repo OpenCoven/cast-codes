@@ -70,7 +70,7 @@ impl OneTimeModalModel {
                         .did_check_to_trigger_oz_launch_modal
                         .set_value(true, ctx)
                     {
-                        log::warn!("Failed to mark Oz launch modal as dismissed: {e}");
+                        log::warn!("Failed to mark agent launch modal as dismissed: {e}");
                     }
                 });
                 GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
@@ -238,32 +238,9 @@ impl OneTimeModalModel {
         self.set_hoa_onboarding_open(true, ctx)
     }
 
-    fn check_and_trigger_oz_launch_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {
-        // Only show if the feature flag is enabled.
-        if !FeatureFlag::OzLaunchModal.is_enabled() {
-            return false;
-        }
-
-        let ai_settings = AISettings::as_ref(ctx);
-        let oz_modal_shown = *ai_settings.did_check_to_trigger_oz_launch_modal;
-
-        // If Oz modal has already been shown, don't show anything.
-        if oz_modal_shown {
-            return false;
-        }
-
-        AISettings::handle(ctx).update(ctx, |settings, ctx| {
-            if let Err(e) = settings
-                .did_check_to_trigger_oz_launch_modal
-                .set_value(true, ctx)
-            {
-                log::warn!("Failed to mark Oz launch modal as dismissed: {e}");
-            }
-        });
-
-        let should_show_oz_modal = !matches!(ChannelState::channel(), Channel::Integration);
-        self.set_oz_launch_modal_open(should_show_oz_modal, ctx);
-        should_show_oz_modal
+    fn check_and_trigger_oz_launch_modal(&mut self, _ctx: &mut ModelContext<Self>) -> bool {
+        // The inherited hosted-agent launch surface is not applicable to CastCodes.
+        false
     }
 
     fn check_and_trigger_openwarp_launch_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {

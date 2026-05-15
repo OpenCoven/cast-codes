@@ -166,7 +166,7 @@ fn render_tier_limits_footer(
 
     fragments.push(FormattedTextFragment::hyperlink("Upgrade", upgrade_url));
     fragments.push(FormattedTextFragment::plain_text(
-        " for more powerful cloud agents.",
+        " for more powerful agent runs.",
     ));
 
     let formatted_text = FormattedText::new(vec![FormattedTextLine::Line(fragments)]);

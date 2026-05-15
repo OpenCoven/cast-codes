@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Cross-compiles the Oz CLI for Linux x86_64 (musl) on macOS and uploads it
+# Cross-compiles the CastCodes CLI for Linux x86_64 (musl) on macOS and uploads it
 # to a remote host via rsync for local remote-server development.
 #
 # Uses rsync for delta transfers — after the first deploy, only changed bytes
@@ -26,7 +26,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") --host <user@hostname> [OPTIONS]
 
-Cross-compile the Oz CLI for Linux x86_64 and upload it to a remote host.
+Cross-compile the CastCodes CLI for Linux x86_64 and upload it to a remote host.
 
 Required:
   --host <user@hostname>    Remote host to upload to
@@ -111,7 +111,7 @@ esac
 
 FEATURES="release_bundle,crash_reporting,standalone,agent_mode_debug"
 WARP_BIN="warp"
-BINARY_NAME="oz-local"
+BINARY_NAME="cast-codes-local"
 REMOTE_DIR=".warp-local/remote-server"
 
 # Determine the output directory
@@ -126,7 +126,7 @@ case "$CARGO_PROFILE" in
 esac
 BUILT_BINARY="$OUTPUT_DIR/$WARP_BIN"
 
-echo "==> Building Oz CLI for $TARGET (profile=$CARGO_PROFILE)"
+echo "==> Building CastCodes CLI for $TARGET (profile=$CARGO_PROFILE)"
 echo "    Binary: $WARP_BIN -> $BINARY_NAME"
 echo "    Features: $FEATURES"
 echo ""

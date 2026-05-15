@@ -323,7 +323,7 @@ impl DefaultSessionMode {
         match self {
             DefaultSessionMode::Terminal => "Terminal",
             DefaultSessionMode::Agent => "Agent",
-            DefaultSessionMode::CloudAgent => "Cloud Oz",
+            DefaultSessionMode::CloudAgent => "Agent",
             DefaultSessionMode::TabConfig => "Tab Config",
             DefaultSessionMode::DockerSandbox => "Local Docker Sandbox",
         }
@@ -1157,7 +1157,7 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // This is not a user-visible setting - it's merely a one-time flag to track if the Oz launch modal
+    // This is not a user-visible setting - it's merely a one-time flag to track if the agent launch modal
     // has been shown to the user.
     //
     // We model it as a setting so it's only shown once to a given user regardless of the number of
@@ -1170,7 +1170,7 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // Used to determine whether the "What's new in Oz" section of the agent view
+    // Used to determine whether the "What's new" section of the agent view
     // zero state is expanded or collapsed by default.
     should_expand_oz_updates: ShouldExpandOzUpdates {
         type: bool,
@@ -1180,7 +1180,7 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // Used to determine whether the "What's new in Oz" section of the agent view
+    // Used to determine whether the "What's new" section of the agent view
     // zero state is shown or hidden.
     should_show_oz_updates_in_zero_state: ShouldShowOzUpdatesInZeroState {
         type: bool,
@@ -1345,7 +1345,7 @@ define_settings_group!(AISettings, settings: [
         toml_path: "general.default_tab_config_path",
     }
 
-    // Whether computer use is enabled for cloud agent conversations started from the Warp app.
+    // Whether computer use is enabled for agent conversations started from the CastCodes app.
     // This setting is only used when the AI autonomy setting is AlwaysAsk or not set.
     cloud_agent_computer_use_enabled: CloudAgentComputerUseEnabled {
         type: bool,
@@ -1354,7 +1354,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "agents.warp_agent.other.cloud_agent_computer_use_enabled",
-        description: "Whether computer use is enabled for cloud agent conversations.",
+        description: "Whether computer use is enabled for agent conversations.",
     }
 
     // Whether multi-agent orchestration is enabled. When enabled, the agent can
@@ -1447,7 +1447,7 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // Whether Oz should add attribution (co-author line) to commit messages and PRs.
+    // Whether the agent should add attribution (co-author line) to commit messages and PRs.
     // This is the user-level preference; it may be overridden by the team-level
     // `enable_warp_attribution` AdminEnablementSetting (see
     // `UserWorkspaces::get_agent_attribution_setting`).
@@ -1625,11 +1625,11 @@ impl AISettings {
         if !FeatureFlag::FileBasedMcp.is_enabled() || !self.is_any_ai_enabled(app) {
             return false;
         }
-        // NOTE: we intentionally do not force-enable this in Cloud Mode. Previously
+        // NOTE: we intentionally do not force-enable this in agent handoff mode. Previously
         // we auto-spawned file-based MCPs in autonomous execution, but that bypassed
         // the user's explicit opt-in and let any MCP config checked into a repo run
-        // arbitrary commands as part of a cloud agent run. Respecting the toggle
-        // closes that attack surface; cloud agents that need project-scoped MCP
+        // arbitrary commands as part of an agent run. Respecting the toggle
+        // closes that attack surface; agents that need project-scoped MCP
         // servers should surface an explicit, auditable opt-in. A more robust
         // solution (e.g. per-environment allowlisting, signed configs) should be
         // explored in the future.

@@ -35,13 +35,6 @@ outputs:
   changelog_slack_channel:
     description: The Slack channel where the release's changelog should be posted.
     value: ${{ steps.get-config.outputs.changelog_slack_channel }}
-  gcs_cache_control_value:
-    description: The Cache-Control value to set for release artifacts in Cloud Storage.
-    value: ${{ steps.get-config.outputs.gcs_cache_control_value }}
-  web_gcs_bucket_prefix:
-    description: The GCS bucket prefix for web artifacts. (Determines if they go in a staging or prod bucket.)
-    value: ${{ steps.get-config.outputs.web_gcs_bucket_prefix }}
-
 runs:
   using: composite
   steps:

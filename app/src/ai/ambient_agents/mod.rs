@@ -18,7 +18,7 @@ pub use task::{
     AmbientAgentTaskState, TaskStatusMessage,
 };
 pub const OUT_OF_CREDITS_TASK_FAILURE_MESSAGE: &str =
-    "Out of credits. Upgrade your CastCodes plan to continue running cloud agents.";
+    "Out of credits. Upgrade your CastCodes plan to continue running agents.";
 pub const SERVER_OVERLOADED_TASK_FAILURE_MESSAGE: &str =
     "CastCodes is temporarily overloaded. Please try again shortly.";
 

@@ -219,7 +219,7 @@ impl ConversationEndedTombstoneView {
             .map(|task_id| {
                 ctx.add_typed_action_view(move |_| {
                     ActionButton::new("Continue", PrimaryTheme)
-                        .with_tooltip("Continue this task in Cloud Mode")
+                        .with_tooltip("Continue this task in CastCodes")
                         .on_click(move |ctx| {
                             ctx.dispatch_typed_action(
                                 ConversationEndedTombstoneAction::ContinueInCloud { task_id },

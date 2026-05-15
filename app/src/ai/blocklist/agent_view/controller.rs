@@ -35,7 +35,7 @@ pub enum ExitAgentViewError {
     LongRunningCommand,
     #[error("Cannot exit conversation as a viewer.")]
     ConversationViewer,
-    #[error("Cannot exit cloud agent.")]
+    #[error("Cannot exit agent.")]
     AmbientAgent,
 }
 

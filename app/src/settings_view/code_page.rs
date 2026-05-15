@@ -2226,7 +2226,7 @@ impl SettingsWidget for AutoOpenCodeReviewPaneCodeWidget {
     type View = CodeSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz auto open code review pane panel agent mode change first time accepted diff view conversation"
+        "agent auto open code review pane panel mode change first time accepted diff view conversation"
     }
 
     fn render(

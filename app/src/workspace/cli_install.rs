@@ -143,7 +143,7 @@ pub fn uninstall_cli() -> Result<()> {
     let cli_path = cli_install_target_path();
 
     if !cli_path.exists() {
-        return Err(anyhow!("Oz command is not currently installed."));
+        return Err(anyhow!("CastCodes CLI command is not currently installed."));
     }
 
     // Safety check: verify it's actually a symlink before removing

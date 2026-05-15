@@ -28,8 +28,8 @@ prefix:      /opt
 ###############################################################################
 
 %description
-CastCodes keeps local terminal and code workflows available while hosted
-cloud services are disabled until CastCodes infrastructure exists.
+CastCodes keeps local terminal and code workflows available in a local-only
+public build.
 
 ###############################################################################
 # Build rule - how does the package get built?

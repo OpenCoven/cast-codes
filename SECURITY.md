@@ -1,6 +1,6 @@
 # Security Policy
 
-CastCodes does not currently operate a dedicated hosted security mailbox or private advisory program.
+CastCodes does not currently operate a dedicated security mailbox or private advisory program.
 
 If you find a vulnerability, prefer GitHub private vulnerability reporting if it is enabled for this repository. If private reporting is not available, open a minimal public issue that avoids exploit details and ask maintainers to coordinate a private channel.
 

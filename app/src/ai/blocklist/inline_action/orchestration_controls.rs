@@ -847,8 +847,8 @@ pub fn empty_env_recommendation_message(
     }
     let env_count = CloudAmbientAgentEnvironment::get_all(app).len();
     Some(if env_count > 0 {
-        "We recommend selecting an environment for cloud agents.".to_string()
+        "We recommend selecting an environment for agents.".to_string()
     } else {
-        "We recommend creating an environment for cloud agents.".to_string()
+        "We recommend creating an environment for agents.".to_string()
     })
 }

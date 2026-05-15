@@ -279,9 +279,9 @@ fn ambient_task_id_from_conversation_metadata(
     conversation_id: &str,
     metadata: ServerAIConversationMetadata,
 ) -> Result<AmbientAgentTaskId> {
-    metadata.ambient_agent_task_id.ok_or_else(|| {
-        anyhow!("Conversation '{conversation_id}' is not backed by a cloud agent task")
-    })
+    metadata
+        .ambient_agent_task_id
+        .ok_or_else(|| anyhow!("Conversation '{conversation_id}' is not backed by an agent task"))
 }
 
 fn parse_run_id(run_id: &str, error_prefix: &str) -> Result<AmbientAgentTaskId> {

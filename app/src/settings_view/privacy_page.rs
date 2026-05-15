@@ -76,7 +76,7 @@ const FONT_SIZE: f32 = 12.;
 const SAFE_MODE_TITLE: &str = "Secret redaction";
 static SAFE_MODE_DESCRIPTION: LazyLock<&'static str> = LazyLock::new(|| {
     "When this setting is enabled, Warp will scan blocks, the contents of \
-        Warp Drive objects, and Oz prompts for potential sensitive \
+        Cast Drive objects, and agent prompts for potential sensitive \
         information and prevent saving or sending this data to any \
         servers. You can customize this list via regexes."
 });
@@ -1682,7 +1682,7 @@ impl SettingsWidget for CloudConversationStorageWidget {
     type View = PrivacyPageView;
 
     fn search_terms(&self) -> &str {
-        "sync cloud conversation store storage ai agent"
+        "sync conversation store storage ai agent"
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
@@ -1744,7 +1744,7 @@ impl SettingsWidget for CloudConversationStorageWidget {
 
         Flex::column()
             .with_child(render_body_item::<PrivacyPageAction>(
-                "Store AI conversations in the cloud".into(),
+                "Store AI conversations outside this device".into(),
                 None,
                 LocalOnlyIconState::Hidden,
                 toggle_state,

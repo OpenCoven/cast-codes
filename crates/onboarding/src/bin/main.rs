@@ -83,7 +83,7 @@ impl OnboardingMainView {
             OnboardingModelInfo {
                 id: LLMId::from("auto"),
                 title: "Auto".to_string(),
-                icon: Icon::Oz,
+                icon: Icon::Stars,
                 requires_upgrade: false,
                 is_default: true,
             },

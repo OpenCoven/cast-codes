@@ -133,7 +133,7 @@ fn ambient_task_id_from_conversation_metadata_requires_cloud_task_metadata() {
 
     assert!(err
         .to_string()
-        .contains("Conversation 'conversation-123' is not backed by a cloud agent task"));
+        .contains("Conversation 'conversation-123' is not backed by an agent task"));
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn failed_conversation_resolution_falls_back_to_env_run_id() {
         None,
         Some(ServerConversationToken::new("conversation-123".to_string())),
         Some(Err(anyhow!(
-            "Conversation 'conversation-123' is not backed by a cloud agent task"
+            "Conversation 'conversation-123' is not backed by an agent task"
         ))),
         Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
     )

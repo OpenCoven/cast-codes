@@ -9,9 +9,8 @@ CastCodes is an open-source terminal and code workspace fork. This repository is
 - Public app ID: `dev.castcodes.CastCodes`
 - Public URL scheme: `castcodes://`
 - Local terminal and code workflows are in scope.
-- Upstream hosted services are not provided by this fork.
 
-The public CastCodes build is fork-local by default. Sign-in, upstream cloud flows, hosted telemetry, hosted crash reporting, upstream release feeds, billing, shared sessions, and upstream feedback flows are disabled or unavailable unless CastCodes-owned infrastructure is added later. Feedback links route to this fork's GitHub issue tracker.
+The public CastCodes build is local-only by default. It does not include sign-in, hosted telemetry, hosted crash reporting, billing, shared sessions, upstream release feeds, or upstream feedback flows. Feedback links route to this fork's GitHub issue tracker.
 
 ## Build
 

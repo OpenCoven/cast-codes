@@ -439,7 +439,7 @@ impl OnboardingCalloutModel {
                 OnboardingQuery::TerminalCommand("Run a command...".to_string())
             }
             AgentModalityCalloutState::NaturalLanguageSupport => {
-                OnboardingQuery::AgentPrompt("help me terraform my Gcloud setup".to_string())
+                OnboardingQuery::AgentPrompt("help me terraform my local dev setup".to_string())
             }
             AgentModalityCalloutState::IntroducingAgentExperience => {
                 OnboardingQuery::AgentPrompt("Tell the agent what to build...".to_string())

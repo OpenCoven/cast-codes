@@ -969,7 +969,7 @@ impl Input {
 
                 if !conversation_is_cloud_oz_for_slash_command(conversation_id, ctx) {
                     show_error_toast(
-                        "/continue-locally is only available for cloud Oz conversations".to_owned(),
+                        "/continue-locally is only available for eligible shared agent conversations".to_owned(),
                         ctx,
                     );
                     return true;

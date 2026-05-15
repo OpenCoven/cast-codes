@@ -1,16 +1,12 @@
 use super::{CTAButton, CheckboxConfig, LaunchModalEvent, Slide};
-use crate::ai::ambient_agents::telemetry::{CloudAgentTelemetryEvent, CloudModeEntryPoint};
 use crate::terminal::view::OnboardingIntention;
 use crate::ui_components::icons::Icon;
 use crate::workspace::action::WorkspaceAction;
 use crate::workspace::view::OnboardingTutorial;
-use crate::workspaces::user_workspaces::UserWorkspaces;
-use crate::workspaces::workspace::{AdminEnablementSetting, UgcCollectionEnablementSetting};
 use asset_macro::bundled_or_fetched_asset;
 use markdown_parser::{FormattedTextFragment, FormattedTextLine};
-use warp_core::send_telemetry_from_ctx;
 use warpui::assets::asset_cache::AssetSource;
-use warpui::{AppContext, SingletonEntity};
+use warpui::AppContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OzLaunchSlide {
@@ -22,13 +18,13 @@ pub enum OzLaunchSlide {
 
 impl Slide for OzLaunchSlide {
     fn modal_title(&self) -> String {
-        "Introducing Oz".to_string()
+        "Agent orchestration".to_string()
     }
 
     fn modal_subtext_paragraphs(&self) -> Vec<FormattedTextLine> {
         vec![FormattedTextLine::Line(vec![
             FormattedTextFragment::plain_text(
-                "Infinitely scalable coding agent — run in local sessions or in the cloud.",
+                "Coordinate local coding agents directly inside CastCodes.",
             ),
         ])]
     }
@@ -57,32 +53,30 @@ impl Slide for OzLaunchSlide {
 
     fn display_text(&self) -> Option<&'static str> {
         Some(match self {
-            OzLaunchSlide::CloudAgents => "Cloud agents",
+            OzLaunchSlide::CloudAgents => "Local agents",
             OzLaunchSlide::AgentAutomations => "Agent automations",
             OzLaunchSlide::AgentManagement => "Agent management",
-            OzLaunchSlide::LaunchCredits => "A little gift",
+            OzLaunchSlide::LaunchCredits => "Local setup",
         })
     }
 
     fn short_label(&self) -> &'static str {
         match self {
-            OzLaunchSlide::CloudAgents => "Cloud agents",
+            OzLaunchSlide::CloudAgents => "Local agents",
             OzLaunchSlide::AgentAutomations => "Agent automations",
             OzLaunchSlide::AgentManagement => "Agent management",
-            OzLaunchSlide::LaunchCredits => "Launch credits",
+            OzLaunchSlide::LaunchCredits => "Local setup",
         }
     }
 
     fn title(&self) -> &'static str {
         match self {
-            OzLaunchSlide::CloudAgents => "Break out of your laptop with cloud agents",
+            OzLaunchSlide::CloudAgents => "Run coding agents locally",
             OzLaunchSlide::AgentAutomations => {
                 "Orchestrate agents, turning Skills into automations"
             }
-            OzLaunchSlide::AgentManagement => "Track local and cloud agents seamlessly",
-            OzLaunchSlide::LaunchCredits => {
-                "1,000 free cloud agent credits when you upgrade to Cast Build"
-            }
+            OzLaunchSlide::AgentManagement => "Track local agent sessions",
+            OzLaunchSlide::LaunchCredits => "Start from the current workspace context",
         }
     }
 
@@ -93,16 +87,16 @@ impl Slide for OzLaunchSlide {
     fn content(&self) -> &'static str {
         match self {
             OzLaunchSlide::CloudAgents => {
-                "Use cloud agents to run many agents in parallel, keep agents working when you close your laptop, or start agents programmatically. Plus, you can check on their work through the web."
+                "Use local agents to work from the files, commands, and terminal context already open in CastCodes."
             }
             OzLaunchSlide::AgentAutomations => {
-                "Oz agents can be defined using the standard Skills format. You can use the built in scheduler to setup agents to run autonomously at set intervals, or use the Oz SDK or API to programmatically start and manage Oz agents."
+                "Agents can use the standard Skills format to keep repeatable workflows close to the repository."
             }
             OzLaunchSlide::AgentManagement => {
-                "View all of your agents across local and cloud sessions in the CastCodes app or at [oz.warp.dev](https://oz.warp.dev). Join live agent sessions, continue tasks locally, and steer agents with one click."
+                "View active agent sessions in CastCodes, inspect their work, and steer them without leaving the terminal."
             }
             OzLaunchSlide::LaunchCredits => {
-                "Upgrade to Build this month and receive 1,000 extra credits to try using Oz. Credits are only eligible for Oz runs in CastCodes-hosted cloud environments."
+                "Start a local agent from the current workspace and keep the whole workflow on this machine."
             }
         }
     }
@@ -142,13 +136,7 @@ impl Slide for OzLaunchSlide {
                 let next = self.next().expect("Non-final slides should have a next");
                 CTAButton::next_slide(next, format!("Next: {}", next.short_label()))
             }
-            OzLaunchSlide::LaunchCredits => CTAButton::custom("Try it out", |ctx| {
-                send_telemetry_from_ctx!(
-                    CloudAgentTelemetryEvent::EnteredCloudMode {
-                        entry_point: CloudModeEntryPoint::OzLaunchModal,
-                    },
-                    ctx
-                );
+            OzLaunchSlide::LaunchCredits => CTAButton::custom("Start locally", |ctx| {
                 ctx.emit(LaunchModalEvent::Close);
                 ctx.dispatch_typed_action(&WorkspaceAction::StartAgentOnboardingTutorial(
                     OnboardingTutorial::NoProject {
@@ -170,22 +158,11 @@ impl Slide for OzLaunchSlide {
     }
 
     fn checkbox_config(&self) -> Option<CheckboxConfig> {
-        Some(CheckboxConfig {
-            label: "Sync conversations to cloud",
-            description: "Agent conversations stored in the cloud can be shared with anyone with one click, and allow conversations to be continued across devices and on logout.",
-        })
+        None
     }
 
-    fn should_show_checkbox(&self, app: &AppContext) -> bool {
-        let cloud_storage_setting =
-            UserWorkspaces::as_ref(app).get_cloud_conversation_storage_enablement_setting();
-        let ugc_setting = UserWorkspaces::as_ref(app).get_ugc_collection_enablement_setting();
-
-        // Show checkbox only when user has control over cloud storage AND UGC is not force-enabled.
-        matches!(
-            cloud_storage_setting,
-            AdminEnablementSetting::RespectUserSetting
-        ) && !matches!(ugc_setting, UgcCollectionEnablementSetting::Enable)
+    fn should_show_checkbox(&self, _app: &AppContext) -> bool {
+        false
     }
 
     fn on_close(&self, ctx: &mut warpui::ViewContext<super::LaunchModal<Self>>) {

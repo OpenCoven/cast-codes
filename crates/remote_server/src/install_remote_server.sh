@@ -5,7 +5,7 @@
 #   {download_base_url}         — e.g. https://app.warp.dev/download/cli
 #   {channel}                   — stable | preview | dev
 #   {install_dir}               — e.g. ~/.warp/remote-server
-#   {binary_name}               — e.g. oz | oz-dev | oz-preview
+#   {binary_name}               — e.g. cast-codes | cast-codes-dev | cast-codes-preview
 #   {version_query}             — e.g. &version=v0.2026... (empty when no release tag)
 #   {version_suffix}            — e.g. -v0.2026...        (empty when no release tag)
 #   {no_http_client_exit_code}  — exit code when neither curl nor wget is available
@@ -62,24 +62,24 @@ if [ -n "$staging_tarball_path" ]; then
   case "$staging_tarball_path" in
     "~"|"~/"*) staging_tarball_path="${HOME}${staging_tarball_path#\~}" ;;
   esac
-  mv "$staging_tarball_path" "$tmpdir/oz.tar.gz"
+  mv "$staging_tarball_path" "$tmpdir/cast-codes.tar.gz"
 else
   # Normal path: download via curl or wget.
   url="{download_base_url}?package=tar&os=$os_name&arch=$arch_name&channel={channel}{version_query}"
 
   if command -v curl >/dev/null 2>&1; then
-    curl -fSL "$url" -o "$tmpdir/oz.tar.gz"
+    curl -fSL "$url" -o "$tmpdir/cast-codes.tar.gz"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$tmpdir/oz.tar.gz" "$url"
+    wget -q -O "$tmpdir/cast-codes.tar.gz" "$url"
   else
     echo "error: neither curl nor wget is available" >&2
     exit {no_http_client_exit_code}
   fi
 fi
 
-tar -xzf "$tmpdir/oz.tar.gz" -C "$tmpdir"
+tar -xzf "$tmpdir/cast-codes.tar.gz" -C "$tmpdir"
 
-bin=$(find "$tmpdir" -type f -name 'oz*' ! -name '*.tar.gz' | head -n1)
+bin=$(find "$tmpdir" -type f -name 'cast-codes*' ! -name '*.tar.gz' | head -n1)
 if [ -z "$bin" ]; then echo "no binary found in tarball" >&2; exit 1; fi
 chmod +x "$bin"
 mv "$bin" "$install_dir/{binary_name}{version_suffix}"

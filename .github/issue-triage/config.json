@@ -70,7 +70,7 @@
     },
     "area:agent": {
       "color": "0052cc",
-      "description": "Agent workflows, conversations, prompts, cloud mode, and AI-specific UI."
+      "description": "Agent workflows, conversations, prompts, and AI-specific UI."
     },
     "area:auth": {
       "color": "5319e7",
@@ -154,7 +154,7 @@
     },
     "area:warp-drive": {
       "color": "0e8a16",
-      "description": "Warp Drive objects, sync, sharing, cloud object management, and persisted artifacts."
+      "description": "Persisted local objects, sharing-related UI, and artifacts."
     },
     "area:window-tabs-panes": {
       "color": "fef2c0",

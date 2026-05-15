@@ -638,7 +638,7 @@ impl ServerCardView {
                         Some(cloud_server) => {
                             format!("Template sync id: {}", cloud_server.sync_id())
                         }
-                        None => "Could not find cloud template".to_string(),
+                        None => "Could not find template".to_string(),
                     };
                     lines.push(format!(
                         "{}",

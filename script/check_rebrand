@@ -99,7 +99,7 @@ if [[ ! -s "$tmp" ]]; then
   exit 0
 fi
 
-allowed='(^WARP.md:|script/macos/bundle:[0-9]+:.*WARP_|script/macos/bundle:[0-9]+:.*WarpDockTilePlugin|script/macos/run:[0-9]+:.*WARP_|script/run:[0-9]+:.*WARP_|script/linux/bundle:[0-9]+:.*WARP_|script/linux/bundle_appimage:[0-9]+:.*WARP_|script/windows/bundle\.ps1:[0-9]+:.*WARP_|script/windows/windows-installer\.iss:[0-9]+:.*WARP_CLI_MODE|app/src/bin/oss\.rs:[0-9]+:.*WarpServerConfig|app/Cargo\.toml:[0-9]+:.*package\.metadata\.bundle\.bin\.warp|app/Cargo\.toml:[0-9]+:.*open_warp_|app/Cargo\.toml:[0-9]+:.*warpify_|app/Cargo\.toml:[0-9]+:.*warpdotdev/|Cargo\.toml:[0-9]+:.*warpdotdev/|app/src/settings_view/mod\.rs:[0-9]+:.*backward compatibility|app/src/settings_view/mod\.rs:[0-9]+:.*"WarpDrive" \| "Warp Drive"|app/src/settings_view/mod\.rs:[0-9]+:.*"Oz" \| "Warp Agent"|app/src/ai_assistant/mod\.rs:[0-9]+://!.*renamed to "Warp AI")'
+allowed='(^WARP.md:|script/macos/bundle:[0-9]+:.*WARP_|script/macos/bundle:[0-9]+:.*WarpDockTilePlugin|script/macos/run:[0-9]+:.*WARP_|script/run:[0-9]+:.*WARP_|script/linux/bundle:[0-9]+:.*WARP_|script/linux/bundle_appimage:[0-9]+:.*WARP_|script/windows/bundle\.ps1:[0-9]+:.*WARP_CLI_MODE|app/src/bin/oss\.rs:[0-9]+:.*WarpServerConfig|app/Cargo\.toml:[0-9]+:.*package\.metadata\.bundle\.bin\.warp|app/Cargo\.toml:[0-9]+:.*open_warp_|app/Cargo\.toml:[0-9]+:.*warpify_|app/Cargo\.toml:[0-9]+:.*warpdotdev/|Cargo\.toml:[0-9]+:.*warpdotdev/|app/src/settings_view/mod\.rs:[0-9]+:.*backward compatibility|app/src/settings_view/mod\.rs:[0-9]+:.*"WarpDrive" \| "Warp Drive"|app/src/settings_view/mod\.rs:[0-9]+:.*"Warp Agent"|app/src/ai_assistant/mod\.rs:[0-9]+://!.*renamed to "Warp AI")'
 
 violations="$(grep -Ev "$allowed" "$tmp" || true)"
 

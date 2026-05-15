@@ -116,8 +116,8 @@ const ADDON_CREDITS_DESCRIPTION: &str = "Add-on credits are purchased in prepaid
 const ADDITIONAL_ADDON_CREDITS_DESCRIPTION_FOR_TEAM: &str =
     "Purchased add-on credits are shared across your team.";
 
-// Cloud agent trial widget constants.
-const AMBIENT_AGENT_TRIAL_TITLE: &str = "Cloud agent trial";
+// Agent trial widget constants.
+const AMBIENT_AGENT_TRIAL_TITLE: &str = "Agent trial";
 /// The threshold below which we only show the "Buy more" button (not "New agent").
 use crate::ai::request_usage_model::AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD;
 

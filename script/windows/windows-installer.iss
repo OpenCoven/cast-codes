@@ -225,7 +225,6 @@ begin
   end;
 
   { After a successful install, write a helper script for running the CastCodes CLI. }
-  { We use this to add an "oz-" prefix for internal channels. }
   if CurStep = ssPostInstall then begin
     { Add CastCodes to PATH if requested }
     if IsTaskSelected('addToPath') then
@@ -238,11 +237,11 @@ begin
     { Determine the channel-specific script name.  These values must match
       `Channel::cli_command_name` in the Rust source. }
 #if ReleaseChannel == "stable"
-    CmdScriptName := 'oz.cmd'
+    CmdScriptName := 'cast-codes.cmd'
 #elif ReleaseChannel == "oss"
     CmdScriptName := 'cast-codes.cmd';
 #else
-    CmdScriptName := 'oz-{#ReleaseChannel}.cmd';
+    CmdScriptName := 'cast-codes-{#ReleaseChannel}.cmd';
 #endif
 
     { Create the helper CMD script }

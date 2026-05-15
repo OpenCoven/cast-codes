@@ -456,7 +456,8 @@ pub fn render_privacy_settings_toggles<A: Action + Clone + 'static>(
         .with_child(
             Shrinkable::new(
                 1.,
-                render_privacy_settings_section_header("Help improve CastCodes", appearance).finish(),
+                render_privacy_settings_section_header("Help improve CastCodes", appearance)
+                    .finish(),
             )
             .finish(),
         )
@@ -475,7 +476,8 @@ pub fn render_privacy_settings_toggles<A: Action + Clone + 'static>(
 
     let telemetry_description = render_description(
         appearance,
-        "High-level feature usage data helps the CastCodes product team prioritize the roadmap.".into(),
+        "High-level feature usage data helps the CastCodes product team prioritize the roadmap."
+            .into(),
     );
 
     let telemetry_link = Flex::row()

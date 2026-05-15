@@ -29,20 +29,19 @@ use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::ViewHandle;
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext};
 
-const DOCS_URL: &str = "https://docs.warp.dev/agent-platform/cloud-agents/overview";
-const ENV_DOCS_URL: &str =
-    "https://docs.warp.dev/reference/cli/integration-setup#creating-an-environment";
-const OZ_URL: &str = "https://oz.warp.dev";
+const DOCS_URL: &str = "https://github.com/OpenCoven/cast-codes";
+const ENV_DOCS_URL: &str = "https://github.com/OpenCoven/cast-codes";
+const CASTCODES_URL: &str = "https://github.com/OpenCoven/cast-codes";
 
 const CONTENT_MAX_WIDTH: f32 = 720.;
 
 const CREATE_ENV_SLASH_CMD: &str = "/create-environment";
 const CREATE_ENV_CLI_CMD: &str =
-    "oz environment create [OPTIONS] --name <NAME> --docker-image <DOCKER_IMAGE>";
+    "cast-codes environment create --name <NAME> --docker-image <DOCKER_IMAGE>";
 const CREATE_SLACK_INTEGRATION_CMD: &str =
-    "oz integration create slack --environment {{environment_id}}";
+    "cast-codes integration create slack --environment {{environment_id}}";
 const CREATE_LINEAR_INTEGRATION_CMD: &str =
-    "oz integration create linear --environment {{environment_id}}";
+    "cast-codes integration create linear --environment {{environment_id}}";
 
 pub struct CloudSetupGuideView {
     create_env_code_handles: CodeSnippetButtonHandles,
@@ -116,7 +115,7 @@ impl CloudSetupGuideView {
         );
 
         let visit_oz_button = ctx.add_typed_action_view(|_| {
-            ActionButton::new("Visit Oz", SecondaryTheme)
+            ActionButton::new("Open CastCodes", SecondaryTheme)
                 .on_click(|ctx| ctx.dispatch_typed_action(CloudSetupGuideAction::VisitOz))
         });
 
@@ -144,7 +143,7 @@ impl CloudSetupGuideView {
         let mut header_container = Flex::column().with_spacing(8.);
 
         let title = Text::new(
-            "Getting started with Oz cloud agents",
+            "Getting started with local agents",
             appearance.ui_font_family(),
             title_font_size,
         )
@@ -154,7 +153,7 @@ impl CloudSetupGuideView {
         header_container.add_child(title);
 
         let subtitle = Text::new(
-            "Start Oz cloud agents directly in CastCodes from an integration (Linear, Slack), with an event (GitHub, built-in schedule), or programmatically with the Oz SDK or CLI.",
+            "Start agents directly in CastCodes from your current workspace and local execution environment.",
             appearance.ui_font_family(),
             subtitle_font_size,
         )
@@ -177,7 +176,7 @@ impl CloudSetupGuideView {
                 appearance
                     .ui_builder()
                     .link(
-                        "Oz documentation".to_string(),
+                        "CastCodes documentation".to_string(),
                         None,
                         Some(Box::new(|ctx| {
                             ctx.dispatch_typed_action(CloudSetupGuideAction::OpenDocs {
@@ -207,13 +206,13 @@ impl CloudSetupGuideView {
         header_container.finish()
     }
 
-    /// Render the quick start banner with link to oz.warp.dev.
+    /// Render the quick start banner with link to CastCodes.
     fn render_quick_start_banner(&self, appearance: &Appearance) -> Box<dyn Element> {
         let theme = appearance.theme();
         let font_size = 16.;
 
         let text = Text::new_inline(
-            "Quick start: Visit oz.warp.dev for a UI-based setup experience.",
+            "Quick start: use /create-environment to prepare a local execution context.",
             appearance.ui_font_family(),
             font_size,
         )
@@ -247,7 +246,7 @@ impl CloudSetupGuideView {
         let font_size = 16.;
 
         Text::new(
-            "Manual setup: Create a Slack or Linear integration with the Oz CLI",
+            "Manual setup: create a local agent environment",
             appearance.ui_font_family(),
             font_size,
         )
@@ -442,7 +441,7 @@ impl CloudSetupGuideView {
 
         let description = Container::new(
             Text::new(
-                "First, set up an environment to create an integration.",
+                "First, set up an environment for local agent work.",
                 appearance.ui_font_family(),
                 step_desc_font_size,
             )
@@ -453,7 +452,7 @@ impl CloudSetupGuideView {
         .finish();
 
         let sub_description = Container::new(Self::render_description_with_link(
-            "Use CastCodes's environment setup command to have an agent help you through it. ",
+            "Use the CastCodes environment setup command to have an agent help you through it. ",
             "Visit docs",
             self.env_docs_link_mouse_state.clone(),
             SetupGuideDocs::Environment,
@@ -515,7 +514,7 @@ impl CloudSetupGuideView {
             .with_child(Self::render_step_number(2, appearance))
             .with_child(
                 Text::new(
-                    "Create an integration",
+                    "Configure optional integrations",
                     appearance.ui_font_family(),
                     step_title_font_size,
                 )
@@ -526,7 +525,7 @@ impl CloudSetupGuideView {
             .finish();
 
         let sub_description = Container::new(Self::render_description_with_link(
-            "Integrate Slack or Linear to assign the Cast Agent tasks with @CastCodes. ",
+            "Connect Slack or Linear when your local setup supports them. ",
             "Visit docs",
             self.integration_docs_link_mouse_state.clone(),
             SetupGuideDocs::Integration,
@@ -653,7 +652,7 @@ impl TypedActionView for CloudSetupGuideView {
                 ));
             }
             CloudSetupGuideAction::VisitOz => {
-                ctx.open_url(OZ_URL);
+                ctx.open_url(CASTCODES_URL);
                 send_telemetry_from_ctx!(
                     AgentManagementTelemetryEvent::SetupGuideStepRun {
                         step: SetupGuideStep::VisitOz

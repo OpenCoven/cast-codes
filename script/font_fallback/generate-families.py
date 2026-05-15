@@ -3,37 +3,40 @@ Generates the `ExternalFontFamily` definitions used in `app/src/font_fallback.rs
 These definitions contain the URLs to each external fallback font we use in Warp.
 Generated code is sent to stdout.
 
-This script will read our cloud storage bucket to retrieve the names of the fonts
-we support, and generate the code required to initialize static references for
-each font family.
-
-Assumes that the fallback fonts in the prod `warp-static-assets` bucket are
-identical to the ones stored in the staging `warp-server-staging-static-assets`
-bucket.
+This script reads fallback font files from a local directory and generates the
+code required to initialize static references for each font family.
 
 Usage:
-1. Make sure the gcloud CLI is installed and you are authed via `gcloud auth login`.
-2. Run `python3 generate_families.py`
+1. Put fallback fonts under `downloaded_fonts/<family>/<font>.ttf`.
+2. Run `python3 generate_families.py`.
 3. Manually inspect the name for each font. The script will generate the name in
    title-case, but this isn't correct for some fonts (e.g. Noto Sans SC).
 '''
 
-import subprocess
 from collections import defaultdict
+from pathlib import Path
+
+FONT_DIR = Path("downloaded_fonts")
 
 
 def list_fonts():
-    command = "gcloud storage ls --recursive 'gs://warp-static-assets/fallback-fonts/**.ttf'"
-    return subprocess.check_output(command, shell=True, text=True).splitlines()
+    if not FONT_DIR.exists():
+        raise SystemExit(f"Missing local fallback font directory: {FONT_DIR}")
+
+    font_paths = sorted(FONT_DIR.rglob("*.ttf"))
+    if not font_paths:
+        raise SystemExit(f"No .ttf files found under {FONT_DIR}")
+    return font_paths
 
 
-def generate_families(font_uris):
+def generate_families(font_paths):
     family_map = defaultdict(list)
-    for uri in font_uris:
-        parts = uri.removeprefix("gs://warp-static-assets/fallback-fonts/").split('/')
-        family_name = parts[0]
-        font_name = parts[1]
-        family_map[family_name].append(font_name)
+    for path in font_paths:
+        rel_path = path.relative_to(FONT_DIR)
+        if len(rel_path.parts) < 2:
+            raise SystemExit(f"Expected <family>/<font>.ttf under {FONT_DIR}, got {rel_path}")
+        family_name = rel_path.parts[0]
+        family_map[family_name].append(path.name)
 
     for family_name, font_names in family_map.items():
         print_family(family_name, font_names)

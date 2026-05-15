@@ -147,24 +147,20 @@ impl FirstTimeCloudAgentSetupView {
 
         // Title - 20px medium weight
         column.add_child(
-            Text::new(
-                "Start a new Oz cloud agent",
-                appearance.ui_font_family(),
-                20.,
-            )
-            .with_style(Properties::default().weight(Weight::Medium))
-            .with_color(theme.foreground().into())
-            .finish(),
+            Text::new("Start a new local agent", appearance.ui_font_family(), 20.)
+                .with_style(Properties::default().weight(Weight::Medium))
+                .with_color(theme.foreground().into())
+                .finish(),
         );
 
         // Description with "Visit docs" link
         let description_fragments = vec![
             FormattedTextFragment::plain_text(
-                "Use Oz cloud agents to run parallel agents, build agents that run autonomously, and check in on your agents from anywhere. ",
+                "Use local agents to work from this workspace and keep repository context on this machine. ",
             ),
             FormattedTextFragment::hyperlink(
                 "Visit docs",
-                "https://docs.warp.dev/agent-platform/cloud-agents/overview",
+                "https://github.com/OpenCoven/cast-codes",
             ),
         ];
         column.add_child(
@@ -192,7 +188,7 @@ impl FirstTimeCloudAgentSetupView {
 
         // Bold/semibold text in foreground color (per Figma: font-semibold text-[#e3e2df])
         Text::new(
-            "Cloud agents require an environment that they'll run in to get their task done. Create your first environment below. You'll be able to edit the environment later, or add new environments when you need them.",
+            "Agents need an environment with the tools and repository state required for the task. Create your first environment below. You'll be able to edit it later, or add new environments when you need them.",
             appearance.ui_font_family(),
             appearance.ui_font_size(),
         )
@@ -225,12 +221,9 @@ impl FirstTimeCloudAgentSetupView {
 
         // Banner text - dynamic based on credits
         let credits_text = if credits == 1 {
-            "You have 1 free credit to use on Oz cloud agents.".to_string()
+            "You have 1 available agent credit.".to_string()
         } else {
-            format!(
-                "You have {} free credits to use on Oz cloud agents.",
-                credits
-            )
+            format!("You have {} available agent credits.", credits)
         };
         let text = Text::new(credits_text, appearance.ui_font_family(), 12.)
             .with_color(blended_colors::text_sub(theme, theme.surface_1()))

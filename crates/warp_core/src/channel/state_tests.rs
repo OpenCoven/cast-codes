@@ -23,6 +23,14 @@ fn unparseable_input_returns_none() {
 #[test]
 fn oss_channel_uses_castcodes_public_identity() {
     assert_eq!(Channel::Oss.cli_command_name(), "cast-codes");
+    assert_eq!(Channel::Stable.cli_command_name(), "cast-codes");
+    assert_eq!(Channel::Dev.cli_command_name(), "cast-codes-dev");
+    assert_eq!(Channel::Preview.cli_command_name(), "cast-codes-preview");
+    assert_eq!(Channel::Local.cli_command_name(), "cast-codes-local");
+    assert_eq!(
+        Channel::Integration.cli_command_name(),
+        "cast-codes-integration"
+    );
     assert_eq!(Channel::Oss.to_string(), "cast-codes");
     assert_eq!(
         ChannelState::app_id().to_string(),

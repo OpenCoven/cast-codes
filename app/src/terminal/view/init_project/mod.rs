@@ -864,7 +864,7 @@ impl InitStepBlock {
                 };
                 Self::render_ready_with_buttons(
                     action_view,
-                    "Would you like to create an environment for this project so you can run cloud agents in it? The agent will guide you through choosing GitHub repos, configuring a Docker image, and specifying startup commands.",
+                    "Would you like to create an environment for this project? The agent will guide you through choosing GitHub repos, configuring a Docker image, and specifying startup commands.",
                     app,
                 )
             }

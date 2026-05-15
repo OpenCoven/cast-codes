@@ -28,11 +28,11 @@ const SUBSCRIBE_ITEMS: &[&str] = &[
     "1,500 credits per month",
     "Access to frontier OpenAI, Anthropic, and Google models",
     "Access to Reload credits and volume-based discounts",
-    "Extended cloud agents access",
+    "Extended agent access",
     "Highest codebase indexing limits",
     "Unlimited Warp Drive objects and collaboration",
     "Private email support",
-    "Unlimited cloud conversation storage",
+    "Unlimited conversation storage",
 ];
 
 #[derive(Debug, Clone)]
@@ -122,7 +122,7 @@ impl FreeUserNoAiSlide {
             0,
             Icon::Code2,
             "Agent driven development with Warp's built-in agent",
-            "Iterate, plan, and build with Oz: Warp's built-in agent. Available locally or in the cloud.",
+            "Iterate, plan, and build with Cast Agent inside CastCodes.",
             agent_price_badge.to_string(),
             true, // badge is green
             self.agent_mouse_state.clone(),

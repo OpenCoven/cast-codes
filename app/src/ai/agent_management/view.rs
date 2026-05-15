@@ -1977,7 +1977,7 @@ impl AgentManagementView {
             let mut stack = Stack::new().with_child(loading_icon);
             if mouse_state.is_hovered() {
                 let tooltip = ui_builder
-                    .tool_tip(String::from("Loading cloud agent runs"))
+                    .tool_tip(String::from("Loading agent runs"))
                     .build()
                     .finish();
                 stack.add_positioned_overlay_child(

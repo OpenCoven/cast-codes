@@ -321,7 +321,10 @@ pub async fn make_authenticated_client(
     // For apps for which we have static client IDs (e.g. GitHub), we manually override scopes.
     let mut scopes: &[&str] = &[];
 
-    let config = match auth_manager.register_client("CastCodes", &redirect_uri).await {
+    let config = match auth_manager
+        .register_client("CastCodes", &redirect_uri)
+        .await
+    {
         Ok(config) => config,
         Err(err @ AuthError::RegistrationFailed(_)) => {
             // If we failed dynamic registration, check to see if this is an auth

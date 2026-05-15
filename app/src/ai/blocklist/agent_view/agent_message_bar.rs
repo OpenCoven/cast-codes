@@ -890,7 +890,7 @@ impl MessageProvider<AgentMessageArgs<'_>> for ExitCloudHandoffModeMessageProduc
                 background_color: None,
             },
             MessageItem::Text {
-                content: "to hand off to cloud".into(),
+                content: "to hand off".into(),
                 color: Some(active_color),
             },
             MessageItem::Keystroke {

@@ -127,12 +127,12 @@ impl CloudAgentCapacityModal {
         let neutral_bg = blended_colors::neutral_1(theme);
         let (title_text, mut explanation_text) = match self.variant {
             CloudAgentCapacityModalVariant::ConcurrentLimit => (
-                "Concurrent cloud agent limit reached",
-                "This cloud run is queued because your team has reached the maximum number of concurrent cloud agents. It will start automatically when another cloud run finishes.".to_string(),
+                "Concurrent agent limit reached",
+                "This agent run is queued because your team has reached the maximum number of concurrent agent runs. It will start automatically when another run finishes.".to_string(),
             ),
             CloudAgentCapacityModalVariant::OutOfCredits => (
                 "You're out of AI credits",
-                "This cloud run stopped because your team has used all available AI credits for the current billing period.".to_string(),
+                "This agent run stopped because your team has used all available AI credits for the current billing period.".to_string(),
             ),
         };
 
@@ -148,10 +148,10 @@ impl CloudAgentCapacityModal {
         if can_upgrade {
             let upgrade_suffix = match self.variant {
                 CloudAgentCapacityModalVariant::ConcurrentLimit => {
-                    " Upgrade your plan for more concurrent cloud agents."
+                    " Upgrade your plan for more concurrent agents."
                 }
                 CloudAgentCapacityModalVariant::OutOfCredits => {
-                    " Upgrade your plan to continue running cloud agents."
+                    " Upgrade your plan to continue running agents."
                 }
             };
             explanation_text.push_str(upgrade_suffix);
@@ -220,7 +220,7 @@ impl CloudAgentCapacityModal {
 
             // Benefits list based on plan type
             let mut benefits = vec![
-                format!("{} the number of concurrent cloud agents", agent_multiplier),
+                format!("{} the number of concurrent agents", agent_multiplier),
                 credits_text,
                 "Bring your own API key".to_string(),
             ];

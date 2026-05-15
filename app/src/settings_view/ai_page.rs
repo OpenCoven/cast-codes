@@ -275,8 +275,8 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
         vec![ToggleSettingActionPair::custom(
             SettingActionPairDescriptions::new(
-                "Show Oz changelog in new agent conversation view",
-                "Hide Oz changelog in new agent conversation view",
+                "Show agent changelog in new agent conversation view",
+                "Hide agent changelog in new agent conversation view",
             ),
             builder(SettingsAction::AI(
                 AISettingsPageAction::ToggleShowOzUpdatesInZeroState,
@@ -1518,7 +1518,7 @@ impl AISettingsPageView {
                 }
             }
             Some(AISubpage::WarpAgent) => {
-                // Oz page: global toggle + Active AI + Input + Other
+                // Agent page: global toggle + Active AI + Input + Other
                 widgets.push(Box::new(GlobalAIWidget::default()));
                 if ai_settings
                     .intelligent_autosuggestions_enabled_internal
@@ -3253,7 +3253,7 @@ impl SettingsWidget for GlobalAIWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz warp agent global ai a.i. active next command prompt code diffs suggestion suggested suggestions \
+        "agent global ai a.i. active next command prompt code diffs suggestion suggested suggestions \
                 agent mode natural language detection input hint api keys bring your own byo google anthropic openai"
     }
 
@@ -4968,7 +4968,7 @@ impl SettingsWidget for AIInputWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz agent ai input natural language detection autodetection prompt terminal command commands history shell executed execution"
+        "agent ai input natural language detection autodetection prompt terminal command commands history shell executed execution"
     }
 
     fn render(
@@ -5218,7 +5218,7 @@ impl SettingsWidget for MCPServersWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz agent mcp server servers model context protocol file-based file based project claude .mcp.json .claude/.mcp.json .codex config.toml .codex/config.toml"
+        "agent mcp server servers model context protocol file-based file based project claude .mcp.json .claude/.mcp.json .codex config.toml .codex/config.toml"
     }
 
     fn should_render(&self, _app: &AppContext) -> bool {
@@ -5470,7 +5470,7 @@ impl SettingsWidget for AIFactWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "agent oz ai a.i. knowledge fact memory memories rules warp drive context workflows notebooks environment variables"
+        "agent ai a.i. knowledge fact memory memories rules drive context workflows notebooks environment variables"
     }
 
     fn should_render(&self, _app: &AppContext) -> bool {
@@ -5598,7 +5598,7 @@ impl SettingsWidget for VoiceWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "voice agent oz ai a.i. speech input natural language talk english"
+        "voice agent ai a.i. speech input natural language talk english"
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
@@ -5663,7 +5663,7 @@ impl SettingsWidget for OtherAIWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "other oz updates zero state empty changelog new conversation agent what's new use agent footer toolbar layout chip chips rearrange re-arrange thinking expanded reasoning collapse never show hide conversation history"
+        "other updates zero state empty changelog new conversation agent what's new use agent footer toolbar layout chip chips rearrange re-arrange thinking expanded reasoning collapse never show hide conversation history"
     }
 
     fn render(
@@ -5691,7 +5691,7 @@ impl SettingsWidget for OtherAIWidget {
         if FeatureFlag::AgentView.is_enabled() {
             let mut agent_view_column = Flex::column()
                 .with_child(render_ai_setting_toggle::<ShouldShowOzUpdatesInZeroState>(
-                    "Show Oz changelog in new conversation view",
+                    "Show agent changelog in new conversation view",
                     AISettingsPageAction::ToggleShowOzUpdatesInZeroState,
                     *ai_settings.should_show_oz_updates_in_zero_state,
                     is_toggleable,
@@ -6099,7 +6099,7 @@ impl SettingsWidget for AgentAttributionWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "agent attribution commit pull request co-author author credit oz warp"
+        "agent attribution commit pull request co-author author credit"
     }
 
     fn render(
@@ -6175,7 +6175,7 @@ impl SettingsWidget for AgentAttributionWidget {
             )
             .with_child(toggle_row)
             .with_child(render_ai_setting_description(
-                "Oz can add attribution to commit messages and pull requests it creates",
+                "The agent can add attribution to commit messages and pull requests it creates",
                 !state.is_disabled,
                 app,
             ))
@@ -6197,7 +6197,7 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
     type View = AISettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "oz cloud agent computer use orchestration multi-agent"
+        "agent computer use orchestration multi-agent"
     }
 
     fn render(
@@ -6254,7 +6254,7 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
 
         let toggle_row = build_toggle_element(
             render_body_item_label::<AISettingsPageAction>(
-                "Computer use in Cloud Agents".to_string(),
+                "Computer use in agents".to_string(),
                 Some(styles::header_font_color(!is_disabled, app)),
                 None,
                 LocalOnlyIconState::Hidden,
@@ -6279,7 +6279,7 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
             )
             .with_child(toggle_row)
             .with_child(render_ai_setting_description(
-                "Enable computer use in cloud agent conversations started from the CastCodes app.",
+                "Enable computer use in agent conversations started from the CastCodes app.",
                 !is_disabled,
                 app,
             ));
@@ -6439,7 +6439,7 @@ impl ApiKeysWidget {
             .with_child(
                 Container::new(
                     render_ai_setting_description(
-                        "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced to the cloud. Using auto models or models from providers you have not provided API keys for will consume CastCodes credits.",
+                        "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced. Using auto models or models from providers you have not provided API keys for will consume CastCodes credits.",
                         is_enabled,
                         app,
                     ))

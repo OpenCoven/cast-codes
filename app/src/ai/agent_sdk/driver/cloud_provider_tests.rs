@@ -20,7 +20,7 @@ fn aws_provider_env_vars_before_setup() {
     );
     assert_eq!(
         vars.get(&OsString::from("AWS_ROLE_SESSION_NAME")),
-        Some(&OsString::from("Oz_Run_abc-123"))
+        Some(&OsString::from("CastCodes_Run_abc-123"))
     );
     let token_file = PathBuf::from(
         vars.get(&OsString::from("AWS_WEB_IDENTITY_TOKEN_FILE"))
@@ -59,7 +59,7 @@ fn extract_cloud_providers_creates_aws_provider() {
     );
     assert_eq!(
         vars.get(&OsString::from("AWS_ROLE_SESSION_NAME")),
-        Some(&OsString::from("Oz_Run_run-42"))
+        Some(&OsString::from("CastCodes_Run_run-42"))
     );
 }
 

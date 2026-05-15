@@ -314,10 +314,9 @@ use warpui::{AppContext, SingletonEntity, WindowId};
 #[include = "async/**"] // Should be kept in sync with ASYNC_ASSETS_DIR.
 #[cfg_attr(target_family = "wasm", exclude = "async/**")]
 // Excludes take precedence.
-// Standalone CLI builds (the `oz` tarball) are headless and never render the
-// onboarding/theme imagery in `async/`, so we exclude those bytes from the
-// embedded asset set to keep the CLI binary small — mirroring the carve-out
-// already applied for the WASM target above.
+// Standalone CLI builds are headless and never render the onboarding/theme
+// imagery in `async/`, so we exclude those bytes from the embedded asset set to
+// keep the CLI binary small, mirroring the carve-out already applied for WASM.
 #[cfg_attr(feature = "standalone", exclude = "async/**")]
 pub struct Assets;
 
@@ -723,10 +722,10 @@ pub fn run() -> Result<()> {
         }
     }
 
-    // If running as a standalone CLI binary or invoked as "oz", print help
-    // instead of launching the GUI app.
+    // If running as a standalone CLI binary or invoked through a CastCodes CLI
+    // wrapper, print help instead of launching the GUI app.
     let is_cli_binary = cfg!(feature = "standalone")
-        || warp_cli::binary_name().is_some_and(|name| name.starts_with("oz"))
+        || warp_cli::binary_name().is_some_and(|name| name.starts_with("cast-codes"))
         || std::env::var_os("WARP_CLI_MODE").is_some();
     if is_cli_binary {
         warp_cli::Args::clap_command().print_help()?;

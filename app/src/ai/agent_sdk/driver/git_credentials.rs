@@ -24,8 +24,8 @@ use command::blocking::Command as BlockingCommand;
 /// well ahead of the one-hour GitHub token expiry).
 pub(crate) const GIT_CREDENTIALS_REFRESH_INTERVAL: Duration = Duration::from_secs(50 * 60);
 
-const DEFAULT_GIT_NAME: &str = "Oz";
-const DEFAULT_GIT_EMAIL: &str = "oz-agent@warp.dev";
+const DEFAULT_GIT_NAME: &str = "CastCodes Agent";
+const DEFAULT_GIT_EMAIL: &str = "agent@cast.codes";
 
 fn home_dir() -> Result<PathBuf> {
     dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))
