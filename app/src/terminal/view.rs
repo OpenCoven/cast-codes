@@ -11948,6 +11948,9 @@ impl TerminalView {
         ctx: &mut ViewContext<Self>,
     ) {
         let Some(notification) = parse_event(title, body) else {
+            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions_model, ctx| {
+                sessions_model.notify_event_parse_failed(self.view_id, ctx);
+            });
             return;
         };
 

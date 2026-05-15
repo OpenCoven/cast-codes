@@ -21,7 +21,10 @@ use super::conversation::ConversationBinding;
 use super::entry::{ChatEntryKind, StopReason};
 use super::model::ChatModel;
 use super::store::ChatStore;
-use crate::terminal::cli_agent_sessions::event::{parse_event, CLIAgentEvent};
+use crate::terminal::cli_agent_sessions::{
+    event::{parse_event, CLIAgentEvent},
+    CLIAgentSessionStatus,
+};
 
 const SENTINEL: &str = "warp://cli-agent";
 
@@ -106,6 +109,61 @@ fn stop_event_with_response_splits_into_assistant_then_stop() {
     // Sequences are monotonically increasing across the synthetic split.
     let seqs: Vec<u64> = conv.entries.iter().map(|e| e.sequence).collect();
     assert_eq!(seqs, vec![0, 1, 2]);
+}
+
+#[test]
+fn event_status_updates_conversation() {
+    let mut model = ChatModel::new_unwired();
+    let terminal_view_id = EntityId::new();
+
+    let prompt = parse_fixture(include_str!("tests/fixtures/claude_prompt_submit.json"));
+    model.apply_event(&prompt, terminal_view_id, Utc::now());
+
+    let permission = parse_fixture(include_str!(
+        "tests/fixtures/claude_permission_request.json"
+    ));
+    model.apply_event(&permission, terminal_view_id, Utc::now());
+
+    let conv = model.conversation("abc").expect("conversation exists");
+    match &conv.status {
+        CLIAgentSessionStatus::Blocked { message } => {
+            assert_eq!(message.as_deref(), Some("Wants to run Bash: rm -rf /tmp"));
+        }
+        other => panic!("expected Blocked status, got {:?}", other),
+    }
+
+    let replied = parse_fixture(
+        r#"{"v":1,"agent":"claude","event":"permission_replied","session_id":"abc","summary":"approved"}"#,
+    );
+    model.apply_event(&replied, terminal_view_id, Utc::now());
+
+    let conv = model.conversation("abc").expect("conversation exists");
+    assert!(matches!(conv.status, CLIAgentSessionStatus::InProgress));
+
+    let stop = parse_fixture(include_str!(
+        "tests/fixtures/claude_stop_with_response.json"
+    ));
+    model.apply_event(&stop, terminal_view_id, Utc::now());
+
+    let conv = model.conversation("abc").expect("conversation exists");
+    assert!(matches!(conv.status, CLIAgentSessionStatus::Success));
+}
+
+#[test]
+fn ended_terminal_converts_live_binding_to_past() {
+    let mut model = ChatModel::new_unwired();
+    let terminal_view_id = EntityId::new();
+    let other_terminal_view_id = EntityId::new();
+
+    model.bind_live_for_testing("abc".to_owned(), terminal_view_id);
+    assert!(!model.close_live_binding_for_testing(other_terminal_view_id));
+    assert!(matches!(model.binding(), ConversationBinding::Live { .. }));
+
+    assert!(model.close_live_binding_for_testing(terminal_view_id));
+    assert!(matches!(
+        model.binding(),
+        ConversationBinding::Past { session_id } if session_id == "abc"
+    ));
 }
 
 #[test]
@@ -198,7 +256,9 @@ fn events_persist_to_store() {
     model.apply_event(&event, tid, Utc::now());
 
     // The in-memory conversation is present.
-    let conv = model.conversation("abc").expect("conversation exists in memory");
+    let conv = model
+        .conversation("abc")
+        .expect("conversation exists in memory");
     assert_eq!(conv.entries.len(), 1);
 
     // The store also has it persisted.
@@ -324,13 +384,27 @@ fn prompt_submit_without_query_increments_skipped_count() {
     assert_eq!(model.skipped_event_count(), 0);
 
     // A PromptSubmit *without* a query — `from_event` returns None.
-    let no_query = parse_fixture(
-        r#"{"v":1,"agent":"claude","event":"prompt_submit","session_id":"abc"}"#,
-    );
+    let no_query =
+        parse_fixture(r#"{"v":1,"agent":"claude","event":"prompt_submit","session_id":"abc"}"#);
     model.apply_event(&no_query, tid, Utc::now());
     assert_eq!(model.skipped_event_count(), 1);
 
     // Sending another one increments again.
     model.apply_event(&no_query, tid, Utc::now());
     assert_eq!(model.skipped_event_count(), 2);
+}
+
+#[test]
+fn unknown_event_increments_skipped_count() {
+    let mut model = ChatModel::new_unwired();
+    let tid = EntityId::new();
+    let unknown = parse_fixture(
+        r#"{"v":1,"agent":"claude","event":"future_event","session_id":"abc","summary":"new protocol event"}"#,
+    );
+
+    model.apply_event(&unknown, tid, Utc::now());
+
+    assert_eq!(model.skipped_event_count(), 1);
+    let conv = model.conversation("abc").expect("conversation exists");
+    assert!(matches!(conv.entries[0].kind, ChatEntryKind::Raw { .. }));
 }

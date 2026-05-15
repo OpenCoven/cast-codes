@@ -273,6 +273,9 @@ pub enum CLIAgentSessionsModelEvent {
         agent: CLIAgent,
         event: Box<CLIAgentEvent>,
     },
+    /// A structured CLI-agent notification used the expected sentinel but
+    /// could not be parsed by this build.
+    EventParseFailed { terminal_view_id: EntityId },
 }
 
 impl CLIAgentSessionsModelEvent {
@@ -295,7 +298,10 @@ impl CLIAgentSessionsModelEvent {
             }
             | CLIAgentSessionsModelEvent::EventReceived {
                 terminal_view_id, ..
-            } => *terminal_view_id,
+            }
+            | CLIAgentSessionsModelEvent::EventParseFailed { terminal_view_id } => {
+                *terminal_view_id
+            }
         }
     }
 }
@@ -450,6 +456,14 @@ impl CLIAgentSessionsModel {
             agent,
             event: Box::new(event.clone()),
         });
+    }
+
+    pub fn notify_event_parse_failed(
+        &mut self,
+        terminal_view_id: EntityId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        ctx.emit(CLIAgentSessionsModelEvent::EventParseFailed { terminal_view_id });
     }
 
     pub fn open_input(

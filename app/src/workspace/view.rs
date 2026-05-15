@@ -3417,10 +3417,11 @@ impl Workspace {
     ) {
         if matches!(
             event,
-            CLIAgentSessionsModelEvent::Started { .. }
+                CLIAgentSessionsModelEvent::Started { .. }
                 | CLIAgentSessionsModelEvent::StatusChanged { .. }
                 | CLIAgentSessionsModelEvent::Ended { .. }
                 | CLIAgentSessionsModelEvent::SessionUpdated { .. }
+                | CLIAgentSessionsModelEvent::EventParseFailed { .. }
         ) && self.workspace_contains_terminal_view(event.terminal_view_id(), ctx)
         {
             ctx.notify();

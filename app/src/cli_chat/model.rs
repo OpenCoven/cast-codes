@@ -15,7 +15,8 @@ use crate::cli_chat::conversation::{AgentKind, ChatConversation, ConversationBin
 use crate::cli_chat::entry::{ChatEntry, ChatEntryKind};
 use crate::cli_chat::store::ChatStore;
 use crate::terminal::cli_agent_sessions::{
-    event::CLIAgentEvent, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
+    event::{CLIAgentEvent, CLIAgentEventType},
+    CLIAgentSessionStatus, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
 };
 
 /// Events emitted by [`ChatModel`] for view subscribers.
@@ -173,11 +174,7 @@ impl ChatModel {
         match store.list_conversations() {
             Ok(convs) => {
                 for conv in convs {
-                    let next_seq = conv
-                        .entries
-                        .last()
-                        .map(|e| e.sequence + 1)
-                        .unwrap_or(0);
+                    let next_seq = conv.entries.last().map(|e| e.sequence + 1).unwrap_or(0);
                     let sid = conv.session_id.clone();
                     self.conversations.insert(sid.clone(), conv);
                     self.next_sequence.insert(sid, next_seq);
@@ -232,10 +229,20 @@ impl ChatModel {
             CLIAgentSessionsModelEvent::Started { .. }
             | CLIAgentSessionsModelEvent::StatusChanged { .. }
             | CLIAgentSessionsModelEvent::InputSessionChanged { .. }
-            | CLIAgentSessionsModelEvent::Ended { .. }
             | CLIAgentSessionsModelEvent::SessionUpdated { .. } => {
                 // Status and lifecycle events are derived from the raw
                 // EventReceived stream — nothing to do here.
+            }
+            CLIAgentSessionsModelEvent::EventParseFailed { .. } => {
+                self.skipped_event_count += 1;
+                ctx.emit(ChatModelEvent::ProtocolIncompatibilityDetected);
+            }
+            CLIAgentSessionsModelEvent::Ended {
+                terminal_view_id, ..
+            } => {
+                if self.close_live_binding_for_terminal(*terminal_view_id) {
+                    ctx.emit(ChatModelEvent::BindingChanged);
+                }
             }
         }
     }
@@ -290,6 +297,9 @@ impl ChatModel {
         if conv.project.is_none() {
             conv.project = event.project.clone();
         }
+        if let Some(status) = status_from_event(event, &conv.status) {
+            conv.status = status;
+        }
         conv.updated_at = now;
 
         let next_seq = self.next_sequence.entry(session_id.clone()).or_insert(0);
@@ -299,6 +309,10 @@ impl ChatModel {
         let mut entries_to_persist: Vec<ChatEntry> = Vec::new();
 
         if let Some(entry) = ChatEntry::from_event(event, *next_seq, now) {
+            if matches!(entry.kind, ChatEntryKind::Raw { .. }) {
+                self.skipped_event_count += 1;
+            }
+
             // Auto-derive title from the first user prompt.
             if conv.title.is_empty() {
                 if let ChatEntryKind::UserPrompt { text } = &entry.kind {
@@ -384,7 +398,71 @@ impl ChatModel {
 
         outcome
     }
+}
 
+impl ChatModel {
+    fn close_live_binding_for_terminal(&mut self, terminal_view_id: EntityId) -> bool {
+        let ConversationBinding::Live {
+            session_id,
+            terminal_view_id: bound_terminal_view_id,
+        } = &self.binding
+        else {
+            return false;
+        };
+
+        if *bound_terminal_view_id != terminal_view_id {
+            return false;
+        }
+
+        self.binding = ConversationBinding::Past {
+            session_id: session_id.clone(),
+        };
+        true
+    }
+
+    #[cfg(test)]
+    pub(crate) fn bind_live_for_testing(
+        &mut self,
+        session_id: String,
+        terminal_view_id: EntityId,
+    ) {
+        self.binding = ConversationBinding::Live {
+            session_id,
+            terminal_view_id,
+        };
+    }
+
+    #[cfg(test)]
+    pub(crate) fn close_live_binding_for_testing(&mut self, terminal_view_id: EntityId) -> bool {
+        self.close_live_binding_for_terminal(terminal_view_id)
+    }
+}
+
+fn status_from_event(
+    event: &CLIAgentEvent,
+    current: &CLIAgentSessionStatus,
+) -> Option<CLIAgentSessionStatus> {
+    match &event.event {
+        CLIAgentEventType::PromptSubmit => Some(CLIAgentSessionStatus::InProgress),
+        CLIAgentEventType::ToolComplete | CLIAgentEventType::PermissionReplied => {
+            matches!(current, CLIAgentSessionStatus::Blocked { .. })
+                .then_some(CLIAgentSessionStatus::InProgress)
+        }
+        CLIAgentEventType::Stop => Some(CLIAgentSessionStatus::Success),
+        CLIAgentEventType::PermissionRequest => Some(CLIAgentSessionStatus::Blocked {
+            message: event.payload.summary.clone(),
+        }),
+        CLIAgentEventType::QuestionAsked => Some(CLIAgentSessionStatus::Blocked {
+            message: event
+                .payload
+                .summary
+                .clone()
+                .or_else(|| Some("Waiting for your answer".to_owned())),
+        }),
+        CLIAgentEventType::IdlePrompt
+        | CLIAgentEventType::SessionStart
+        | CLIAgentEventType::Unknown(_) => None,
+    }
 }
 
 /// Result of [`ChatModel::apply_event`].
