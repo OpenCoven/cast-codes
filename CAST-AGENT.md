@@ -57,6 +57,18 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   six are shared infrastructure that `crates/ai` requires regardless of
   agent backend. No code changes — this is a roadmap so the next agent
   can pick the right starting point.
+- ✅ Host substrate bridge —
+  [`CastAgentRuntime::set_host_substrate`](crates/cast_agent/src/runtime.rs)
+  lets the host (`app/src`) push the editor-side slice of substrate
+  (`active_file`, `open_panes`, `recent_errors`) into an
+  `Arc<RwLock<HostSubstrate>>` owned by the runtime.
+  [`CastAgentRuntime::build_substrate`](crates/cast_agent/src/runtime.rs)
+  overlays it on top of the cast_agent-collected base (shell CWD, git
+  branch, Comux panes) for gateway calls. Verified end-to-end by
+  [`crates/cast_agent/tests/substrate.rs`](crates/cast_agent/tests/substrate.rs).
+  Currently `app/src/lib.rs::run` only pushes a `HostSubstrate::default()`
+  baseline; replacing that stub with editor / pane / LSP-driven updates
+  is the next slice.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
   agent panel switch to `stream_messages` for actual chat — see
   "Open follow-ups" below.

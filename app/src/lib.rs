@@ -591,6 +591,13 @@ pub fn run() -> Result<()> {
     #[cfg(feature = "cast-agent")]
     {
         let _ = ::ai::cast_agent::global();
+        // Initialise the host-owned substrate slice to a known-empty
+        // baseline. Real wiring (editor focus → `active_file`, tab
+        // lifecycle → `open_panes`, LSP arrivals → `recent_errors`) is
+        // intentionally deferred to follow-up PRs so this PR stays scoped
+        // to the bridge contract. The cast_agent runtime falls back to
+        // these defaults until a future caller replaces them.
+        ::ai::cast_agent::set_host_substrate(::ai::cast_agent::HostSubstrate::default());
     }
 
     // Parse command-line arguments.

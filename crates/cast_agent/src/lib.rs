@@ -23,6 +23,6 @@ pub use agent::{AgentBackend, AgentMessage, AgentResponse, CastAgent};
 pub use comux::ComuxPane;
 pub use config::CastAgentConfig;
 pub use gateway::MessageChunk;
-pub use runtime::{global, is_available, sessions, CastAgentRuntime};
+pub use runtime::{global, is_available, sessions, set_host_substrate, CastAgentRuntime};
 pub use session::{CovenSession, SessionStatus};
-pub use substrate::{DiagnosticEntry, PaneInfo, Substrate};
+pub use substrate::{DiagnosticEntry, DiagnosticSeverity, HostSubstrate, PaneInfo, Substrate};
