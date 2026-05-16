@@ -32,9 +32,21 @@ use crate::{
     ui_components::{blended_colors, buttons::icon_button_with_color, icons::Icon},
 };
 
+use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
 use super::url_input::{resolve, Resolved};
 use super::webview_host::NativeBrowserWebView;
+
+/// Map a model-side URL to the URL the webview should actually load.
+/// `about:home` is rendered from a bundled HTML page served as a `data:` URL;
+/// every other URL is loaded verbatim.
+fn webview_url_for(model_url: &str) -> String {
+    if model_url == "about:home" {
+        about_home::url()
+    } else {
+        model_url.to_string()
+    }
+}
 
 const URL_BAR_HEIGHT: f32 = 32.0;
 const TOOLBAR_HEIGHT: f32 = 48.0;
@@ -177,7 +189,7 @@ impl BrowserView {
         let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             initial_tab_id,
-            model.current_url().to_string(),
+            webview_url_for(model.current_url()),
             title_tx.clone(),
             true,
         )));
@@ -260,7 +272,7 @@ impl BrowserView {
                 editor.set_buffer_text_with_base_buffer(&url, ctx);
             });
             if let Some(webview) = self.active_webview() {
-                webview.borrow_mut().load_url(&url);
+                webview.borrow_mut().load_url(&webview_url_for(&url));
             }
             self.sync_pane_title(ctx);
             ctx.notify();
@@ -311,7 +323,7 @@ impl BrowserView {
         let (tab_id, _idx) = self.model.add_tab(DEFAULT_BROWSER_URL);
         let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             tab_id,
-            DEFAULT_BROWSER_URL.to_string(),
+            webview_url_for(DEFAULT_BROWSER_URL),
             self.title_tx.clone(),
             true,
         )));
@@ -346,7 +358,7 @@ impl BrowserView {
         if let Some(new_tab_id) = result.new_tab_id {
             let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
                 new_tab_id,
-                DEFAULT_BROWSER_URL.to_string(),
+                webview_url_for(DEFAULT_BROWSER_URL),
                 self.title_tx.clone(),
                 true,
             )));
