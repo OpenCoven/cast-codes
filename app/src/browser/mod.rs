@@ -1,3 +1,4 @@
+pub(crate) mod about_home;
 mod browser_model;
 mod browser_view;
 pub(crate) mod url_input;
