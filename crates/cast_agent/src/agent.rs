@@ -30,7 +30,7 @@ pub struct AgentResponse {
 /// The substrate manager + AI agent backend trait that the host calls into.
 ///
 /// All methods are async. `is_available` is sync so the UI can poll cheaply.
-#[allow(async_fn_in_trait)]
+#[async_trait::async_trait]
 pub trait AgentBackend: Send + Sync {
     /// Send a chat message and await the (non-streamed) response.
     async fn send_message(&self, msg: AgentMessage) -> anyhow::Result<AgentResponse>;
