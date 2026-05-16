@@ -1,4 +1,5 @@
 pub(crate) mod about_home;
+pub(crate) mod agent_api;
 pub(crate) mod browser_model;
 mod browser_view;
 pub(crate) mod data_dir;
