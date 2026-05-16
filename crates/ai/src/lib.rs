@@ -11,7 +11,10 @@ pub mod cast_agent {
     //! of truth. Today this is a pass-through; if more host-side wiring
     //! lands (e.g. wrapping `is_available` with telemetry), it goes here.
 
-    pub use ::cast_agent::{global, is_available, CastAgent, CastAgentConfig, CastAgentRuntime};
+    pub use ::cast_agent::{
+        global, is_available, sessions, CastAgent, CastAgentConfig, CastAgentRuntime, CovenSession,
+        SessionStatus,
+    };
 }
 
 pub mod llm_id;

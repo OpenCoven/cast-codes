@@ -23,8 +23,15 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   `render_gateway_status_pill`). Green when the gateway is reachable,
   amber otherwise; brand colours in
   [`app/src/ai/coven_brand.rs`](app/src/ai/coven_brand.rs)
-  (`OPENCOVEN_SUCCESS`/`OPENCOVEN_WARNING`).
-- ⏳ Session list / click-through, streaming responses, per-call
+  (`OPENCOVEN_SUCCESS`/`OPENCOVEN_WARNING`/`OPENCOVEN_MUTED`).
+- ✅ Coven Sessions section — read-only list under the transcript in the
+  agent panel
+  ([`app/src/ai_assistant/panel.rs`](app/src/ai_assistant/panel.rs)
+  `render_sessions_section`). Shows name, status dot, and last-active
+  timestamp per session. Hidden until the gateway answers at least once.
+  Cached snapshot is refreshed on a 60-second background loop on the
+  cast_agent runtime; UI reads it sync via a `std::sync::RwLock`.
+- ⏳ Session click-through, streaming responses, per-call
   `#[cfg(feature = "warp-agent")]` gating — see "Open follow-ups" below.
 
 ## Architecture

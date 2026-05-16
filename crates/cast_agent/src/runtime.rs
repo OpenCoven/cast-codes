@@ -17,12 +17,18 @@ use tokio::runtime::Runtime;
 use crate::{
     agent::{AgentBackend, CastAgent},
     config::CastAgentConfig,
+    session::CovenSession,
 };
 
 /// How often the background loop re-probes `GET /health`. Chosen to be
 /// short enough that the UI pill flips within ~a minute of the gateway
 /// coming back up, but long enough not to flood logs.
 const HEALTH_PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// How often the background loop re-fetches the active session list.
+/// Slower than the health probe because sessions change less frequently
+/// and the request is more expensive than `GET /health`.
+const SESSION_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Owns the dedicated tokio runtime and an initialized [`CastAgent`].
 /// Cheap to clone via `Arc` — the inner runtime is shared.
@@ -56,6 +62,18 @@ impl CastAgentRuntime {
             }
         });
 
+        // Periodic session refresh so `sessions_snapshot()` stays current.
+        // Initial fetch runs immediately so the UI has data on first render
+        // (modulo network latency); subsequent fetches happen on the interval.
+        let session_agent = agent.clone();
+        handle.spawn(async move {
+            session_agent.refresh_sessions().await;
+            loop {
+                tokio::time::sleep(SESSION_REFRESH_INTERVAL).await;
+                session_agent.refresh_sessions().await;
+            }
+        });
+
         Ok(Self {
             agent,
             handle,
@@ -67,6 +85,13 @@ impl CastAgentRuntime {
     /// safe to call on the UI thread on every render.
     pub fn is_available(&self) -> bool {
         self.agent.is_available()
+    }
+
+    /// Sync snapshot of the cached Coven session list. Safe to call from
+    /// the UI render thread — reads a [`std::sync::RwLock`] populated by
+    /// the background refresh loop.
+    pub fn sessions(&self) -> Vec<CovenSession> {
+        self.agent.sessions_snapshot()
     }
 
     /// Display name ("Cast Agent").
@@ -106,4 +131,10 @@ pub fn global() -> Option<&'static CastAgentRuntime> {
 /// Returns `false` if the runtime never started.
 pub fn is_available() -> bool {
     global().map(CastAgentRuntime::is_available).unwrap_or(false)
+}
+
+/// Sync convenience for the agent panel's session list. Returns an empty
+/// `Vec` if the runtime never started or the first refresh hasn't landed.
+pub fn sessions() -> Vec<CovenSession> {
+    global().map(CastAgentRuntime::sessions).unwrap_or_default()
 }

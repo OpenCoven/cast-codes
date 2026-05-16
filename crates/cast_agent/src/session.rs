@@ -1,10 +1,15 @@
 //! Coven session bridging — list / open / close active sessions through
 //! the gateway, with in-memory caching so the UI can render without
 //! re-querying on every render pass.
+//!
+//! The cache uses [`std::sync::RwLock`] (not `tokio::sync::RwLock`) so the
+//! UI thread can take a synchronous read snapshot on every render — the
+//! mutator side is the background refresh loop running on the cast_agent
+//! runtime, and contention is negligible (one writer, brief critical
+//! section). Switching to `arc-swap` would be marginally faster but adds
+//! a dependency for no measurable win at this list size.
 
-use std::sync::Arc;
-
-use tokio::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::gateway::GatewayClient;
 
@@ -43,20 +48,26 @@ impl SessionStore {
     pub async fn list(&self) -> anyhow::Result<Vec<CovenSession>> {
         match self.gateway.list_sessions().await {
             Ok(sessions) => {
-                let mut guard = self.cache.write().await;
+                let mut guard = self
+                    .cache
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 *guard = sessions.clone();
                 Ok(sessions)
             }
             Err(err) => {
                 log::warn!("cast_agent: session list failed: {err}");
-                Ok(self.cache.read().await.clone())
+                Ok(self.snapshot())
             }
         }
     }
 
     pub async fn open(&self, name: &str) -> anyhow::Result<CovenSession> {
         let session = self.gateway.open_session(name).await?;
-        let mut guard = self.cache.write().await;
+        let mut guard = self
+            .cache
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(existing) = guard.iter_mut().find(|s| s.id == session.id) {
             *existing = session.clone();
         } else {
@@ -67,12 +78,21 @@ impl SessionStore {
 
     pub async fn close(&self, id: &str) -> anyhow::Result<()> {
         self.gateway.close_session(id).await?;
-        let mut guard = self.cache.write().await;
+        let mut guard = self
+            .cache
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.retain(|s| s.id != id);
         Ok(())
     }
 
-    pub async fn cached(&self) -> Vec<CovenSession> {
-        self.cache.read().await.clone()
+    /// Sync snapshot of the cached session list. Safe to call from the
+    /// UI thread — uses a [`std::sync::RwLock`] and recovers from
+    /// poisoning by returning the inner data unchanged.
+    pub fn snapshot(&self) -> Vec<CovenSession> {
+        self.cache
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 }

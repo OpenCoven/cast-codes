@@ -23,3 +23,12 @@ pub(crate) const OPENCOVEN_WARNING: ColorU = ColorU {
     b: 11,
     a: 255,
 };
+
+/// Brand muted text colour (`#5A5A65`) — used for closed-session status
+/// dots and secondary metadata in Coven session rows.
+pub(crate) const OPENCOVEN_MUTED: ColorU = ColorU {
+    r: 90,
+    g: 90,
+    b: 101,
+    a: 255,
+};

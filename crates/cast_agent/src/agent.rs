@@ -101,6 +101,23 @@ impl CastAgent {
     pub async fn health_probe(&self) {
         self.gateway.health_probe().await;
     }
+
+    /// Refresh the cached session list from the gateway. Logs and keeps the
+    /// previous snapshot on transport error — never panics. Returns the
+    /// (possibly stale) cached list either way.
+    pub async fn refresh_sessions(&self) -> Vec<CovenSession> {
+        self.sessions.list().await.unwrap_or_else(|err| {
+            log::debug!("cast_agent: session refresh skipped: {err}");
+            self.sessions.snapshot()
+        })
+    }
+
+    /// Sync snapshot of the cached session list. Safe to call from the UI
+    /// render thread. Returns whatever the most recent `refresh_sessions`
+    /// produced, or an empty `Vec` before the first refresh completes.
+    pub fn sessions_snapshot(&self) -> Vec<CovenSession> {
+        self.sessions.snapshot()
+    }
 }
 
 #[async_trait::async_trait]
