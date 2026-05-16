@@ -48,8 +48,18 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   [`crates/cast_agent/tests/streaming.rs`](crates/cast_agent/tests/streaming.rs).
   No UI consumer yet — the agent panel still uses the existing
   non-streaming chat path.
-- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating, agent panel switch
-  to `stream_messages` for actual chat — see "Open follow-ups" below.
+- ✅ Per-call `warp-agent` gating audit — see
+  [Feature-gating audit](#feature-gating-audit-warp-agent-vs-cast-agent)
+  below. Verdict: of the seven warp_* deps the brief listed, only
+  `warp_multi_agent_api` is actually gateable, and even that needs a
+  three-phase setup (extract wire types from public API → add
+  cast_agent-native parallel types → optional-ify the dep). The other
+  six are shared infrastructure that `crates/ai` requires regardless of
+  agent backend. No code changes — this is a roadmap so the next agent
+  can pick the right starting point.
+- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
+  agent panel switch to `stream_messages` for actual chat — see
+  "Open follow-ups" below.
 
 ## Architecture
 
@@ -173,3 +183,74 @@ be done in a follow-up PR without partially-wiring the host crate:
    single round-trip. A `stream_messages` method using `tokio-tungstenite`
    against `/v1/messages/stream` should be added when the host wires its
    streaming UI through.
+
+## Feature-gating audit (`warp-agent` vs `cast-agent`)
+
+[`CODY-BRIEF.md`](CODY-BRIEF.md) §2.5 calls for gating the upstream
+`warp_*` dependencies in `crates/ai` behind a `warp-agent` Cargo feature
+so `cast-agent`-only builds are leaner. After auditing every `warp_*`
+import in `crates/ai/src/` against today's code (`grep -rln warp_*
+crates/ai/src/`), the picture is more constrained than the brief
+implied: most of the listed crates provide **shared infrastructure**
+that `crates/ai` uses for non-agent purposes (telemetry, codebase
+indexing, UI entity primitives, paths). Only one crate is plausibly
+gateable today.
+
+### Per-dep verdict
+
+| Dep | Files / refs | Used for | Verdict |
+|-----|--------------|----------|---------|
+| `warp_core`            | 9 / 27 | Telemetry, `features::FeatureFlag`, `channel::ChannelState`, `command::ExitCode`, `paths::secure_state_dir`, `sync_queue`, `ui::Icon`, `safe_anyhow!`/`safe_warn!` macros. Used by `telemetry.rs`, `aws_credentials.rs`, the entire `index/full_source_code_embedding/` codebase-indexing tree, and the agent action paths. | **Shared infra — cannot gate.** Required for `crates/ai` to compile regardless of agent backend. |
+| `warp_util`            | 6 / 19 | `StandardizedPath` (workspace-wide path normalization), used by codebase indexing tests + production paths. | **Shared infra — cannot gate.** Non-agent codebase indexing depends on it. |
+| `warpui`               | 8 / 12 | `Entity`, `ModelContext`, `SingletonEntity`, `ModelHandle`, `App`, `AppContext`, `r#async::Timer`, `platform::OperatingSystem`. The GPUI-style entity system. Every model/view in `crates/ai` participates. | **Shared infra — cannot gate.** UI framework foundation; gating it removes `crates/ai` itself. |
+| `warpui_extras`        | 1 / 1  | `secure_storage::AppContextExt` for `api_keys.rs`. | **Shared infra — cannot gate.** Used by non-agent api-key storage. |
+| `warp_terminal`        | 5 / 6  | `shell::ShellLaunchData` (used by `paths.rs`, non-agent), `model::BlockId`, `model::escape_sequences` (used by agent action paths). | **Mixed.** Non-agent `paths.rs` use blocks wholesale gating. Could narrow the gate to the agent action paths only, but the dep stays unconditional. |
+| `warp_graphql`         | 2 / 25 | `EmbeddingConfig`, `RepoMetadata`, `FragmentLocationInput` for codebase indexing GraphQL queries. **Not used by agent paths.** | **Shared infra — cannot gate.** Codebase-indexing wire types, not agent protocol. |
+| `warp_multi_agent_api` | 10 / 19 | Agent protocol wire types: `LifecycleEventType`, `FileContent`, `AnyFileContent`, `SkillReference`, `message::tool_call::*` mode types, `apply_file_diffs_result::*`. Used in `agent/`, `skills/`, `api_keys.rs`, `aws_credentials.rs`. Currently re-exported as public API of `crates/ai` (`pub use warp_multi_agent_api::LifecycleEventType;` in `agent/action/mod.rs`). | **Gateable in principle — but blocked by the public-API leak.** See the roadmap below. |
+
+### Roadmap to a real `warp-agent` gate
+
+The brief assumed each warp_* dep is "an agent client construction site"
+that can be wrapped with a `#[cfg(...)]` block. The actual shape of the
+codebase is different: the only meaningful gating opportunity is
+`warp_multi_agent_api`, and even that needs preparation before the
+`#[cfg(...)]` can land safely.
+
+**Phase A — stop leaking wire types through `crates/ai`'s public API.**
+Today `crates/ai/src/agent/action/mod.rs` does
+`pub use warp_multi_agent_api::LifecycleEventType;`, and several
+`From<warp_multi_agent_api::FileContent> for FileContext` impls live in
+`agent/action/convert.rs`. Downstream `app/src/` consumers depend on
+these. Step one is to keep all `warp_multi_agent_api` references
+*internal* to `crates/ai`: define `crates/ai`-owned types for anything
+that's re-exported, with `From` conversions kept inside the agent
+subtree. No behaviour change, no feature flags yet.
+
+**Phase B — `cast_agent`-native parallel types.** Introduce equivalent
+types inside `cast_agent` (or a new `agent_wire_types` crate that both
+backends depend on). Define `From<cast_agent::Foo> for
+crates::ai::Foo` and the reverse where needed. Keep the warp-agent
+side gated behind `#[cfg(feature = "warp-agent")]`.
+
+**Phase C — actually gate the dep.** Once Phase A and B land, the
+`warp_multi_agent_api` import in `crates/ai/src/agent/` lives only
+inside `#[cfg(feature = "warp-agent")]` blocks. Cargo can then
+optional-ify the dep:
+
+```toml
+warp_multi_agent_api = { workspace = true, optional = true }
+warp-agent = ["dep:warp_multi_agent_api", ...]
+```
+
+`cast-agent`-only builds will then skip the protobuf compilation and
+the dep entirely.
+
+### What this PR is not
+
+This PR ships **no code changes** beyond the documentation update —
+explicitly per scope choice. The work above is multi-PR; landing Phase
+A alone would touch every `agent/` and `skills/` consumer. Future
+agents should treat the per-dep verdict table as ground truth before
+attempting `#[cfg(feature = "warp-agent")]` blocks. Most warp_* deps
+will never be gateable in `crates/ai` because their use is not
+agent-related — and that's a real architectural answer, not a TODO.
