@@ -235,6 +235,7 @@ jobs:
         env:
           CHANNEL: ${{ needs.prepare_release.outputs.channel }}
           GIT_RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
+          SHOULD_PUBLISH: ${{ needs.prepare_release.outputs.should_publish }}
           WARP_APPLE_TEAM_ID: 9LR8Z8UQ9X
           WARP_CODESIGN_IDENTITY: "Developer ID Application: Soul Protocol LLC (9LR8Z8UQ9X)"
           WARP_DEVELOPER_ID_CERT: ${{ secrets.WARP_DEVELOPER_ID_CERT }}
@@ -244,22 +245,28 @@ jobs:
           WARP_NOTARIZATION_PASSWORD: ${{ secrets.WARP_NOTARIZATION_PASSWORD }}
         run: |
           set -euo pipefail
-          required=(
-            WARP_DEVELOPER_ID_CERT
-            WARP_DEVELOPER_ID_CERT_PASSWORD
-            WARP_CODESIGN_KEYCHAIN_PASSWORD
-            WARP_NOTARIZATION_APPLE_ID
-            WARP_NOTARIZATION_PASSWORD
-          )
-          for var in "${required[@]}"; do
-            if [[ -z "${!var:-}" ]]; then
-              echo "::error::${var} is required to publish a Gatekeeper-valid macOS DMG"
-              exit 1
-            fi
-          done
-          script/bundle --read-passwords-from-env --channel "$CHANNEL" --arch aarch64 --dmg-name-suffix arm64
+          if [[ "$SHOULD_PUBLISH" == "true" ]]; then
+            required=(
+              WARP_DEVELOPER_ID_CERT
+              WARP_DEVELOPER_ID_CERT_PASSWORD
+              WARP_CODESIGN_KEYCHAIN_PASSWORD
+              WARP_NOTARIZATION_APPLE_ID
+              WARP_NOTARIZATION_PASSWORD
+            )
+            for var in "${required[@]}"; do
+              if [[ -z "${!var:-}" ]]; then
+                echo "::error::${var} is required to publish a Gatekeeper-valid macOS DMG"
+                exit 1
+              fi
+            done
+            script/bundle --read-passwords-from-env --channel "$CHANNEL" --arch aarch64 --dmg-name-suffix arm64
+          else
+            echo "Dry run: building unsigned macOS bundle (signing/notarization skipped)."
+            script/bundle --nosign --channel "$CHANNEL" --arch aarch64 --dmg-name-suffix arm64
+          fi
 
       - name: Verify notarized DMG
+        if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
