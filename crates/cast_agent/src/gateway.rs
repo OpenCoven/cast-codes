@@ -34,7 +34,7 @@ impl GatewayClient {
         let http = reqwest::Client::builder()
             .timeout(config.request_timeout)
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .expect("cast_agent: failed to build reqwest client (TLS init?)");
         Self {
             config,
             http,

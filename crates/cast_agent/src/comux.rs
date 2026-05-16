@@ -95,18 +95,27 @@ impl Default for ComuxBridge {
 
 #[cfg(unix)]
 async fn unix_request(path: &Path) -> anyhow::Result<Vec<ComuxPane>> {
+    use std::time::Duration;
+
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
+    use tokio::time::timeout;
 
-    let mut stream = UnixStream::connect(path).await?;
-    let req = serde_json::to_string(&ListPanesRequest { kind: "list_panes" })?;
-    stream.write_all(req.as_bytes()).await?;
-    stream.write_all(b"\n").await?;
-    stream.flush().await?;
+    const COMUX_DEADLINE: Duration = Duration::from_secs(2);
 
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    reader.read_line(&mut line).await?;
-    let parsed: ListPanesResponse = serde_json::from_str(line.trim())?;
-    Ok(parsed.panes)
+    timeout(COMUX_DEADLINE, async {
+        let mut stream = UnixStream::connect(path).await?;
+        let req = serde_json::to_string(&ListPanesRequest { kind: "list_panes" })?;
+        stream.write_all(req.as_bytes()).await?;
+        stream.write_all(b"\n").await?;
+        stream.flush().await?;
+
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).await?;
+        let parsed: ListPanesResponse = serde_json::from_str(line.trim())?;
+        Ok::<_, anyhow::Error>(parsed.panes)
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("comux request timed out after {:?}", COMUX_DEADLINE))?
 }

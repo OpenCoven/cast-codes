@@ -19,8 +19,8 @@ pub struct AgentMessage {
     pub body: serde_json::Value,
 }
 
-/// Generic response from the agent. Streaming is handled separately by
-/// [`GatewayClient::stream_messages`].
+/// Generic response from the agent. The gateway currently only supports the
+/// non-streamed `POST /v1/messages` path; streaming will be added separately.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AgentResponse {
     pub conversation_id: String,
@@ -66,12 +66,14 @@ pub struct CastAgent {
 
 impl CastAgent {
     /// Build a CastAgent from config (or defaults if `None`).
-    /// Performs a non-blocking health check on construction.
+    /// Construction is non-blocking: the gateway health probe runs on a
+    /// detached task so a down gateway can't stall startup. `is_available()`
+    /// will start returning true once the probe lands.
     pub async fn new(config: Option<CastAgentConfig>) -> Self {
         let config = Arc::new(config.unwrap_or_default());
         let gateway = Arc::new(GatewayClient::new(config.clone()));
-        // Best-effort health probe — sets `is_available()` accordingly.
-        gateway.health_probe().await;
+        let probe_gateway = gateway.clone();
+        tokio::spawn(async move { probe_gateway.health_probe().await });
         let substrate = Arc::new(SubstrateCollector::new());
         let sessions = Arc::new(SessionStore::new(gateway.clone()));
         let comux = Arc::new(ComuxBridge::new());

@@ -19,7 +19,7 @@ paths here are:
 | `crates/workspace/src/status_bar.rs`     | `app/src/shell_indicator.rs` + tab decorations   |
 | `crates/project_panel`, `crates/outline_panel` | not present (Warp has no project panel)    |
 | `crates/editor`                          | `crates/editor` (already exists)                 |
-| `cargo check -p zed`                     | `cargo check -p warp --bin cast-codes --features gui` |
+| `cargo check -p zed`                     | `cargo check -p warp-app --bin cast-codes --features gui` |
 
 `WarpTheme::new()` accepts seven concrete slots (background fill,
 foreground color, accent fill, optional gradient, details preset, terminal
@@ -127,11 +127,11 @@ the brief is asking for at a coarse level — finer surface separation
 - `cargo check -p ai` ✅ (42.21s) with the new `default = ["cast-agent"]`.
 
 The theme changes and rebrand string sweeps are syntactic edits to
-existing files in the `app` crate; full `cargo check -p warp` on this
+existing files in the `app` crate; full `cargo check -p warp-app` on this
 Warp fork is a multi-minute compile and was not run in this session.
 Recommended verification before merge:
 
 ```bash
 ./script/check_rebrand
-cargo check -p warp --bin cast-codes --features gui
+cargo check -p warp-app --bin cast-codes --features gui
 ```

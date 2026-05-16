@@ -23,30 +23,3 @@ pub use comux::ComuxPane;
 pub use config::CastAgentConfig;
 pub use session::CovenSession;
 pub use substrate::{DiagnosticEntry, PaneInfo, Substrate};
-
-/// Error type for cast_agent operations.
-#[derive(Debug, thiserror::Error)]
-pub enum CastAgentError {
-    #[error("gateway unreachable: {0}")]
-    GatewayUnreachable(String),
-
-    #[error("gateway returned status {status}: {body}")]
-    GatewayStatus { status: u16, body: String },
-
-    #[error("transport error: {0}")]
-    Transport(#[from] reqwest::Error),
-
-    #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("deserialization error: {0}")]
-    Serde(#[from] serde_json::Error),
-
-    #[error("config error: {0}")]
-    Config(String),
-
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
-
-pub type Result<T> = std::result::Result<T, CastAgentError>;

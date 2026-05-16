@@ -60,8 +60,10 @@ impl SubstrateCollector {
         Self {}
     }
 
-    /// Collect a minimal substrate snapshot. The host is expected to fill in
-    /// editor/pane state via [`Self::with_host_state`] before sending.
+    /// Collect a minimal substrate snapshot (shell CWD + git branch).
+    /// The host (`crates/ai`) is expected to merge in `active_file`,
+    /// `open_panes`, and `recent_errors` from its own editor state before
+    /// sending; this collector does not yet expose a dedicated merge helper.
     pub async fn collect(&self) -> anyhow::Result<Substrate> {
         let shell_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
         let git_branch = detect_git_branch(&shell_cwd);
@@ -82,21 +84,41 @@ impl Default for SubstrateCollector {
     }
 }
 
-/// Read the current branch from `<cwd>/.git/HEAD` if present, without
-/// shelling out to git. Returns `None` for detached HEAD or non-git dirs.
+/// Read the current branch by walking up from `cwd` looking for `.git`,
+/// handling both a `.git` directory (regular repo) and a `.git` file
+/// containing `gitdir: <path>` (worktrees, submodules). Returns `None` for
+/// detached HEAD or non-git dirs. Never shells out to git.
 fn detect_git_branch(cwd: &std::path::Path) -> Option<String> {
     let mut dir = cwd.to_path_buf();
     loop {
-        let head = dir.join(".git").join("HEAD");
-        if head.exists() {
-            let content = std::fs::read_to_string(&head).ok()?;
-            let trimmed = content.trim();
-            return trimmed
-                .strip_prefix("ref: refs/heads/")
-                .map(|s| s.to_string());
+        let git_entry = dir.join(".git");
+        if git_entry.is_dir() {
+            return read_branch_from_head(&git_entry.join("HEAD"));
+        }
+        if git_entry.is_file() {
+            let content = std::fs::read_to_string(&git_entry).ok()?;
+            let gitdir = content
+                .lines()
+                .find_map(|l| l.strip_prefix("gitdir:"))?
+                .trim();
+            let gitdir_path = std::path::PathBuf::from(gitdir);
+            let resolved = if gitdir_path.is_absolute() {
+                gitdir_path
+            } else {
+                dir.join(gitdir_path)
+            };
+            return read_branch_from_head(&resolved.join("HEAD"));
         }
         if !dir.pop() {
             return None;
         }
     }
+}
+
+fn read_branch_from_head(head: &std::path::Path) -> Option<String> {
+    let content = std::fs::read_to_string(head).ok()?;
+    let trimmed = content.trim();
+    trimmed
+        .strip_prefix("ref: refs/heads/")
+        .map(|s| s.to_string())
 }

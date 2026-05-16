@@ -36,14 +36,14 @@ impl CastAgentConfig {
         cfg.gateway_url = std::env::var("COVEN_GATEWAY_URL")
             .ok()
             .filter(|v| !v.trim().is_empty())
-            .or(file_cfg.gateway_url)
+            .or_else(|| file_cfg.gateway_url.filter(|v| !v.trim().is_empty()))
             .unwrap_or_else(|| DEFAULT_GATEWAY_URL.to_string());
 
         // 2. Token — env > file > token-file.
         cfg.token = std::env::var("COVEN_TOKEN")
             .ok()
             .filter(|v| !v.trim().is_empty())
-            .or(file_cfg.token)
+            .or_else(|| file_cfg.token.filter(|v| !v.trim().is_empty()))
             .or_else(Self::load_token_file);
 
         cfg
