@@ -332,4 +332,23 @@ mod tests {
         assert_eq!(model.tabs()[0].display_title(), "Page A");
         assert_eq!(model.tabs()[1].display_title(), "Page B");
     }
+
+    #[test]
+    fn new_tab_has_default_pinned_and_no_favicon() {
+        let model = BrowserModel::new("https://a.test");
+        let tab = &model.tabs()[0];
+        assert!(!tab.pinned());
+        assert_eq!(tab.favicon(), None);
+    }
+
+    #[test]
+    fn pinned_and_favicon_setters_round_trip() {
+        let mut model = BrowserModel::new("https://a.test");
+        let id = model.tabs()[0].id();
+        model.set_pinned(id, true);
+        model.set_favicon(id, Some("https://a.test/favicon.ico".into()));
+        let tab = &model.tabs()[0];
+        assert!(tab.pinned());
+        assert_eq!(tab.favicon(), Some("https://a.test/favicon.ico"));
+    }
 }
