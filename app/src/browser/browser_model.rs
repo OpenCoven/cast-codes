@@ -1,4 +1,4 @@
-pub const DEFAULT_BROWSER_URL: &str = "https://opencoven.ai";
+pub const DEFAULT_BROWSER_URL: &str = "about:home";
 
 use serde::{Deserialize, Serialize};
 
@@ -373,6 +373,18 @@ mod tests {
             normalize_url("http://localhost:3000"),
             "http://localhost:3000"
         );
+    }
+
+    #[test]
+    fn default_new_tab_lands_on_about_home() {
+        let model = BrowserModel::new(DEFAULT_BROWSER_URL);
+        assert_eq!(model.current_url(), "about:home");
+    }
+
+    #[test]
+    fn about_scheme_passes_through_normalize() {
+        assert_eq!(normalize_url("about:home"), "about:home");
+        assert_eq!(normalize_url("about:blank"), "about:blank");
     }
 
     #[test]
