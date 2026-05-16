@@ -31,6 +31,11 @@ pub(crate) struct NativeBrowserWebView {
     #[cfg(not(target_family = "wasm"))]
     devtools_enabled: bool,
     title_tx: async_channel::Sender<(TabId, String)>,
+    /// Channel for popup / new-window-requested URLs. Every webview in
+    /// the same pane sends to the same receiver; the pane creates a new
+    /// tab for each URL it gets.
+    #[cfg(not(target_family = "wasm"))]
+    new_window_tx: async_channel::Sender<String>,
     pending_url: Option<String>,
     bounds: Option<RectF>,
     desired_visible: bool,
@@ -45,6 +50,7 @@ impl NativeBrowserWebView {
         desired_visible: bool,
         #[cfg(not(target_family = "wasm"))] web_context: SharedWebContext,
         #[cfg(not(target_family = "wasm"))] devtools_enabled: bool,
+        #[cfg(not(target_family = "wasm"))] new_window_tx: async_channel::Sender<String>,
     ) -> Self {
         Self {
             tab_id,
@@ -55,6 +61,8 @@ impl NativeBrowserWebView {
             #[cfg(not(target_family = "wasm"))]
             devtools_enabled,
             title_tx,
+            #[cfg(not(target_family = "wasm"))]
+            new_window_tx,
             pending_url: Some(initial_url.into()),
             bounds: None,
             desired_visible,
@@ -157,6 +165,7 @@ impl NativeBrowserWebView {
 
             let url = self.pending_url.clone().unwrap_or_default();
             let title_tx = self.title_tx.clone();
+            let new_window_tx = self.new_window_tx.clone();
             let tab_id = self.tab_id;
             let mut web_context = self.web_context.borrow_mut();
             match wry::WebViewBuilder::new_as_child(&parent)
@@ -168,6 +177,14 @@ impl NativeBrowserWebView {
                 .with_accept_first_mouse(true)
                 .with_document_title_changed_handler(move |title| {
                     let _ = title_tx.try_send((tab_id, title));
+                })
+                .with_new_window_req_handler(move |requested_url: String| -> bool {
+                    // Forward the raw URL — the receiver applies popup_policy
+                    // with a warpui ctx available so OS hand-offs use
+                    // ctx.open_url() rather than dragging in an `opener` dep.
+                    let _ = new_window_tx.try_send(requested_url);
+                    // Never let wry pop a native window.
+                    false
                 })
                 .build()
             {
