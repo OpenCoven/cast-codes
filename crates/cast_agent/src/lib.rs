@@ -15,11 +15,13 @@ pub mod agent;
 pub mod comux;
 pub mod config;
 pub mod gateway;
+pub mod runtime;
 pub mod session;
 pub mod substrate;
 
 pub use agent::{AgentBackend, AgentMessage, AgentResponse, CastAgent};
 pub use comux::ComuxPane;
 pub use config::CastAgentConfig;
+pub use runtime::{global, is_available, CastAgentRuntime};
 pub use session::CovenSession;
 pub use substrate::{DiagnosticEntry, PaneInfo, Substrate};

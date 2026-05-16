@@ -583,6 +583,16 @@ pub fn run() -> Result<()> {
     // Ensure feature flags are initialized before parsing command-line arguments.
     init_feature_flags();
 
+    // Eagerly boot the Cast Agent runtime so the first `is_available()` poll
+    // on the UI thread is a cheap atomic read (the lazy `OnceLock` would
+    // otherwise initialize on first render and briefly block). Errors are
+    // logged but never fatal — a missing or down Coven Gateway just keeps the
+    // agent panel pill amber. See `crates/cast_agent/src/runtime.rs`.
+    #[cfg(feature = "cast-agent")]
+    {
+        let _ = ::ai::cast_agent::global();
+    }
+
     // Parse command-line arguments.
     let args = warp_cli::Args::from_env();
 
