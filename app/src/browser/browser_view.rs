@@ -696,6 +696,7 @@ impl BrowserView {
             .finish();
 
         let chip_mouse = ui_state.chip_mouse.clone();
+        let accent = theme.accent();
         let chip = Hoverable::new(chip_mouse, move |hover_state| {
             let background = if is_active {
                 Some(active_bg)
@@ -710,6 +711,9 @@ impl BrowserView {
                 .with_corner_radius(CornerRadius::with_all(Radius::Pixels(TAB_BORDER_RADIUS)));
             if let Some(bg) = background {
                 container = container.with_background(bg);
+            }
+            if is_active {
+                container = container.with_border(Border::all(1.0).with_border_fill(accent));
             }
             container.finish()
         })
