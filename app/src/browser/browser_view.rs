@@ -180,6 +180,14 @@ pub struct BrowserView {
 }
 
 impl BrowserView {
+    /// Read-only access to the underlying model. Used by the workspace to
+    /// snapshot tab state for persistence.
+    pub(crate) fn model(&self) -> &BrowserModel {
+        &self.model
+    }
+}
+
+impl BrowserView {
     pub fn new(initial_url: Option<String>, ctx: &mut ViewContext<Self>) -> Self {
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =

@@ -1,5 +1,5 @@
 pub(crate) mod about_home;
-mod browser_model;
+pub(crate) mod browser_model;
 mod browser_view;
 pub(crate) mod persistence;
 pub(crate) mod url_input;

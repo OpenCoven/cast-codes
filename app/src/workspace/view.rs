@@ -3248,6 +3248,11 @@ impl Workspace {
             registry.register(window_id, weak_handle);
         });
 
+        // Restore the browser pane if it was open at last shutdown.
+        // No-op on wasm where the pane isn't supported.
+        #[cfg(not(target_family = "wasm"))]
+        ws.restore_browser_state_on_init(ctx);
+
         ws
     }
 
@@ -13054,7 +13059,7 @@ impl Workspace {
     }
 
     /// Toggles the browser pane: closes it if an open browser pane exists in
-    /// the active pane group, opens one if not.
+    /// the active pane group, opens one if not. Persists the resulting state.
     #[cfg(not(target_family = "wasm"))]
     pub(crate) fn toggle_browser_pane(&mut self, ctx: &mut ViewContext<Self>) {
         let group = self.active_tab_pane_group();
@@ -13064,13 +13069,76 @@ impl Workspace {
             .find(|id| id.is_browser_pane());
         match existing {
             Some(pane_id) => {
+                // Snapshot model BEFORE close so the persisted tab list
+                // reflects the state the user closed at.
+                let snapshot = group
+                    .as_ref(ctx)
+                    .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
+                    .map(|pane| {
+                        pane.browser_view(ctx)
+                            .as_ref(ctx)
+                            .model()
+                            .snapshot(/* open */ false)
+                    });
                 group.update(ctx, |pane_group, ctx| {
                     pane_group.close_pane(pane_id, ctx);
                 });
+                if let Some(state) = snapshot {
+                    Self::write_browser_state(&state);
+                }
             }
             None => {
                 self.open_browser_pane(None, ctx);
+                // Capture the freshly opened pane's snapshot for persistence.
+                let group = self.active_tab_pane_group();
+                let snapshot = group
+                    .as_ref(ctx)
+                    .pane_ids()
+                    .find(|id| id.is_browser_pane())
+                    .and_then(|pane_id| {
+                        group
+                            .as_ref(ctx)
+                            .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
+                    })
+                    .map(|pane| {
+                        pane.browser_view(ctx)
+                            .as_ref(ctx)
+                            .model()
+                            .snapshot(/* open */ true)
+                    });
+                if let Some(state) = snapshot {
+                    Self::write_browser_state(&state);
+                }
             }
+        }
+    }
+
+    /// Writes the supplied browser state to disk. Errors are logged, not
+    /// propagated — persistence is a convenience, not a correctness boundary.
+    #[cfg(not(target_family = "wasm"))]
+    fn write_browser_state(state: &crate::pane_group::pane::browser::browser_model::BrowserState) {
+        let Some(dir) = warp_core::paths::warp_home_config_dir() else {
+            log::warn!("cannot persist browser state: no CastCodes home dir");
+            return;
+        };
+        if let Err(err) = crate::pane_group::pane::browser::persistence::save(&dir, state) {
+            log::warn!("failed to persist browser state: {err}");
+        }
+    }
+
+    /// At workspace init: if the user last quit with the browser pane open,
+    /// reopen it. v1 reopens with a fresh default tab; restoring the
+    /// previously-open tab list is a follow-up.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn restore_browser_state_on_init(&mut self, ctx: &mut ViewContext<Self>) {
+        let Some(dir) = warp_core::paths::warp_home_config_dir() else {
+            return;
+        };
+        let Some(state) = crate::pane_group::pane::browser::persistence::load(&dir) else {
+            return;
+        };
+        if state.open {
+            self.open_browser_pane(None, ctx);
         }
     }
 
