@@ -63,6 +63,8 @@ pub enum BrowserViewAction {
     NewTab,
     CloseTab(usize),
     SelectTab(usize),
+    OpenExternal,
+    Collapse,
 }
 
 #[derive(Default, Clone)]
@@ -160,6 +162,8 @@ pub struct BrowserView {
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
     new_tab_button_mouse_state: MouseStateHandle,
+    collapse_button_mouse_state: MouseStateHandle,
+    open_external_button_mouse_state: MouseStateHandle,
 }
 
 impl BrowserView {
@@ -220,6 +224,8 @@ impl BrowserView {
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
             new_tab_button_mouse_state: MouseStateHandle::default(),
+            collapse_button_mouse_state: MouseStateHandle::default(),
+            open_external_button_mouse_state: MouseStateHandle::default(),
         }
     }
 
@@ -471,14 +477,27 @@ impl BrowserView {
             .with_main_axis_size(MainAxisSize::Max);
 
         toolbar.add_child(self.render_toolbar_button(
-            Icon::ArrowLeft,
-            "Back",
-            self.back_button_mouse_state.clone(),
+            Icon::LeftSidebarClose,
+            "Toggle browser pane (⌘⌥B)",
+            self.collapse_button_mouse_state.clone(),
             false,
-            !self.model.can_go_back(),
-            BrowserViewAction::Back,
+            false,
+            BrowserViewAction::Collapse,
             app,
         ));
+        toolbar.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::ArrowLeft,
+                "Back",
+                self.back_button_mouse_state.clone(),
+                false,
+                !self.model.can_go_back(),
+                BrowserViewAction::Back,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
         toolbar.add_child(
             Container::new(self.render_toolbar_button(
                 Icon::ArrowRight,
@@ -526,6 +545,20 @@ impl BrowserView {
                     .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
                     .finish(),
             )
+            .finish(),
+        );
+
+        toolbar.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::LinkExternal,
+                "Open in default browser",
+                self.open_external_button_mouse_state.clone(),
+                false,
+                false,
+                BrowserViewAction::OpenExternal,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
             .finish(),
         );
 
@@ -741,6 +774,16 @@ impl TypedActionView for BrowserView {
             BrowserViewAction::NewTab => self.new_tab(ctx),
             BrowserViewAction::CloseTab(idx) => self.close_tab(*idx, ctx),
             BrowserViewAction::SelectTab(idx) => self.select_tab(*idx, ctx),
+            BrowserViewAction::OpenExternal => {
+                let url = self.model.current_url().to_string();
+                ctx.open_url(&url);
+            }
+            BrowserViewAction::Collapse => {
+                // The `workspace:toggle_browser_pane` global action is
+                // registered in Phase 7; dispatching by string name resolves
+                // at runtime, so it's safe to land before the handler exists.
+                ctx.dispatch_global_action("workspace:toggle_browser_pane", &());
+            }
         }
     }
 }
