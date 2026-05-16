@@ -38,8 +38,19 @@ impl ActiveFileModel {
         // Only emit event if the active file changed.
         if self.active_file.as_ref() != Some(&path) {
             self.active_file = Some(path.clone());
-            ctx.emit(ActiveFileEvent::ActiveFileChanged { file_info: path });
+            ctx.emit(ActiveFileEvent::ActiveFileChanged {
+                file_info: path.clone(),
+            });
             ctx.notify();
+            // Mirror the focus change into the Cast Agent host substrate so
+            // the gateway sees an up-to-date `active_file` on the next
+            // `build_substrate` call. Patching just this field via
+            // `update_host_substrate` preserves whatever other publishers
+            // (pane lifecycle, LSP) have written to the snapshot.
+            #[cfg(feature = "cast-agent")]
+            ::ai::cast_agent::update_host_substrate(move |host| {
+                host.active_file = Some(path);
+            });
         }
     }
 }

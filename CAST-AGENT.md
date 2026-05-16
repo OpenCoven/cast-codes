@@ -67,8 +67,14 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   branch, Comux panes) for gateway calls. Verified end-to-end by
   [`crates/cast_agent/tests/substrate.rs`](crates/cast_agent/tests/substrate.rs).
   Currently `app/src/lib.rs::run` only pushes a `HostSubstrate::default()`
-  baseline; replacing that stub with editor / pane / LSP-driven updates
-  is the next slice.
+  baseline; real data sources are landing per-field below.
+- ✅ `active_file` publisher —
+  [`app/src/code/active_file.rs::active_file_changed`](app/src/code/active_file.rs)
+  mirrors every editor focus change into the cast_agent host substrate
+  via
+  [`update_host_substrate`](crates/cast_agent/src/runtime.rs).
+  Patches just the `active_file` field so concurrent publishers (pane
+  lifecycle, LSP) keep their slices when they land.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
   agent panel switch to `stream_messages` for actual chat — see
   "Open follow-ups" below.

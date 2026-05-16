@@ -92,3 +92,42 @@ fn host_substrate_starts_empty_and_overlays_on_build() {
     // The cast_agent-owned shell_cwd is preserved through the merge.
     assert_eq!(merged.shell_cwd, base.shell_cwd);
 }
+
+#[test]
+fn update_host_substrate_patches_one_field_without_clobbering_others() {
+    install_crypto_provider_once();
+
+    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
+        .expect("runtime boots");
+
+    // Seed open_panes and recent_errors first so we have something to lose.
+    runtime.set_host_substrate(HostSubstrate {
+        active_file: None,
+        open_panes: vec![PaneInfo {
+            id: "p1".into(),
+            title: "zsh".into(),
+            cwd: PathBuf::from("/tmp"),
+            active: true,
+        }],
+        recent_errors: vec![DiagnosticEntry {
+            file: PathBuf::from("/tmp/a.rs"),
+            line: 1,
+            severity: DiagnosticSeverity::Warning,
+            message: "warn".into(),
+        }],
+    });
+
+    // Patch just active_file via update_host_substrate — simulates the
+    // call ActiveFileModel::active_file_changed makes in production.
+    runtime.update_host_substrate(|h| {
+        h.active_file = Some(PathBuf::from("/tmp/focused.rs"));
+    });
+
+    let after = runtime.host_substrate();
+    assert_eq!(
+        after.active_file.as_deref(),
+        Some(std::path::Path::new("/tmp/focused.rs"))
+    );
+    assert_eq!(after.open_panes.len(), 1, "panes should be preserved");
+    assert_eq!(after.recent_errors.len(), 1, "errors should be preserved");
+}

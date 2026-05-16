@@ -144,6 +144,21 @@ impl CastAgentRuntime {
         *guard = host;
     }
 
+    /// Patch the host-owned substrate slice in place. Holds the write
+    /// lock for the closure call so callers can update one field (e.g.
+    /// `active_file`) without read-modify-write races against other
+    /// publishers (pane lifecycle, LSP). Sync, never blocks the runtime.
+    pub fn update_host_substrate<F>(&self, f: F)
+    where
+        F: FnOnce(&mut HostSubstrate),
+    {
+        let mut guard = self
+            .host
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        f(&mut guard);
+    }
+
     /// Snapshot the host-owned substrate slice. Useful for tests and for
     /// the UI if it wants to render whatever the host last reported
     /// (rather than re-computing).
@@ -197,5 +212,16 @@ pub fn sessions() -> Vec<CovenSession> {
 pub fn set_host_substrate(host: HostSubstrate) {
     if let Some(rt) = global() {
         rt.set_host_substrate(host);
+    }
+}
+
+/// Sync convenience for the host to patch one or more substrate fields
+/// without losing the others. No-op if the runtime never started.
+pub fn update_host_substrate<F>(f: F)
+where
+    F: FnOnce(&mut HostSubstrate),
+{
+    if let Some(rt) = global() {
+        rt.update_host_substrate(f);
     }
 }
