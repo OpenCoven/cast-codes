@@ -630,6 +630,8 @@ pub(crate) const TOGGLE_WARP_DRIVE_BINDING_NAME: &str = "workspace:toggle_warp_d
 pub(crate) const TOGGLE_RIGHT_PANEL_BINDING_NAME: &str = "workspace:toggle_right_panel";
 #[cfg(not(target_family = "wasm"))]
 pub(crate) const TOGGLE_CLI_CHAT_PANEL_BINDING_NAME: &str = "workspace:toggle_cli_chat_panel";
+#[cfg(not(target_family = "wasm"))]
+pub(crate) const TOGGLE_BROWSER_PANE_BINDING_NAME: &str = "workspace:toggle_browser_pane";
 pub(crate) const TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME: &str =
     "workspace:toggle_vertical_tabs_panel";
 pub(crate) const OPEN_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:open_global_search";
@@ -13078,6 +13080,27 @@ impl Workspace {
         });
     }
 
+    /// Toggles the browser pane: closes it if an open browser pane exists in
+    /// the active pane group, opens one if not.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn toggle_browser_pane(&mut self, ctx: &mut ViewContext<Self>) {
+        let group = self.active_tab_pane_group();
+        let existing = group
+            .as_ref(ctx)
+            .pane_ids()
+            .find(|id| id.is_browser_pane());
+        match existing {
+            Some(pane_id) => {
+                group.update(ctx, |pane_group, ctx| {
+                    pane_group.close_pane(pane_id, ctx);
+                });
+            }
+            None => {
+                self.open_browser_pane(None, ctx);
+            }
+        }
+    }
+
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
     fn show_handoff_prepare_failed_toast(window_id: WindowId, ctx: &mut ViewContext<Self>) {
         WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
@@ -20708,6 +20731,12 @@ impl TypedActionView for Workspace {
             OpenBrowserPane { url } => {
                 self.open_browser_pane(url.clone(), ctx);
             }
+            #[cfg(not(target_family = "wasm"))]
+            ToggleBrowserPane => {
+                self.toggle_browser_pane(ctx);
+            }
+            #[cfg(target_family = "wasm")]
+            ToggleBrowserPane => {}
             FixSettingsWithOz { error_description } => {
                 use crate::ai::skills::SkillManager;
                 let modify_settings_skill = SkillManager::as_ref(ctx)
