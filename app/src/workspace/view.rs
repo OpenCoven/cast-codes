@@ -10874,6 +10874,33 @@ impl Workspace {
         }
     }
 
+    /// Open a new terminal tab whose shell starts in the given Coven
+    /// session's working directory. Unlike `add_new_session_tab_*`, this
+    /// always honours the supplied CWD (it does not consult
+    /// `get_new_tab_startup_directory`) — the click came from the agent
+    /// panel's Coven Sessions list, which already knows where the user
+    /// wants to land. Tab title is prefixed `Coven: <name>` so the user
+    /// can tell coven-spawned tabs apart from regular ones at a glance.
+    pub fn add_new_coven_session_tab(
+        &mut self,
+        coven_session_name: String,
+        cwd: PathBuf,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        self.add_tab_with_pane_layout(
+            PanesLayout::SingleTerminal(Box::new(NewTerminalOptions {
+                shell: None,
+                initial_directory: Some(cwd),
+                conversation_restoration: None,
+                hide_homepage: true,
+                ..Default::default()
+            })),
+            Arc::new(HashMap::new()),
+            Some(format!("Coven: {coven_session_name}")),
+            ctx,
+        );
+    }
+
     /// Enters agent view with a new conversation on the active tab's terminal.
     ///
     /// Used after adding a new tab when the session mode should default to agent view.
@@ -21927,6 +21954,9 @@ impl TypedActionView for Workspace {
                 line_and_column,
             } => {
                 self.add_tab_for_code_file(full_path.clone(), *line_and_column, ctx);
+            }
+            OpenCovenSessionInNewTab { name, cwd } => {
+                self.add_new_coven_session_tab(name.clone(), cwd.clone(), ctx);
             }
             OpenRepository { path } => {
                 self.open_repository(path.as_deref(), ctx);
