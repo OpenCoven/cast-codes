@@ -171,6 +171,16 @@ pub struct BrowserView {
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
+    /// Shared WebKit data context — points at the app-private data dir so
+    /// CastCodes' cookies/localStorage are isolated from the system browser.
+    /// All tabs in this pane share the same context.
+    #[cfg(not(target_family = "wasm"))]
+    web_context: super::webview_host::SharedWebContext,
+    /// Whether WebKit DevTools are enabled for tabs in this pane. Captured
+    /// once at pane open from `BrowserSettings.devtools_enabled`; toggling
+    /// the setting requires reopening the pane to take effect.
+    #[cfg(not(target_family = "wasm"))]
+    devtools_enabled: bool,
     back_button_mouse_state: MouseStateHandle,
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
@@ -194,12 +204,25 @@ impl BrowserView {
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
         let (title_tx, title_rx) = async_channel::unbounded::<(TabId, String)>();
 
+        // Read security settings once at pane open. Subsequent setting
+        // changes require reopening the pane to take effect (acceptable
+        // for power-user toggles).
+        #[cfg(not(target_family = "wasm"))]
+        let web_context = super::webview_host::new_web_context();
+        #[cfg(not(target_family = "wasm"))]
+        let devtools_enabled = crate::settings::BrowserSettings::handle(ctx)
+            .read(ctx, |s, _| *s.devtools_enabled);
+
         let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             initial_tab_id,
             webview_url_for(model.current_url()),
             title_tx.clone(),
             true,
+            #[cfg(not(target_family = "wasm"))]
+            web_context.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            devtools_enabled,
         )));
 
         let mut tab_ui_states = HashMap::new();
@@ -241,6 +264,10 @@ impl BrowserView {
             webviews: vec![native_webview],
             title_tx,
             tab_ui_states,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
+            #[cfg(not(target_family = "wasm"))]
+            devtools_enabled,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
@@ -334,6 +361,10 @@ impl BrowserView {
             webview_url_for(DEFAULT_BROWSER_URL),
             self.title_tx.clone(),
             true,
+            #[cfg(not(target_family = "wasm"))]
+            self.web_context.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            self.devtools_enabled,
         )));
         self.webviews.push(webview);
         self.tab_ui_states.insert(tab_id, TabUiState::default());
@@ -369,6 +400,10 @@ impl BrowserView {
                 webview_url_for(DEFAULT_BROWSER_URL),
                 self.title_tx.clone(),
                 true,
+                #[cfg(not(target_family = "wasm"))]
+                self.web_context.clone(),
+                #[cfg(not(target_family = "wasm"))]
+                self.devtools_enabled,
             )));
             self.webviews.push(webview);
             self.tab_ui_states.insert(new_tab_id, TabUiState::default());
