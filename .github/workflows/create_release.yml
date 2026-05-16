@@ -166,28 +166,44 @@ jobs:
             echo "is_oss=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create release tag
+      - name: Validate signing/notarization credentials
         if: ${{ steps.release_inputs.outputs.should_publish == 'true' }}
         shell: bash
         env:
-          RELEASE_TAG: ${{ steps.release_inputs.outputs.release_tag }}
+          CASTCODES_DEVELOPER_ID_CERT: ${{ secrets.CASTCODES_DEVELOPER_ID_CERT }}
+          WARP_DEVELOPER_ID_CERT: ${{ secrets.WARP_DEVELOPER_ID_CERT }}
+          CASTCODES_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.CASTCODES_DEVELOPER_ID_CERT_PASSWORD }}
+          WARP_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.WARP_DEVELOPER_ID_CERT_PASSWORD }}
+          CASTCODES_CODESIGN_KEYCHAIN_PASSWORD: ${{ secrets.CASTCODES_CODESIGN_KEYCHAIN_PASSWORD }}
+          WARP_CODESIGN_KEYCHAIN_PASSWORD: ${{ secrets.WARP_CODESIGN_KEYCHAIN_PASSWORD }}
+          CASTCODES_NOTARIZATION_APPLE_ID: ${{ secrets.CASTCODES_NOTARIZATION_APPLE_ID }}
+          WARP_NOTARIZATION_APPLE_ID: ${{ secrets.WARP_NOTARIZATION_APPLE_ID }}
+          CASTCODES_NOTARIZATION_PASSWORD: ${{ secrets.CASTCODES_NOTARIZATION_PASSWORD }}
+          WARP_NOTARIZATION_PASSWORD: ${{ secrets.WARP_NOTARIZATION_PASSWORD }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$RELEASE_TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$RELEASE_TAG"
-
-      - name: Create GitHub release
-        if: ${{ steps.release_inputs.outputs.should_publish == 'true' }}
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
-        with:
-          name: ${{ steps.get-config.outputs.release_base_name }} ${{ steps.release_inputs.outputs.release_tag }}
-          tag_name: ${{ steps.release_inputs.outputs.release_tag }}
-          body: ${{ steps.get-config.outputs.release_body_text }}
-          draft: false
-          prerelease: ${{ steps.get-config.outputs.is_prerelease }}
-          token: ${{ github.token }}
+          required_secrets=(
+            DEVELOPER_ID_CERT
+            DEVELOPER_ID_CERT_PASSWORD
+            CODESIGN_KEYCHAIN_PASSWORD
+            NOTARIZATION_APPLE_ID
+            NOTARIZATION_PASSWORD
+          )
+          missing=()
+          for var in "${required_secrets[@]}"; do
+            # Check CASTCODES_ first, fall back to WARP_
+            castcodes_var="CASTCODES_${var}"
+            warp_var="WARP_${var}"
+            if [[ -z "${!castcodes_var:-}" ]] && [[ -z "${!warp_var:-}" ]]; then
+              missing+=("$castcodes_var or $warp_var")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing required macOS signing/notarization secrets for publication:"
+            printf "  - %s\n" "${missing[@]}"
+            echo "Set CASTCODES_* or WARP_* secrets in repository settings."
+            exit 1
+          fi
 
   release_macos_arm64:
     name: Build Release (macOS arm64)
@@ -238,14 +254,26 @@ jobs:
           SHOULD_PUBLISH: ${{ needs.prepare_release.outputs.should_publish }}
           WARP_APPLE_TEAM_ID: 9LR8Z8UQ9X
           WARP_CODESIGN_IDENTITY: "Developer ID Application: Soul Protocol LLC (9LR8Z8UQ9X)"
+          CASTCODES_DEVELOPER_ID_CERT: ${{ secrets.CASTCODES_DEVELOPER_ID_CERT }}
           WARP_DEVELOPER_ID_CERT: ${{ secrets.WARP_DEVELOPER_ID_CERT }}
+          CASTCODES_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.CASTCODES_DEVELOPER_ID_CERT_PASSWORD }}
           WARP_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.WARP_DEVELOPER_ID_CERT_PASSWORD }}
+          CASTCODES_CODESIGN_KEYCHAIN_PASSWORD: ${{ secrets.CASTCODES_CODESIGN_KEYCHAIN_PASSWORD }}
           WARP_CODESIGN_KEYCHAIN_PASSWORD: ${{ secrets.WARP_CODESIGN_KEYCHAIN_PASSWORD }}
+          CASTCODES_NOTARIZATION_APPLE_ID: ${{ secrets.CASTCODES_NOTARIZATION_APPLE_ID }}
           WARP_NOTARIZATION_APPLE_ID: ${{ secrets.WARP_NOTARIZATION_APPLE_ID }}
+          CASTCODES_NOTARIZATION_PASSWORD: ${{ secrets.CASTCODES_NOTARIZATION_PASSWORD }}
           WARP_NOTARIZATION_PASSWORD: ${{ secrets.WARP_NOTARIZATION_PASSWORD }}
         run: |
           set -euo pipefail
           if [[ "$SHOULD_PUBLISH" == "true" ]]; then
+            # Use CASTCODES_ secrets if available, fall back to WARP_
+            export WARP_DEVELOPER_ID_CERT="${CASTCODES_DEVELOPER_ID_CERT:-${WARP_DEVELOPER_ID_CERT}}"
+            export WARP_DEVELOPER_ID_CERT_PASSWORD="${CASTCODES_DEVELOPER_ID_CERT_PASSWORD:-${WARP_DEVELOPER_ID_CERT_PASSWORD}}"
+            export WARP_CODESIGN_KEYCHAIN_PASSWORD="${CASTCODES_CODESIGN_KEYCHAIN_PASSWORD:-${WARP_CODESIGN_KEYCHAIN_PASSWORD}}"
+            export WARP_NOTARIZATION_APPLE_ID="${CASTCODES_NOTARIZATION_APPLE_ID:-${WARP_NOTARIZATION_APPLE_ID}}"
+            export WARP_NOTARIZATION_PASSWORD="${CASTCODES_NOTARIZATION_PASSWORD:-${WARP_NOTARIZATION_PASSWORD}}"
+            
             required=(
               WARP_DEVELOPER_ID_CERT
               WARP_DEVELOPER_ID_CERT_PASSWORD
@@ -738,3 +766,47 @@ jobs:
           fi
 
           echo "All enabled release jobs completed successfully."
+
+  create_release:
+    name: Create GitHub Release
+    runs-on: ubuntu-24.04
+    needs:
+      - prepare_release
+      - verify_release_jobs
+    if: ${{ needs.prepare_release.outputs.should_publish == 'true' && needs.verify_release_jobs.result == 'success' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$RELEASE_TAG" --message "Release $RELEASE_TAG"
+          git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Get channel configuration
+        id: get-config
+        uses: ./.github/actions/get_channel_config/
+        with:
+          config_file: ${{ env.CONFIG_FILE }}
+          channel: ${{ needs.prepare_release.outputs.channel }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        with:
+          name: ${{ steps.get-config.outputs.release_base_name }} ${{ needs.prepare_release.outputs.release_tag }}
+          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
+          body: ${{ steps.get-config.outputs.release_body_text }}
+          draft: false
+          prerelease: ${{ steps.get-config.outputs.is_prerelease }}
+          token: ${{ github.token }}
