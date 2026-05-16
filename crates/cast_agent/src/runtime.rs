@@ -10,7 +10,7 @@
 //! Construction is lazy and idempotent: the first call to [`global`] spins
 //! up the runtime; subsequent calls return the same `Arc`.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use tokio::runtime::Runtime;
 
@@ -18,6 +18,7 @@ use crate::{
     agent::{AgentBackend, CastAgent},
     config::CastAgentConfig,
     session::CovenSession,
+    substrate::{HostSubstrate, Substrate},
 };
 
 /// How often the background loop re-probes `GET /health`. Chosen to be
@@ -35,13 +36,32 @@ const SESSION_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_
 pub struct CastAgentRuntime {
     agent: Arc<CastAgent>,
     handle: tokio::runtime::Handle,
+    /// Latest host-owned substrate slice pushed via
+    /// [`Self::set_host_substrate`]. Read by [`Self::build_substrate`] to
+    /// enrich the [`crate::agent::CastAgent::get_substrate`] output before
+    /// it ships to the gateway. `std::sync::RwLock` so both the UI thread
+    /// (writer) and the cast-agent runtime threads (reader) can use it
+    /// without going through tokio's async lock.
+    host: Arc<RwLock<HostSubstrate>>,
     // Held to keep the runtime alive for the lifetime of this struct.
     _runtime: Arc<Runtime>,
 }
 
 impl CastAgentRuntime {
-    /// Build a runtime + agent. Spawns a background thread so the runtime
-    /// is multi-threaded without taking over the UI thread.
+    /// Build a fresh isolated runtime + agent. Spawns a background thread
+    /// so the runtime is multi-threaded without taking over the UI thread.
+    ///
+    /// Production callers should go through [`global`] for the
+    /// process-wide singleton; this constructor exists so tests can build
+    /// an isolated instance without sharing state with the rest of the
+    /// process. Each call spawns a fresh tokio runtime + worker threads,
+    /// so don't call it on a hot path.
+    pub fn new_isolated(config: Option<CastAgentConfig>) -> std::io::Result<Self> {
+        Self::boot(config)
+    }
+
+    /// Internal boot. Kept private so the only way to get a process-wide
+    /// runtime is via [`global`], which guarantees singleton semantics.
     fn boot(config: Option<CastAgentConfig>) -> std::io::Result<Self> {
         let runtime = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
@@ -77,6 +97,7 @@ impl CastAgentRuntime {
         Ok(Self {
             agent,
             handle,
+            host: Arc::new(RwLock::new(HostSubstrate::default())),
             _runtime: runtime,
         })
     }
@@ -109,6 +130,38 @@ impl CastAgentRuntime {
     pub fn handle(&self) -> &tokio::runtime::Handle {
         &self.handle
     }
+
+    /// Replace the host-owned substrate slice. Called by `app/src` whenever
+    /// editor focus changes, panes open/close, or LSP diagnostics arrive.
+    /// Sync, never blocks on the gateway — the next time the runtime
+    /// builds a [`Substrate`] for a gateway call it picks up the new
+    /// values. Lock poisoning is recovered by replacing the inner state.
+    pub fn set_host_substrate(&self, host: HostSubstrate) {
+        let mut guard = self
+            .host
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard = host;
+    }
+
+    /// Snapshot the host-owned substrate slice. Useful for tests and for
+    /// the UI if it wants to render whatever the host last reported
+    /// (rather than re-computing).
+    pub fn host_substrate(&self) -> HostSubstrate {
+        self.host
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    /// Build a [`Substrate`] for the gateway: collect the cast_agent-owned
+    /// slices (shell CWD, git branch, Comux panes) via `CastAgent`, then
+    /// overlay the host-pushed [`HostSubstrate`] on top.
+    pub async fn build_substrate(&self) -> anyhow::Result<Substrate> {
+        let mut substrate = self.agent.get_substrate().await?;
+        substrate.apply_host(self.host_substrate());
+        Ok(substrate)
+    }
 }
 
 /// Process-wide singleton. First call spins up the runtime; later calls
@@ -137,4 +190,12 @@ pub fn is_available() -> bool {
 /// `Vec` if the runtime never started or the first refresh hasn't landed.
 pub fn sessions() -> Vec<CovenSession> {
     global().map(CastAgentRuntime::sessions).unwrap_or_default()
+}
+
+/// Sync convenience for the host to push a fresh substrate snapshot. No-op
+/// if the runtime never started.
+pub fn set_host_substrate(host: HostSubstrate) {
+    if let Some(rt) = global() {
+        rt.set_host_substrate(host);
+    }
 }

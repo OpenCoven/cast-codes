@@ -20,9 +20,10 @@ toml = "0.8"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util", "test-util"] }
-# The workspace builds `reqwest` against rustls, which requires a
-# CryptoProvider to be installed at process startup (the production app
-# does this in `app/src/lib.rs`). Tests construct a `GatewayClient` whose
-# inner `reqwest::Client::build()` panics otherwise — install the
-# `aws-lc-rs` provider on first test setup to satisfy that.
+# Tests construct a real `CastAgentRuntime`, whose inner `GatewayClient`
+# builds a `reqwest::Client`. With the workspace-pinned rustls TLS
+# features that builder panics ("No provider set") unless a
+# `CryptoProvider` is installed first. Production installs the
+# `aws-lc-rs` provider in `app/src/lib.rs::run`; tests mirror that
+# from a `std::sync::Once`.
 rustls = { workspace = true }

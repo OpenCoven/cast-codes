@@ -42,6 +42,34 @@ pub struct DiagnosticEntry {
     pub message: String,
 }
 
+/// Subset of [`Substrate`] that only the host (`crates/ai` / `app/src`) can
+/// know about — editor focus, open terminal panes, and recent LSP
+/// diagnostics. [`SubstrateCollector::collect`] fills in everything else
+/// (shell CWD, git branch, Comux panes) and merges the latest
+/// `HostSubstrate` snapshot in on top.
+///
+/// The host pushes updates via [`crate::runtime::set_host_substrate`]
+/// whenever its state changes (focus event, tab open/close, LSP diagnostic
+/// arrival). cast_agent doesn't reach into the host — pushing keeps the
+/// async boundary clean and means cast_agent never blocks the UI thread.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct HostSubstrate {
+    pub active_file: Option<PathBuf>,
+    pub open_panes: Vec<PaneInfo>,
+    pub recent_errors: Vec<DiagnosticEntry>,
+}
+
+impl Substrate {
+    /// Overwrite the host-owned fields on `self` with values from
+    /// `host`. Fields cast_agent populates itself (`shell_cwd`,
+    /// `git_branch`, `comux_panes`) are preserved.
+    pub fn apply_host(&mut self, host: HostSubstrate) {
+        self.active_file = host.active_file;
+        self.open_panes = host.open_panes;
+        self.recent_errors = host.recent_errors;
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiagnosticSeverity {
