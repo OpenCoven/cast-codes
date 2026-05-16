@@ -39,8 +39,17 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   [`app/src/workspace/view.rs`](app/src/workspace/view.rs)
   `add_new_coven_session_tab` bypasses `get_new_tab_startup_directory`
   because the click already specifies where to land.
-- ⏳ Streaming responses, per-call `#[cfg(feature = "warp-agent")]`
-  gating — see "Open follow-ups" below.
+- ✅ Streaming responses — `GatewayClient::stream_messages` opens a
+  WebSocket against `/v1/messages/stream`, sends the initial
+  `AgentMessage` as a JSON frame, and surfaces server frames as
+  [`MessageChunk`](crates/cast_agent/src/gateway.rs) `Delta` / `Done` /
+  `Error` items on a boxed `Stream`. Covered by an in-process stub
+  WebSocket server in
+  [`crates/cast_agent/tests/streaming.rs`](crates/cast_agent/tests/streaming.rs).
+  No UI consumer yet — the agent panel still uses the existing
+  non-streaming chat path.
+- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating, agent panel switch
+  to `stream_messages` for actual chat — see "Open follow-ups" below.
 
 ## Architecture
 

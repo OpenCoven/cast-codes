@@ -118,6 +118,19 @@ impl CastAgent {
     pub fn sessions_snapshot(&self) -> Vec<CovenSession> {
         self.sessions.snapshot()
     }
+
+    /// Open a streaming chat session against the Coven Gateway's
+    /// `/v1/messages/stream` WebSocket endpoint. See
+    /// [`crate::gateway::GatewayClient::stream_messages`] for the wire
+    /// protocol and error semantics. This is an inherent method (not part
+    /// of [`AgentBackend`]) because `async_trait`-shaped traits can't
+    /// return an associated `Stream` type.
+    pub async fn stream_messages(
+        &self,
+        msg: AgentMessage,
+    ) -> anyhow::Result<crate::gateway::MessageStream> {
+        self.gateway.stream_messages(msg).await
+    }
 }
 
 #[async_trait::async_trait]

@@ -9,9 +9,20 @@ license.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util"] }
+tokio-tungstenite = "0.24"
 serde.workspace = true
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json"] }
+futures.workspace = true
 log.workspace = true
 dirs.workspace = true
 toml = "0.8"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util", "test-util"] }
+# The workspace builds `reqwest` against rustls, which requires a
+# CryptoProvider to be installed at process startup (the production app
+# does this in `app/src/lib.rs`). Tests construct a `GatewayClient` whose
+# inner `reqwest::Client::build()` panics otherwise — install the
+# `aws-lc-rs` provider on first test setup to satisfy that.
+rustls = { workspace = true }

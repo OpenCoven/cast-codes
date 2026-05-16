@@ -12,8 +12,8 @@ pub mod cast_agent {
     //! lands (e.g. wrapping `is_available` with telemetry), it goes here.
 
     pub use ::cast_agent::{
-        global, is_available, sessions, CastAgent, CastAgentConfig, CastAgentRuntime, CovenSession,
-        SessionStatus,
+        global, is_available, sessions, AgentMessage, CastAgent, CastAgentConfig, CastAgentRuntime,
+        CovenSession, MessageChunk, SessionStatus,
     };
 }
 

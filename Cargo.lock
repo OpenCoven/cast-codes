@@ -2600,11 +2600,14 @@ dependencies = [
  "anyhow",
  "async-trait",
  "dirs 6.0.0",
+ "futures",
  "log",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "toml 0.8.23",
 ]
 
@@ -14071,6 +14074,18 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite",
 ]
 
 [[package]]
