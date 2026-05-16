@@ -17,14 +17,31 @@ pub fn state_path(state_dir: &Path) -> PathBuf {
 /// Loads the persisted state, or `None` if the file is missing, malformed,
 /// or written by an unknown version.
 pub fn load(state_dir: &Path) -> Option<BrowserState> {
-    let _ = state_dir;
-    None
+    let path = state_path(state_dir);
+    let bytes = fs::read(&path).ok()?;
+    let parsed: BrowserState = serde_json::from_slice(&bytes).ok()?;
+    if parsed.v != BROWSER_STATE_VERSION {
+        return None;
+    }
+    Some(parsed)
 }
 
 /// Atomically writes the state file. Creates parent directories as needed.
 pub fn save(state_dir: &Path, state: &BrowserState) -> std::io::Result<()> {
-    let _ = (state_dir, state);
-    unimplemented!()
+    let path = state_path(state_dir);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    {
+        let mut file = fs::File::create(&tmp)?;
+        let json = serde_json::to_vec_pretty(state)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        file.write_all(&json)?;
+        file.sync_all()?;
+    }
+    fs::rename(&tmp, &path)?;
+    Ok(())
 }
 
 #[cfg(test)]
