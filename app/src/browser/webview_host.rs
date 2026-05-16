@@ -1,3 +1,7 @@
+#[cfg(not(target_family = "wasm"))]
+use std::cell::RefCell;
+#[cfg(not(target_family = "wasm"))]
+use std::rc::Rc;
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
@@ -6,10 +10,26 @@ use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
 
+/// Shared WebKit data context for a single browser pane. Cloning this
+/// Rc across the pane's tabs makes them share cookies/localStorage.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) type SharedWebContext = Rc<RefCell<wry::WebContext>>;
+
+/// Builds a fresh `SharedWebContext` pointing at the app-private data
+/// directory (`super::data_dir::path()`).
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn new_web_context() -> SharedWebContext {
+    Rc::new(RefCell::new(wry::WebContext::new(super::data_dir::path())))
+}
+
 pub(crate) struct NativeBrowserWebView {
     tab_id: TabId,
     #[cfg(not(target_family = "wasm"))]
     webview: Option<wry::WebView>,
+    #[cfg(not(target_family = "wasm"))]
+    web_context: SharedWebContext,
+    #[cfg(not(target_family = "wasm"))]
+    devtools_enabled: bool,
     title_tx: async_channel::Sender<(TabId, String)>,
     pending_url: Option<String>,
     bounds: Option<RectF>,
@@ -23,11 +43,17 @@ impl NativeBrowserWebView {
         initial_url: impl Into<String>,
         title_tx: async_channel::Sender<(TabId, String)>,
         desired_visible: bool,
+        #[cfg(not(target_family = "wasm"))] web_context: SharedWebContext,
+        #[cfg(not(target_family = "wasm"))] devtools_enabled: bool,
     ) -> Self {
         Self {
             tab_id,
             #[cfg(not(target_family = "wasm"))]
             webview: None,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
+            #[cfg(not(target_family = "wasm"))]
+            devtools_enabled,
             title_tx,
             pending_url: Some(initial_url.into()),
             bounds: None,
@@ -132,7 +158,10 @@ impl NativeBrowserWebView {
             let url = self.pending_url.clone().unwrap_or_default();
             let title_tx = self.title_tx.clone();
             let tab_id = self.tab_id;
+            let mut web_context = self.web_context.borrow_mut();
             match wry::WebViewBuilder::new_as_child(&parent)
+                .with_web_context(&mut web_context)
+                .with_devtools(self.devtools_enabled)
                 .with_url(url)
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
