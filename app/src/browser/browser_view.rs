@@ -33,6 +33,7 @@ use crate::{
 };
 
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
+use super::url_input::{resolve, Resolved};
 use super::webview_host::NativeBrowserWebView;
 
 const URL_BAR_HEIGHT: f32 = 32.0;
@@ -48,7 +49,7 @@ const TOOLBAR_BUTTON_GAP: f32 = 6.0;
 const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
-const URL_BAR_PLACEHOLDER: &str = "Enter URL";
+const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -246,8 +247,11 @@ impl BrowserView {
     }
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
-        let url = self.url_editor.as_ref(ctx).buffer_text(ctx);
-        self.navigate(url, ctx);
+        let raw_text = self.url_editor.as_ref(ctx).buffer_text(ctx);
+        let target = match resolve(&raw_text) {
+            Resolved::Url(u) | Resolved::Search(u) => u,
+        };
+        self.navigate(target, ctx);
     }
 
     fn navigate(&mut self, url: impl Into<String>, ctx: &mut ViewContext<Self>) {
