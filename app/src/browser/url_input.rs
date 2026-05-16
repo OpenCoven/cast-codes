@@ -7,8 +7,49 @@ pub enum Resolved {
 }
 
 pub fn resolve(raw: &str) -> Resolved {
-    let _ = raw;
-    unimplemented!("write me")
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Resolved::Url("about:home".to_string());
+    }
+
+    for scheme in ["http://", "https://", "file://", "about:", "data:", "castcodes://"] {
+        if trimmed.starts_with(scheme) {
+            return Resolved::Url(trimmed.to_string());
+        }
+    }
+
+    let looks_like_host = !trimmed.contains(char::is_whitespace)
+        && (trimmed.contains('.') || is_loopback_host(trimmed));
+
+    if looks_like_host {
+        let scheme = if is_loopback_host(trimmed) { "http://" } else { "https://" };
+        return Resolved::Url(format!("{scheme}{trimmed}"));
+    }
+
+    let encoded = percent_encode_query(trimmed);
+    Resolved::Search(format!("https://duckduckgo.com/?q={encoded}"))
+}
+
+fn is_loopback_host(input: &str) -> bool {
+    let host = input.split_once('/').map(|(h, _)| h).unwrap_or(input);
+    let host = host.split_once(':').map(|(h, _)| h).unwrap_or(host);
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+}
+
+fn percent_encode_query(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => {
+                out.push('%');
+                out.push_str(&format!("{byte:02X}"));
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
