@@ -23,6 +23,7 @@ use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{elements::Element, AppContext, Entity, TypedActionView, View, ViewContext};
 use warpui::{FocusContext, ModelHandle, SingletonEntity, ViewHandle};
 
+use crate::ai::coven_brand::{OPENCOVEN_SUCCESS, OPENCOVEN_WARNING};
 use crate::appearance::Appearance;
 use crate::editor::{
     EditorOptions, EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, TextOptions,
@@ -735,6 +736,7 @@ impl AIAssistantPanelView {
                 )
                 .finish(),
             )
+            .with_child(self.render_gateway_status_pill())
             .with_child(Shrinkable::new(1., Empty::new().finish()).finish());
 
         // Add the copy and restart buttons iff the transcript is non-empty or there's a request in flight;
@@ -772,6 +774,41 @@ impl AIAssistantPanelView {
         );
 
         header.finish()
+    }
+
+    /// Small coloured dot next to the title indicating Coven Gateway
+    /// reachability. Green when `is_available()`, amber otherwise.
+    /// Reads the cached availability bit from the cast_agent runtime
+    /// (refreshed by a background health-probe loop) so this is cheap
+    /// to call on every render.
+    fn render_gateway_status_pill(&self) -> Box<dyn Element> {
+        const PILL_SIZE: f32 = 8.;
+        let online = {
+            #[cfg(feature = "cast-agent")]
+            {
+                ::ai::cast_agent::is_available()
+            }
+            #[cfg(not(feature = "cast-agent"))]
+            {
+                false
+            }
+        };
+        let color = if online {
+            OPENCOVEN_SUCCESS
+        } else {
+            OPENCOVEN_WARNING
+        };
+        Container::new(
+            ConstrainedBox::new(Empty::new().finish())
+                .with_width(PILL_SIZE)
+                .with_height(PILL_SIZE)
+                .finish(),
+        )
+        .with_background(Fill::Solid(color))
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(PILL_SIZE / 2.)))
+        .with_margin_left(8.)
+        .with_margin_right(4.)
+        .finish()
     }
 
     fn render_copy_transcript_button(&self, appearance: &Appearance) -> Box<dyn Element> {

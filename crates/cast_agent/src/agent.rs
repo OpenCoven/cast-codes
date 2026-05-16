@@ -95,8 +95,15 @@ impl CastAgent {
     pub fn config(&self) -> &CastAgentConfig {
         &self.config
     }
+
+    /// Re-run the `GET /health` probe to refresh `is_available()`. Cheap,
+    /// safe to call on a periodic loop.
+    pub async fn health_probe(&self) {
+        self.gateway.health_probe().await;
+    }
 }
 
+#[async_trait::async_trait]
 impl AgentBackend for CastAgent {
     async fn send_message(&self, msg: AgentMessage) -> anyhow::Result<AgentResponse> {
         self.gateway.send_message(msg).await

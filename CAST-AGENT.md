@@ -7,10 +7,25 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
 
 ## Status
 
-- ✅ Crate skeleton (`crates/cast_agent`) — compiles standalone (`cargo check -p cast_agent`).
-- ⏳ `crates/ai` integration — **not yet wired**. See "Open follow-ups" below.
-- ⏳ TUI rebranding (Warp Agent → Cast Agent labels, gateway status pill,
-  Coven session list) — **not yet wired**.
+- ✅ Crate skeleton (`crates/cast_agent`) — `cargo check -p cast_agent`.
+- ✅ `crates/ai` facade — `ai::cast_agent::{global, is_available, ...}`,
+  gated by the `cast-agent` feature (default-on).
+- ✅ Dedicated tokio runtime on a background OS thread
+  ([`crates/cast_agent/src/runtime.rs`](crates/cast_agent/src/runtime.rs)).
+  Lazy `OnceLock<CastAgentRuntime>` so the UI thread reads `is_available()`
+  as a cheap atomic. Periodic 30s health re-probe keeps the bit fresh.
+- ✅ Eager runtime boot at app startup
+  ([`app/src/lib.rs`](app/src/lib.rs) `run()`) so the first render is free
+  of `OnceLock` init overhead.
+- ✅ Gateway status pill — small 8px coloured dot in the agent panel
+  header
+  ([`app/src/ai_assistant/panel.rs`](app/src/ai_assistant/panel.rs)
+  `render_gateway_status_pill`). Green when the gateway is reachable,
+  amber otherwise; brand colours in
+  [`app/src/ai/coven_brand.rs`](app/src/ai/coven_brand.rs)
+  (`OPENCOVEN_SUCCESS`/`OPENCOVEN_WARNING`).
+- ⏳ Session list / click-through, streaming responses, per-call
+  `#[cfg(feature = "warp-agent")]` gating — see "Open follow-ups" below.
 
 ## Architecture
 
