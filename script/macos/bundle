@@ -605,8 +605,14 @@ if [[ $READ_PASSWORDS_FROM_ENV != true ]]; then
 fi
 
 if [[ $CODESIGN = true ]]; then
-  # TODO - does this need to change per user?  Seems like it's tied to the WARP_NOTARIZATION_PASSWORD password.
-  APPLE_TEAM_ID="${WARP_APPLE_TEAM_ID:-9LR8Z8UQ9X}"
+  # The Apple Team ID is intentionally hardcoded: it must match the app-group
+  # string baked into script/Entitlements.plist and the APPLE_TEAM_ID constant
+  # in crates/warp_core/src/macos.rs. Overriding it here without also
+  # regenerating the entitlement and rebuilding the Rust code would sign with
+  # one team while requesting another team's app-group entitlement, which
+  # breaks signing and app-group access. Forks that need a different team ID
+  # should change all three locations together.
+  APPLE_TEAM_ID="9LR8Z8UQ9X"
   CODESIGN_IDENTITY="${WARP_CODESIGN_IDENTITY:-$APPLE_TEAM_ID}"
   CODESIGN_KEYCHAIN_NAME="warp-codesign-keychain"
 
