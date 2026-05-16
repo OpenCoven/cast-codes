@@ -258,6 +258,30 @@ pub(super) fn adeberry_colors() -> TerminalColors {
     TerminalColors::new(ADEBERRY_NORMAL_COLORS, ADEBERRY_BRIGHT_COLORS)
 }
 
+/// CastCodes dark theme — OpenCoven brand palette.
+///
+/// Brand slots mapped onto the available `WarpTheme` color slots:
+/// - background: `#0f0f12`
+/// - foreground (text primary): `#e8e8ed`
+/// - accent (purple): `#7c3aed`
+///
+/// Brand slots that have no dedicated `WarpTheme` slot (surface `#161619`,
+/// elevated surface `#1e1e22`, border `rgba(255,255,255,0.08)`, text secondary
+/// `#8e8e9a`, text muted `#5a5a65`, accent gold `#d4a84b`, status bar `#0a0a0d`)
+/// are applied surface-by-surface in dependent crates; see `DESIGN-CHANGES.md`.
+pub fn castcodes_dark() -> WarpTheme {
+    WarpTheme::new(
+        Fill::Solid(ColorU::from_u32(0x0F0F12FF)),
+        ColorU::from_u32(0xE8E8EDFF),
+        Fill::Solid(ColorU::from_u32(0x7C3AEDFF)),
+        None,
+        Some(Details::Darker),
+        dark_mode_colors(),
+        None,
+        Some("CastCodes Dark".to_string()),
+    )
+}
+
 /// Default bundled themes
 pub fn dark_theme() -> WarpTheme {
     WarpTheme::new(

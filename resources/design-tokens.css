@@ -1,0 +1,84 @@
+/*
+ * CastCodes — OpenCoven design tokens.
+ *
+ * Authoritative source for the public CastCodes brand palette, written as
+ * shadcn/ui-style CSS custom properties so non-GPUI surfaces (docs sites,
+ * onboarding pages, marketing, the future plugin host's web UI) can
+ * consume the same values the native `castcodes_dark` theme uses.
+ *
+ * Native UI mapping lives in `app/src/themes/default_themes.rs::castcodes_dark`.
+ * Values here are kept in sync by hand; see DESIGN-CHANGES.md.
+ */
+
+:root,
+.castcodes-dark {
+  /* Surfaces */
+  --color-background: #0f0f12;
+  --color-surface: #161619;
+  --color-surface-elevated: #1e1e22;
+  --color-titlebar: #0a0a0d;
+  --color-statusbar: #0a0a0d;
+
+  /* Borders */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+
+  /* Text */
+  --color-foreground: #e8e8ed;
+  --color-foreground-secondary: #8e8e9a;
+  --color-foreground-muted: #5a5a65;
+
+  /* Accent — primary (purple) */
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-primary-foreground: #ffffff;
+  --color-ring: #7c3aed;
+
+  /* Accent — secondary (gold), highlights only */
+  --color-accent: #d4a84b;
+
+  /* Semantic */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: #ffffff;
+
+  /* Shape */
+  --radius: 0.375rem;            /* 6px — interactive elements */
+  --radius-sm: 0.25rem;          /* 4px — small items */
+  --radius-md: 0.5rem;           /* 8px — larger interactive surfaces */
+  --radius-lg: var(--radius-md);
+
+  /* Motion */
+  --motion-duration: 120ms;      /* 100-150ms range from brief */
+  --motion-easing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * shadcn/ui semantic-token aliases, for direct consumption by any
+ * shadcn-style component installed into a CastCodes-adjacent web surface.
+ */
+:root,
+.castcodes-dark {
+  --background: var(--color-background);
+  --foreground: var(--color-foreground);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-foreground);
+  --popover: var(--color-surface-elevated);
+  --popover-foreground: var(--color-foreground);
+  --primary: var(--color-primary);
+  --primary-foreground: var(--color-primary-foreground);
+  --secondary: var(--color-surface);
+  --secondary-foreground: var(--color-foreground-secondary);
+  --muted: var(--color-surface);
+  --muted-foreground: var(--color-foreground-muted);
+  --accent: var(--color-surface-elevated);
+  --accent-foreground: var(--color-foreground);
+  --destructive: var(--color-destructive);
+  --destructive-foreground: var(--color-destructive-foreground);
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-ring);
+}
