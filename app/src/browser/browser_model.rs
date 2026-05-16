@@ -1,5 +1,26 @@
 pub const DEFAULT_BROWSER_URL: &str = "https://opencoven.ai";
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserState {
+    pub v: u32,
+    pub open: bool,
+    pub tabs: Vec<TabSnapshot>,
+    pub active: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabSnapshot {
+    pub url: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+pub const BROWSER_STATE_VERSION: u32 = 1;
+
 pub type TabId = u64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,6 +31,8 @@ pub struct BrowserTab {
     forward_history: Vec<String>,
     loading: bool,
     title: String,
+    pinned: bool,
+    favicon: Option<String>,
 }
 
 impl BrowserTab {
@@ -21,6 +44,8 @@ impl BrowserTab {
             forward_history: Vec::new(),
             loading: false,
             title: String::new(),
+            pinned: false,
+            favicon: None,
         }
     }
 
@@ -98,6 +123,22 @@ impl BrowserTab {
         self.title = title;
         self.loading = false;
         changed
+    }
+
+    pub fn pinned(&self) -> bool {
+        self.pinned
+    }
+
+    pub fn favicon(&self) -> Option<&str> {
+        self.favicon.as_deref()
+    }
+
+    fn set_pinned(&mut self, pinned: bool) {
+        self.pinned = pinned;
+    }
+
+    fn set_favicon(&mut self, favicon: Option<String>) {
+        self.favicon = favicon;
     }
 }
 
@@ -245,6 +286,59 @@ impl BrowserModel {
         };
         self.tabs[idx].set_title(title)
     }
+
+    pub fn set_pinned(&mut self, id: TabId, pinned: bool) -> bool {
+        let Some(idx) = self.index_of(id) else { return false; };
+        self.tabs[idx].set_pinned(pinned);
+        true
+    }
+
+    pub fn set_favicon(&mut self, id: TabId, favicon: Option<String>) -> bool {
+        let Some(idx) = self.index_of(id) else { return false; };
+        self.tabs[idx].set_favicon(favicon);
+        true
+    }
+
+    pub fn snapshot(&self, open: bool) -> BrowserState {
+        BrowserState {
+            v: BROWSER_STATE_VERSION,
+            open,
+            active: self.active,
+            tabs: self
+                .tabs
+                .iter()
+                .map(|tab| TabSnapshot {
+                    url: tab.current_url.clone(),
+                    title: tab.title.clone(),
+                    pinned: tab.pinned,
+                })
+                .collect(),
+        }
+    }
+
+    pub fn restore(state: BrowserState) -> Self {
+        let mut model = Self {
+            tabs: Vec::with_capacity(state.tabs.len().max(1)),
+            active: 0,
+            next_id: 0,
+        };
+        for snap in state.tabs {
+            let id = model.push_tab(snap.url);
+            let idx = model.tabs.len() - 1;
+            model.tabs[idx].title = snap.title;
+            model.tabs[idx].pinned = snap.pinned;
+        }
+        if model.tabs.is_empty() {
+            model.push_tab(DEFAULT_BROWSER_URL);
+        }
+        if model.tabs.is_empty() {
+            // Should be unreachable, but guard against active being indexed into [].
+            model.active = 0;
+        } else {
+            model.active = state.active.min(model.tabs.len() - 1);
+        }
+        model
+    }
 }
 
 fn normalize_url(url: impl Into<String>) -> String {
@@ -350,5 +444,73 @@ mod tests {
         let tab = &model.tabs()[0];
         assert!(tab.pinned());
         assert_eq!(tab.favicon(), Some("https://a.test/favicon.ico"));
+    }
+
+    #[test]
+    fn snapshot_round_trip_preserves_tabs_active_and_pinned() {
+        let mut model = BrowserModel::new("https://a.test");
+        model.add_tab("https://b.test");
+        let pinned_id = model.tabs()[0].id();
+        model.set_pinned(pinned_id, true);
+        model.select_tab(1);
+
+        let state = model.snapshot(/* open */ true);
+        assert_eq!(state.v, 1);
+        assert!(state.open);
+        assert_eq!(state.active, 1);
+        assert_eq!(state.tabs.len(), 2);
+        assert_eq!(state.tabs[0].url, "https://a.test");
+        assert!(state.tabs[0].pinned);
+        assert_eq!(state.tabs[1].url, "https://b.test");
+        assert!(!state.tabs[1].pinned);
+
+        let restored = BrowserModel::restore(state);
+        assert_eq!(restored.tabs().len(), 2);
+        assert_eq!(restored.active_index(), 1);
+        assert_eq!(restored.tabs()[0].current_url(), "https://a.test");
+        assert!(restored.tabs()[0].pinned());
+        assert_eq!(restored.tabs()[1].current_url(), "https://b.test");
+    }
+
+    #[test]
+    fn restore_with_empty_tabs_falls_back_to_default() {
+        let state = BrowserState {
+            v: 1,
+            open: true,
+            tabs: vec![],
+            active: 0,
+        };
+        let model = BrowserModel::restore(state);
+        assert_eq!(model.tabs().len(), 1);
+        assert_eq!(model.current_url(), DEFAULT_BROWSER_URL);
+    }
+
+    #[test]
+    fn restore_clamps_out_of_range_active() {
+        let state = BrowserState {
+            v: 1,
+            open: true,
+            tabs: vec![TabSnapshot {
+                url: "https://a.test".into(),
+                title: String::new(),
+                pinned: false,
+            }],
+            active: 99,
+        };
+        let model = BrowserModel::restore(state);
+        assert_eq!(model.active_index(), 0);
+    }
+
+    #[test]
+    fn history_is_not_persisted() {
+        let mut model = BrowserModel::new("https://a.test");
+        model.navigate("https://b.test");
+        model.navigate("https://c.test");
+        assert!(model.can_go_back());
+
+        let restored = BrowserModel::restore(model.snapshot(true));
+        assert!(!restored.can_go_back());
+        assert!(!restored.can_go_forward());
+        assert_eq!(restored.current_url(), "https://c.test");
     }
 }
