@@ -1,0 +1,23 @@
+[package]
+name = "cast_agent"
+version = "0.1.0"
+edition = "2021"
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util"] }
+serde.workspace = true
+serde_json.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+tokio-tungstenite = "0.24"
+futures.workspace = true
+log.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
+uuid.workspace = true
+toml = "0.8"
+
+[target.'cfg(unix)'.dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "io-util"] }

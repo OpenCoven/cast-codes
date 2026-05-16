@@ -6,14 +6,26 @@ publish.workspace = true
 license.workspace = true
 
 [features]
+default = ["cast-agent"]
 jemalloc = []
 local_fs = []
 test-util = []
 crash_reporting = ["dep:sentry"]
 
+# Coven-native Cast Agent (the new default for CastCodes builds).
+# See CAST-AGENT.md and crates/cast_agent for the backend implementation.
+cast-agent = ["dep:cast_agent"]
+
+# Legacy Warp Agent path. The underlying warp_* deps are still pulled
+# unconditionally today because they are also used outside agent code;
+# this feature exists so call-site gating (`#[cfg(feature = "warp-agent")]`)
+# can be added incrementally per CODY-BRIEF.md §2.5.
+warp-agent = []
+
 [dependencies]
 async-channel.workspace = true
 async-trait.workspace = true
+cast_agent = { workspace = true, optional = true }
 bincode.workspace = true
 bytes.workspace = true
 cfg-if.workspace = true

@@ -52,6 +52,8 @@ pub enum ThemeKind {
     #[schemars(description = "Phenomenon")]
     Phenomenon,
     #[default]
+    #[schemars(description = "CastCodes Dark")]
+    CastCodesDark,
     #[schemars(description = "Dark")]
     Dark,
     #[schemars(description = "Dracula")]
@@ -112,6 +114,7 @@ impl From<CustomTheme> for ThemeKind {
 impl std::fmt::Display for ThemeKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match &self {
+            ThemeKind::CastCodesDark => "CastCodes Dark",
             ThemeKind::Light => "Light",
             ThemeKind::Dark => "Dark",
             ThemeKind::Dracula => "Dracula",
@@ -300,6 +303,7 @@ impl WarpThemeConfig {
                 ThemeKind::ReceivedReferralReward,
                 received_referral_reward(),
             ),
+            (ThemeKind::CastCodesDark, castcodes_dark()),
             (ThemeKind::Dark, dark_theme()),
             (ThemeKind::Light, light_theme()),
             (ThemeKind::SolarizedDark, solarized_dark()),
@@ -338,7 +342,10 @@ impl WarpThemeConfig {
     }
 
     pub fn theme(&self, name: &ThemeKind) -> WarpTheme {
-        self.theme_map.get(name).cloned().unwrap_or_else(dark_theme)
+        self.theme_map
+            .get(name)
+            .cloned()
+            .unwrap_or_else(castcodes_dark)
     }
 }
 
