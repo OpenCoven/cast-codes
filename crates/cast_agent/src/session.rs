@@ -9,6 +9,7 @@
 //! section). Switching to `arc-swap` would be marginally faster but adds
 //! a dependency for no measurable win at this list size.
 
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use crate::gateway::GatewayClient;
@@ -20,6 +21,11 @@ pub struct CovenSession {
     pub status: SessionStatus,
     /// RFC3339 timestamp the session was last active.
     pub last_active: Option<String>,
+    /// Working directory the session was opened in. `None` when the gateway
+    /// didn't return one (older gateway versions or sessions opened without
+    /// a directory) — UI uses this to decide whether the row is clickable.
+    #[serde(default)]
+    pub cwd: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

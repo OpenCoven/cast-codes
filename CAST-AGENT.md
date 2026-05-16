@@ -31,8 +31,16 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   timestamp per session. Hidden until the gateway answers at least once.
   Cached snapshot is refreshed on a 60-second background loop on the
   cast_agent runtime; UI reads it sync via a `std::sync::RwLock`.
-- ⏳ Session click-through, streaming responses, per-call
-  `#[cfg(feature = "warp-agent")]` gating — see "Open follow-ups" below.
+- ✅ Session click-through — clicking a session row dispatches
+  `WorkspaceAction::OpenCovenSessionInNewTab { name, cwd }` which opens a
+  new terminal tab whose shell starts at the session's CWD. Tab title is
+  prefixed `Coven: <name>` so coven-spawned tabs are visually distinct.
+  Rows whose `cwd` is `None` render the same but stay inert. Handler in
+  [`app/src/workspace/view.rs`](app/src/workspace/view.rs)
+  `add_new_coven_session_tab` bypasses `get_new_tab_startup_directory`
+  because the click already specifies where to land.
+- ⏳ Streaming responses, per-call `#[cfg(feature = "warp-agent")]`
+  gating — see "Open follow-ups" below.
 
 ## Architecture
 

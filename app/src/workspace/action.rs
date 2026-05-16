@@ -457,6 +457,15 @@ pub enum WorkspaceAction {
         full_path: PathBuf,
         line_and_column: Option<LineAndColumnArg>,
     },
+    /// Open a new terminal tab whose shell starts in the given Coven
+    /// session's working directory. Dispatched from the agent panel's
+    /// Coven Sessions list when the user clicks a session row.
+    OpenCovenSessionInNewTab {
+        /// Human-readable Coven session name (used for the tab title).
+        name: String,
+        /// Working directory the session was opened in.
+        cwd: PathBuf,
+    },
     OpenNotebook {
         id: SyncId,
     },
@@ -791,6 +800,7 @@ impl WorkspaceAction {
             | OpenNotebook { .. }
             | RunWorkflow { .. }
             | OpenFileInNewTab { .. }
+            | OpenCovenSessionInNewTab { .. }
             | RestoreOrNavigateToConversation { .. }
             | NewCodeFile
             | ForkAIConversation { .. }

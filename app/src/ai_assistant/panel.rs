@@ -39,7 +39,7 @@ use crate::ui_components::blended_colors;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 use crate::ui_components::buttons::icon_button;
-use crate::workspace::{ActiveSession, TAB_BAR_HEIGHT};
+use crate::workspace::{ActiveSession, WorkspaceAction, TAB_BAR_HEIGHT};
 
 use crate::util::bindings::{cmd_or_ctrl_shift, CustomAction};
 use warpui::elements::MouseStateHandle;
@@ -916,8 +916,27 @@ impl AIAssistantPanelView {
                         .finish(),
                 );
             }
+            // Rows whose session has a CWD become clickable — clicking
+            // dispatches a `WorkspaceAction::OpenCovenSessionInNewTab` which
+            // opens a new terminal tab whose shell starts at that CWD. Rows
+            // with no CWD render the same but stay inert (the gateway didn't
+            // tell us where the session lives, so we have nowhere to open).
+            let row_element: Box<dyn Element> = if let Some(cwd) = session.cwd.clone() {
+                let session_name = session.name.clone();
+                EventHandler::new(row.finish())
+                    .on_left_mouse_down(move |ctx, _, _| {
+                        ctx.dispatch_typed_action(WorkspaceAction::OpenCovenSessionInNewTab {
+                            name: session_name.clone(),
+                            cwd: cwd.clone(),
+                        });
+                        DispatchEventResult::StopPropagation
+                    })
+                    .finish()
+            } else {
+                row.finish()
+            };
             section.add_child(
-                Container::new(row.finish())
+                Container::new(row_element)
                     .with_padding_top(ROW_VERTICAL_PADDING)
                     .with_padding_bottom(ROW_VERTICAL_PADDING)
                     .finish(),
