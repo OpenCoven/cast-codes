@@ -47,7 +47,7 @@ pub struct BrowserAgent;
 impl BrowserAgent {
     /// Returns one snapshot per open tab in the active browser pane.
     /// Empty list if no pane is open.
-    pub fn list_tabs(ctx: &mut AppContext) -> Vec<TabInfo> {
+    pub fn list_tabs(ctx: &AppContext) -> Vec<TabInfo> {
         let Some(window_id) = ctx.windows().active_window() else {
             return vec![];
         };
