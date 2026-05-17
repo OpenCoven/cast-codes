@@ -4956,7 +4956,41 @@ impl Workspace {
             self.set_active_tab_index(index, ctx);
             self.focus_active_tab(ctx);
             self.update_window_title(ctx);
+            #[cfg(feature = "cast-agent")]
+            self.publish_open_panes_to_cast_agent(ctx);
         }
+    }
+
+    /// Snapshot the open tabs and push them to the Cast Agent host substrate
+    /// so the gateway sees a fresh `open_panes` list on its next
+    /// `build_substrate` call. Cheap on the UI thread: just walks
+    /// `self.tabs` and writes a sync `RwLock`. Called from any path that
+    /// mutates the tab list — open, activate, close.
+    ///
+    /// The per-pane `cwd` is left empty for now because the terminal model
+    /// lives behind `active_session_view → model.lock() → block::current_working_directory()`,
+    /// which is too deep to reach safely from this hook. A follow-up that
+    /// wires the terminal CWD will fill it in. `title` and `active` are
+    /// enough for the gateway to disambiguate tabs in the meantime.
+    #[cfg(feature = "cast-agent")]
+    fn publish_open_panes_to_cast_agent(&self, ctx: &warpui::AppContext) {
+        let panes: Vec<::ai::cast_agent::PaneInfo> = self
+            .tabs
+            .iter()
+            .enumerate()
+            .map(|(idx, tab)| {
+                let title = tab.pane_group.as_ref(ctx).display_title(ctx);
+                ::ai::cast_agent::PaneInfo {
+                    id: format!("tab-{idx}"),
+                    title,
+                    cwd: std::path::PathBuf::new(),
+                    active: idx == self.active_tab_index,
+                }
+            })
+            .collect();
+        ::ai::cast_agent::update_host_substrate(move |host| {
+            host.open_panes = panes;
+        });
     }
 
     fn left_panel_visibility_across_tabs_enabled(&self, ctx: &AppContext) -> bool {
@@ -10453,6 +10487,12 @@ impl Workspace {
         for i in tab_indices_vec.into_iter().sorted().rev() {
             self.remove_tab(i, add_to_undo_stack, true, ctx);
         }
+        // Republish open_panes to Cast Agent — `remove_tab` may trigger
+        // `activate_tab_internal` when the active tab is among the removed
+        // (which already publishes), but the last-remaining-tab case skips
+        // that path. Publishing here unconditionally is idempotent.
+        #[cfg(feature = "cast-agent")]
+        self.publish_open_panes_to_cast_agent(ctx);
         true
     }
 

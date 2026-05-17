@@ -131,3 +131,54 @@ fn update_host_substrate_patches_one_field_without_clobbering_others() {
     assert_eq!(after.open_panes.len(), 1, "panes should be preserved");
     assert_eq!(after.recent_errors.len(), 1, "errors should be preserved");
 }
+
+#[test]
+fn update_host_substrate_replaces_open_panes_atomically() {
+    install_crypto_provider_once();
+
+    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
+        .expect("runtime boots");
+
+    // Seed an active_file and an initial open_panes list, then replace
+    // open_panes wholesale — simulates how `Workspace::publish_open_panes_to_cast_agent`
+    // patches the host substrate when tabs change. `active_file` must
+    // survive untouched.
+    runtime.set_host_substrate(HostSubstrate {
+        active_file: Some(PathBuf::from("/repo/src/main.rs")),
+        open_panes: vec![PaneInfo {
+            id: "tab-0".into(),
+            title: "old".into(),
+            cwd: PathBuf::new(),
+            active: true,
+        }],
+        recent_errors: Vec::new(),
+    });
+
+    runtime.update_host_substrate(|h| {
+        h.open_panes = vec![
+            PaneInfo {
+                id: "tab-0".into(),
+                title: "zsh".into(),
+                cwd: PathBuf::new(),
+                active: false,
+            },
+            PaneInfo {
+                id: "tab-1".into(),
+                title: "main.rs".into(),
+                cwd: PathBuf::new(),
+                active: true,
+            },
+        ];
+    });
+
+    let after = runtime.host_substrate();
+    assert_eq!(after.open_panes.len(), 2, "open_panes replaced wholesale");
+    assert_eq!(after.open_panes[0].title, "zsh");
+    assert_eq!(after.open_panes[1].title, "main.rs");
+    assert!(after.open_panes[1].active, "tab-1 is the active tab now");
+    assert_eq!(
+        after.active_file.as_deref(),
+        Some(std::path::Path::new("/repo/src/main.rs")),
+        "active_file slice survives the open_panes patch"
+    );
+}

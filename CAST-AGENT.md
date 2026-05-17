@@ -75,6 +75,18 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   [`update_host_substrate`](crates/cast_agent/src/runtime.rs).
   Patches just the `active_file` field so concurrent publishers (pane
   lifecycle, LSP) keep their slices when they land.
+- ✅ `open_panes` publisher —
+  [`Workspace::publish_open_panes_to_cast_agent`](app/src/workspace/view.rs)
+  walks `self.tabs`, builds a `Vec<PaneInfo>` (id, title, active flag),
+  and pushes it via `update_host_substrate`. Wired into
+  `activate_tab_internal` (covers open + activate, since
+  `add_tab_with_pane_layout` ends by activating the new tab) and into
+  `close_tabs` (covers the last-tab-removed edge case where
+  `activate_tab_internal` doesn't fire). Per-pane `cwd` is left empty
+  for now — it lives behind
+  `active_session_view → model.lock() → block::current_working_directory()`,
+  which is deeper than the hook can reach safely; wiring the terminal
+  CWD is its own slice.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
   agent panel switch to `stream_messages` for actual chat — see
   "Open follow-ups" below.
