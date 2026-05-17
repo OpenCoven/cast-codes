@@ -13,11 +13,12 @@ Tracking `@create-markdown/core@2.0.3`:
 - [x] Block factories (`paragraph`, `h1`..`h6`, lists, code, table, callouts)
 - [x] Document operations (insert, append, move, find, update)
 - [x] Markdown serializer (blocks → markdown)
-- [ ] Tokenizer
-- [ ] Markdown parser (markdown → blocks)
-- [ ] Full vitest → `#[test]` test-suite parity
+- [x] Line-based tokenizer
+- [x] Inline parser (bold/italic/code/strikethrough/highlight/links/images/escapes)
+- [x] Block parser (headings, paragraphs, lists, code fences, tables, callouts, dividers)
+- [ ] Full vitest → `#[test]` test-suite parity (hand-written suite covers the surface; the JS package's vitest fixtures aren't yet ported)
 
-68 unit tests cover every implemented surface and pass on CI.
+118 unit tests cover every surface and pass on CI.
 
 ## Quick Start
 
@@ -63,9 +64,9 @@ The Rust API is snake_case. The JS→Rust map for the public surface:
 
 | JS                         | Rust                              |
 | -------------------------- | --------------------------------- |
-| `parse(md)`                | `parse(md)` *(not yet implemented)* |
-| `markdownToBlocks`         | `markdown_to_blocks` *(not yet)*    |
-| `markdownToDocument`       | `markdown_to_document` *(not yet)*  |
+| `parse(md)`                | `parse(md)`                       |
+| `markdownToBlocks`         | `markdown_to_blocks`              |
+| `markdownToDocument`       | `markdown_to_document`            |
 | `stringify`                | `stringify`                       |
 | `blocksToMarkdown`         | `blocks_to_markdown`              |
 | `documentToMarkdown`       | `document_to_markdown`            |
@@ -73,7 +74,7 @@ The Rust API is snake_case. The JS→Rust map for the public surface:
 | `appendBlock` / `insertBlock` / `removeBlock` / `moveBlock` / `findBlock` | same, snake_case |
 | `escapeMarkdown` / `unescapeMarkdown` | `escape_markdown` / `unescape_markdown` |
 | `generateId`               | `generate_id`                     |
-| `fromMarkdown` / `toMarkdown` | `from_markdown` *(not yet)* / `to_markdown` *(not yet)* |
+| `fromMarkdown` / `toMarkdown` | `from_markdown` / `to_markdown` |
 | `h1`..`h6`                 | `h1`..`h6`                        |
 | `bulletList`               | `bullet_list`                     |
 | `numberedList`             | `numbered_list`                   |
