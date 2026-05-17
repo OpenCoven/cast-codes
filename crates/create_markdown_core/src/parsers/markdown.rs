@@ -210,7 +210,11 @@ fn parse_numbered_list(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> 
             break;
         }
         if t.indent > base_indent {
-            cur.advance();
+            let Some(last_item) = children.last_mut() else {
+                break;
+            };
+            let nested_list = parse_numbered_list(cur, options);
+            last_item.children.push(nested_list);
             continue;
         }
         let content = parse_inline(&t.content);
@@ -365,6 +369,9 @@ fn parse_table(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Block {
                     .trim()
                     .trim_start_matches('|')
                     .trim_end_matches('|');
+                // Split on '|' and trim whitespace but *keep* empty cells so
+                // that intentional blank columns (e.g. `| a |  | b |`) are
+                // preserved and the table can round-trip correctly.
                 let cells: Vec<String> = row.split('|').map(|c| c.trim().to_string()).collect();
                 if is_first && !has_separator {
                     headers = cells;
@@ -422,6 +429,7 @@ fn parse_image(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Block {
     let tok = cur.peek().expect("checked");
     let url = tok.content.clone();
     let alt = tok.meta.image_alt.clone().filter(|s| !s.is_empty());
+    let title = tok.meta.image_title.clone();
     cur.advance();
     block_with_id(
         options,
@@ -430,7 +438,7 @@ fn parse_image(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Block {
         BlockProps::Image(ImageProps {
             url,
             alt,
-            title: None,
+            title,
             width: None,
             height: None,
         }),
@@ -589,3 +597,65 @@ mod tests {
         assert_eq!(doc.blocks.len(), 1);
     }
 }
+
+    // ── new tests for fixed behaviours ─────────────────────────────────────
+
+    #[test]
+    fn image_with_title_round_trips() {
+        let blocks = parse(r#"![logo](https://example.com/logo.png "Brand Logo")"#);
+        assert_eq!(blocks.len(), 1);
+        match &blocks[0].props {
+            BlockProps::Image(p) => {
+                assert_eq!(p.url, "https://example.com/logo.png");
+                assert_eq!(p.alt.as_deref(), Some("logo"));
+                assert_eq!(p.title.as_deref(), Some("Brand Logo"));
+            }
+            _ => panic!("expected Image block"),
+        }
+        // Serializer should emit the title back out.
+        let back = crate::serializers::markdown::blocks_to_markdown(
+            &blocks,
+            &crate::types::MarkdownSerializeOptions::default(),
+        );
+        assert!(back.contains("\"Brand Logo\""), "serialized: {back}");
+    }
+
+    #[test]
+    fn table_preserves_empty_cells() {
+        let md = "| a |  | c |\n|---|---|---|\n| 1 |  | 3 |";
+        let blocks = parse(md);
+        assert_eq!(blocks.len(), 1);
+        match &blocks[0].props {
+            BlockProps::Table(t) => {
+                assert_eq!(t.headers.len(), 3, "headers: {:?}", t.headers);
+                assert_eq!(t.rows[0].len(), 3, "row: {:?}", t.rows[0]);
+                assert_eq!(t.headers[1], "", "middle header should be empty");
+                assert_eq!(t.rows[0][1], "", "middle cell should be empty");
+            }
+            _ => panic!("expected Table block"),
+        }
+    }
+
+    #[test]
+    fn nested_bullet_list_items_are_children_not_dropped() {
+        let md = "- a\n  - b\n  - c\n- d";
+        let blocks = parse(md);
+        assert_eq!(blocks.len(), 1);
+        let list = &blocks[0];
+        // top-level: items for "a" and "d"
+        assert_eq!(list.children.len(), 2, "top-level items: {}", list.children.len());
+        // "a" item should have a nested list child
+        let item_a = &list.children[0];
+        assert_eq!(item_a.children.len(), 1, "item_a should have 1 nested list child");
+    }
+
+    #[test]
+    fn nested_numbered_list_items_are_children_not_dropped() {
+        let md = "1. a\n   1. b\n1. c";
+        let blocks = parse(md);
+        assert_eq!(blocks.len(), 1);
+        let list = &blocks[0];
+        assert_eq!(list.children.len(), 2, "top-level items: {}", list.children.len());
+        let item_a = &list.children[0];
+        assert_eq!(item_a.children.len(), 1, "item_a should have 1 nested list child");
+    }

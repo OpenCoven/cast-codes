@@ -167,7 +167,10 @@ fn serialize_code_block(block: &Block, options: &MarkdownSerializeOptions) -> St
     }
 
     let le = options.line_ending.as_str();
-    format!("```{language}{le}{code}{le}```")
+    // Escape any ``` sequences inside the code so the fence isn't prematurely
+    // closed. Uses the existing `escape_code_block` utility.
+    let escaped_code = crate::utils::escape_code_block(&code);
+    format!("```{language}{le}{escaped_code}{le}```")
 }
 
 fn serialize_blockquote(block: &Block, options: &MarkdownSerializeOptions) -> String {
@@ -326,7 +329,30 @@ pub fn serialize_span(span: &TextSpan, options: &MarkdownSerializeOptions) -> St
     }
 
     if styles.code {
-        text = format!("`{text}`");
+        // Choose a delimiter longer than the longest backtick run inside the
+        // text so the inline-code span is always valid CommonMark.
+        let max_run = {
+            let mut max = 0usize;
+            let mut cur = 0usize;
+            for ch in text.chars() {
+                if ch == '`' {
+                    cur += 1;
+                    max = max.max(cur);
+                } else {
+                    cur = 0;
+                }
+            }
+            max
+        };
+        let delim = "`".repeat(max_run + 1);
+        // Add a surrounding space when the content starts or ends with a
+        // backtick, per CommonMark § 6.1.
+        let (pre, post) = if text.starts_with('`') || text.ends_with('`') {
+            (" ", " ")
+        } else {
+            ("", "")
+        };
+        text = format!("{delim}{pre}{text}{post}{delim}");
     }
 
     if styles.highlight {
@@ -579,3 +605,30 @@ mod tests {
         assert!(md.contains("  - y"), "expected nested bullet y; got: {md}");
     }
 }
+
+    #[test]
+    fn code_block_with_backtick_fence_is_escaped() {
+        use crate::blocks::code_block as mkcode;
+        let block = mkcode("```js\nconsole.log(1)\n```", Some("md".to_string()));
+        let siblings = [block.clone()];
+        let md = serialize_block(&block, 0, &MarkdownSerializeOptions::default(), 0, &siblings);
+        assert!(!md.contains("```js\nconsole.log(1)\n```"), "raw fence not escaped: {md}");
+    }
+
+    #[test]
+    fn inline_code_with_backtick_uses_double_delimiter() {
+        use crate::blocks::paragraph as para;
+        use crate::types::{InlineStyle, TextSpan};
+        let span = TextSpan {
+            text: "foo`bar".to_string(),
+            styles: InlineStyle { code: true, ..Default::default() },
+        };
+        let block = {
+            let mut b = para("");
+            b.content = vec![span];
+            b
+        };
+        let siblings = [block.clone()];
+        let md = serialize_block(&block, 0, &MarkdownSerializeOptions::default(), 0, &siblings);
+        assert!(md.contains("``foo`bar``"), "expected double-backtick delimiter; got: {md}");
+    }

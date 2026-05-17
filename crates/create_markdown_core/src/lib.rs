@@ -73,6 +73,6 @@ pub use utils::{
 /// Package version. Mirrors the npm package's exported `VERSION`.
 pub const VERSION: &str = "2.0.3";
 
-/// Document schema version used by [`Document::version`]. Mirrors the JS
-/// `DOCUMENT_VERSION` constant.
-pub const DOCUMENT_VERSION: u32 = 1;
+/// Document schema version used by [`Document::version`]. Sourced from
+/// [`document::DOCUMENT_VERSION`] — single authoritative definition.
+pub use document::DOCUMENT_VERSION;
