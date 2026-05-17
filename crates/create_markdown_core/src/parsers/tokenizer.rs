@@ -53,9 +53,10 @@ pub struct TokenMeta {
     pub checked: Option<bool>,
     pub language: Option<String>,
     pub callout_type: Option<String>,
-    /// For standalone images, the alt text (JS upstream stuffed this into a
-    /// `language` field; this port gives it its own slot).
+    /// For standalone images, the alt text.
     pub image_alt: Option<String>,
+    /// For standalone images, the optional title from `![alt](url "title")`.
+    pub image_title: Option<String>,
 }
 
 // ============================================================================
@@ -284,7 +285,7 @@ fn is_table_separator(line: &str) -> bool {
 }
 
 /// `^!\[([^\]]*)\]\(([^)]+)\)$` — standalone image. Returns (alt, url).
-fn match_image(line: &str) -> Option<(&str, &str)> {
+fn match_image(line: &str) -> Option<(&str, &str, Option<&str>)> {
     let trimmed = line.trim();
     if !trimmed.starts_with("![") || !trimmed.ends_with(')') {
         return None;
@@ -298,11 +299,45 @@ fn match_image(line: &str) -> Option<(&str, &str)> {
     if !after.starts_with('(') {
         return None;
     }
-    let url = &after[1..after.len() - 1];
+    // Content between the outer parens (the closing ')' has been stripped).
+    let paren_inner = &after[1..after.len() - 1];
+    if paren_inner.is_empty() {
+        return None;
+    }
+    // Detect an optional title: `url "title"` or `url 'title'`.
+    // A title is present only when paren_inner ends with a quoted string
+    // AND there is a space between the URL and the opening quote.
+    let (url, title) = parse_url_and_title(paren_inner);
     if url.is_empty() {
         return None;
     }
-    Some((alt, url))
+    Some((alt, url, title))
+}
+
+/// Split `url "title"` or `url 'title'` into `(url, Some(title))`.
+/// Returns `(inner, None)` when no title is present.
+fn parse_url_and_title(inner: &str) -> (&str, Option<&str>) {
+    // A title must be wrapped in matching quotes and preceded by whitespace.
+    for &q in &['"', '\''] {
+        if inner.ends_with(q) {
+            // Find the *opening* quote of the title, which must be preceded
+            // by at least one ASCII space.
+            if let Some(open_pos) = inner[..inner.len() - 1].rfind(q) {
+                // Verify the character just before the opening quote is whitespace.
+                if open_pos > 0 {
+                    let before = inner.as_bytes()[open_pos - 1];
+                    if before == b' ' || before == b'\t' {
+                        let url_part = inner[..open_pos].trim_end();
+                        let title_part = &inner[open_pos + 1..inner.len() - 1];
+                        if !url_part.is_empty() {
+                            return (url_part, Some(title_part));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (inner, None)
 }
 
 // ============================================================================
@@ -530,7 +565,7 @@ fn tokenize_line(
     }
 
     // Standalone image
-    if let Some((alt, url)) = match_image(line) {
+    if let Some((alt, url, title)) = match_image(line) {
         return Some(Token {
             token_type: TokenType::Image,
             raw: line.to_string(),
@@ -539,6 +574,7 @@ fn tokenize_line(
             line: line_number,
             meta: TokenMeta {
                 image_alt: Some(alt.to_string()),
+                image_title: title.map(str::to_string),
                 ..Default::default()
             },
         });

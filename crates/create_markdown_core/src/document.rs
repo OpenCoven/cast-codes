@@ -53,8 +53,9 @@ fn days_to_ymd(days: i64) -> (i32, u32, u32) {
 
 /// Creates a new document seeded with the given blocks and metadata.
 ///
-/// Blocks are deep-cloned (without regenerating IDs) so the caller retains
-/// ownership of the originals.
+/// Blocks are deep-cloned so the caller retains ownership of the originals.
+/// If `options.generate_id` is `Some`, each block's ID is regenerated using
+/// the supplied generator; otherwise the original IDs are preserved.
 pub fn create_document(blocks: &[Block], options: DocumentOptions) -> Document {
     let mut meta = options.meta.unwrap_or_default();
     let now = now_iso8601();
@@ -62,11 +63,22 @@ pub fn create_document(blocks: &[Block], options: DocumentOptions) -> Document {
         meta.created_at = Some(now.clone());
     }
     meta.updated_at = Some(now);
+    let id_gen = &options.generate_id;
     Document {
         version: DOCUMENT_VERSION,
         blocks: blocks
             .iter()
-            .map(|b| deep_clone_block_with(b, false))
+            .map(|b| {
+                if let Some(gen_fn) = id_gen {
+                    // Regenerate this block's ID using the caller-supplied
+                    // generator, then deep-clone children with the same fn.
+                    let mut cloned = deep_clone_block_with(b, false);
+                    cloned.id = gen_fn();
+                    cloned
+                } else {
+                    deep_clone_block_with(b, false)
+                }
+            })
             .collect(),
         meta,
     }
@@ -616,3 +628,32 @@ mod tests {
         assert_eq!(updated.blocks[0].content[0].text, "y");
     }
 }
+
+    // ── new tests for fixed behaviours ─────────────────────────────────────
+
+    #[test]
+    fn create_document_with_generate_id_uses_custom_ids() {
+        use std::sync::{Arc, Mutex};
+        use crate::blocks::paragraph;
+
+        let counter = Arc::new(Mutex::new(0u32));
+        let counter_clone = counter.clone();
+        let options = DocumentOptions {
+            generate_id: Some(Arc::new(move || {
+                let mut c = counter_clone.lock().unwrap();
+                *c += 1;
+                format!("custom-{}", *c)
+            })),
+            meta: None,
+        };
+        let blocks = vec![paragraph("hello"), paragraph("world")];
+        let doc = create_document(&blocks, options);
+        assert_eq!(doc.blocks[0].id, "custom-1");
+        assert_eq!(doc.blocks[1].id, "custom-2");
+    }
+
+    #[test]
+    fn document_version_constant_is_same_at_root_and_module() {
+        // Ensures the crate-root re-export and the module constant never drift.
+        assert_eq!(DOCUMENT_VERSION, crate::DOCUMENT_VERSION);
+    }
