@@ -10,8 +10,14 @@
 
 pub mod blocks;
 pub mod document;
+pub mod serializers;
 pub mod types;
 pub mod utils;
+
+pub use serializers::markdown::{
+    blocks_to_markdown, document_to_markdown, serialize_block, serialize_inline_content,
+    serialize_span, stringify,
+};
 
 pub use document::{
     append_block, append_block_content, clear_blocks, clone_document, create_document,
