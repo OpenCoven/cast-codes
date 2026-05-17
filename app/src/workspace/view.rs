@@ -13144,7 +13144,7 @@ impl Workspace {
 
     /// Snapshot of every tab in the active browser pane, used by the
     /// agent_api `list_tabs` surface. Empty list if no pane is open.
-    pub fn list_browser_tabs(
+    pub(crate) fn list_browser_tabs(
         &self,
         ctx: &warpui::AppContext,
     ) -> Vec<crate::pane_group::pane::browser::agent_api::TabInfo> {
