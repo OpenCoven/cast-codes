@@ -1,0 +1,18 @@
+[package]
+name = "create_markdown_core"
+version = "0.1.0"
+edition = "2024"
+authors = ["Val Alexander <val@viewdue.ai>"]
+description = "Block-based markdown parsing and serialization — Rust sister port of @create-markdown/core."
+homepage = "https://github.com/BunsDev/create-markdown"
+repository = "https://github.com/BunsDev/create-markdown"
+documentation = "https://docs.rs/create_markdown_core"
+keywords = ["markdown", "parser", "serializer", "blocks"]
+categories = ["text-processing", "parser-implementations"]
+readme = "README.md"
+license = "MIT"
+publish = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
