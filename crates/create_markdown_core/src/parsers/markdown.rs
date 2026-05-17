@@ -174,7 +174,11 @@ fn parse_bullet_list(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Bl
             break;
         }
         if t.indent > base_indent {
-            cur.advance();
+            let Some(last_item) = children.last_mut() else {
+                break;
+            };
+            let nested_list = parse_bullet_list(cur, options);
+            last_item.children.push(nested_list);
             continue;
         }
         let content = parse_inline(&t.content);
