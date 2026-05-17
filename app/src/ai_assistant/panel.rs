@@ -172,12 +172,12 @@ struct CovenStreamState {
 }
 
 #[cfg(feature = "cast-agent")]
-#[derive(Clone)]
-struct CovenStreamHistoryEntry {
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub(super) struct CovenStreamHistoryEntry {
     /// Conversation id (used as a stable disambiguator in the UI).
-    conversation_id: String,
+    pub conversation_id: String,
     /// Final rendered text for the completed stream.
-    text: String,
+    pub text: String,
 }
 
 #[cfg(feature = "cast-agent")]
@@ -321,7 +321,19 @@ impl AIAssistantPanelView {
             resizable_state_handle,
             mouse_state_handles: Default::default(),
             #[cfg(feature = "cast-agent")]
-            coven_stream: Arc::new(std::sync::Mutex::new(CovenStreamState::default())),
+            coven_stream: {
+                let mut state = CovenStreamState::default();
+                // Load any persisted history from `~/.coven/stream-history.json`
+                // so completed streams survive a restart. Live `text` and
+                // `in_flight` always start fresh — we don't persist
+                // mid-flight state.
+                state.history.extend(
+                    super::coven_stream_persist::load()
+                        .into_iter()
+                        .take(COVEN_STREAM_HISTORY_MAX),
+                );
+                Arc::new(std::sync::Mutex::new(state))
+            },
         };
 
         panel.tick(ctx);
@@ -920,6 +932,15 @@ impl AIAssistantPanelView {
                 while state.history.len() > COVEN_STREAM_HISTORY_MAX {
                     state.history.pop_front();
                 }
+                // Persist the updated history so it survives restarts.
+                // We snapshot inside the lock then write while still
+                // holding it — the write is a few KB to local disk,
+                // microseconds in practice, and avoids the bookkeeping
+                // of dropping + re-locking around the rest of the
+                // reset path.
+                let snapshot: Vec<CovenStreamHistoryEntry> =
+                    state.history.iter().cloned().collect();
+                super::coven_stream_persist::save(&snapshot);
             } else {
                 state.text.clear();
             }

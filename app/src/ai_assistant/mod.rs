@@ -20,6 +20,8 @@ use warp_graphql::{
     mutations::generate_commands::{GenerateCommandsFailureType, GeneratedCommand},
 };
 
+#[cfg(feature = "cast-agent")]
+pub mod coven_stream_persist;
 pub mod execution_context;
 pub mod panel;
 pub mod requests;

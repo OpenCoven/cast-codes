@@ -124,7 +124,12 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   while the stream is in flight. Concurrent invocations abort the
   previous tokio task via `JoinHandle::abort` and archive its text
   into a bounded `VecDeque` of up to 5 completed streams, rendered
-  dimmed and newest-first above the live section.
+  dimmed and newest-first above the live section. History persists
+  across restarts at
+  [`~/.coven/stream-history.json`](app/src/ai_assistant/coven_stream_persist.rs)
+  — loaded on panel construction, saved (atomic temp + rename) on
+  every archive. Lives outside CastCodes' workspace serialization so
+  it follows the user across workspaces.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation — see
   "Open follow-ups" below.
 
