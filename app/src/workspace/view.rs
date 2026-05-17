@@ -13144,11 +13144,9 @@ impl Workspace {
     /// propagated — persistence is a convenience, not a correctness boundary.
     #[cfg(not(target_family = "wasm"))]
     fn write_browser_state(state: &crate::pane_group::pane::browser::browser_model::BrowserState) {
-        let Some(dir) = warp_core::paths::warp_home_config_dir() else {
-            log::warn!("cannot persist browser state: no CastCodes home dir");
-            return;
-        };
-        if let Err(err) = crate::pane_group::pane::browser::persistence::save(&dir, state) {
+        use crate::pane_group::pane::browser::persistence;
+
+        if let Err(err) = persistence::save_to_default_dir(state) {
             log::warn!("failed to persist browser state: {err}");
         }
     }

@@ -12,7 +12,14 @@ pub fn resolve(raw: &str) -> Resolved {
         return Resolved::Url("about:home".to_string());
     }
 
-    for scheme in ["http://", "https://", "file://", "about:", "data:", "castcodes://"] {
+    for scheme in [
+        "http://",
+        "https://",
+        "file://",
+        "about:",
+        "data:",
+        "castcodes://",
+    ] {
         if trimmed.starts_with(scheme) {
             return Resolved::Url(trimmed.to_string());
         }
@@ -22,7 +29,11 @@ pub fn resolve(raw: &str) -> Resolved {
         && (trimmed.contains('.') || is_loopback_host(trimmed));
 
     if looks_like_host {
-        let scheme = if is_loopback_host(trimmed) { "http://" } else { "https://" };
+        let scheme = if is_loopback_host(trimmed) {
+            "http://"
+        } else {
+            "https://"
+        };
         return Resolved::Url(format!("{scheme}{trimmed}"));
     }
 
@@ -31,8 +42,17 @@ pub fn resolve(raw: &str) -> Resolved {
 }
 
 fn is_loopback_host(input: &str) -> bool {
-    let host = input.split_once('/').map(|(h, _)| h).unwrap_or(input);
-    let host = host.split_once(':').map(|(h, _)| h).unwrap_or(host);
+    let host_port = input.split_once('/').map(|(h, _)| h).unwrap_or(input);
+    let host = if let Some(rest) = host_port.strip_prefix('[') {
+        rest.split_once(']').map(|(h, _)| h).unwrap_or(host_port)
+    } else if host_port == "::1" {
+        host_port
+    } else {
+        host_port
+            .split_once(':')
+            .map(|(h, _)| h)
+            .unwrap_or(host_port)
+    };
     matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
 }
 
@@ -101,6 +121,11 @@ mod tests {
         assert_eq!(
             resolve("127.0.0.1:8080/api"),
             Resolved::Url("http://127.0.0.1:8080/api".to_string())
+        );
+        assert_eq!(resolve("::1"), Resolved::Url("http://::1".to_string()));
+        assert_eq!(
+            resolve("[::1]:3000"),
+            Resolved::Url("http://[::1]:3000".to_string())
         );
     }
 

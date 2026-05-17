@@ -44,10 +44,21 @@ pub fn save(state_dir: &Path, state: &BrowserState) -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(not(target_family = "wasm"))]
+pub fn save_to_default_dir(state: &BrowserState) -> std::io::Result<()> {
+    let dir = warp_core::paths::warp_home_config_dir().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "CastCodes home dir unavailable",
+        )
+    })?;
+    save(&dir, state)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::browser_model::{BrowserModel, TabSnapshot};
+    use super::*;
 
     fn tmp_dir() -> tempfile::TempDir {
         tempfile::tempdir().expect("tempdir")
@@ -66,8 +77,16 @@ mod tests {
             v: BROWSER_STATE_VERSION,
             open: true,
             tabs: vec![
-                TabSnapshot { url: "https://a.test".into(), title: "A".into(), pinned: true },
-                TabSnapshot { url: "https://b.test".into(), title: "B".into(), pinned: false },
+                TabSnapshot {
+                    url: "https://a.test".into(),
+                    title: "A".into(),
+                    pinned: true,
+                },
+                TabSnapshot {
+                    url: "https://b.test".into(),
+                    title: "B".into(),
+                    pinned: false,
+                },
             ],
             active: 1,
         };
@@ -90,10 +109,7 @@ mod tests {
         let dir = tmp_dir();
         let path = state_path(dir.path());
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(
-            &path,
-            br#"{"v":99,"open":true,"tabs":[],"active":0}"#,
-        ).unwrap();
+        fs::write(&path, br#"{"v":99,"open":true,"tabs":[],"active":0}"#).unwrap();
         assert!(load(dir.path()).is_none());
     }
 

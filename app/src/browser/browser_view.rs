@@ -34,6 +34,7 @@ use crate::{
 
 use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
+use super::persistence;
 use super::url_input::{resolve, Resolved};
 use super::webview_host::NativeBrowserWebView;
 
@@ -377,8 +378,7 @@ impl BrowserView {
         // If the active tab changed, surface the new tab's URL & title; if the
         // previously-active webview is still around (e.g. we closed a non-active
         // tab), leave it as-is.
-        if self.model.active_index() != prior_active_idx
-            || result.removed_index == prior_active_idx
+        if self.model.active_index() != prior_active_idx || result.removed_index == prior_active_idx
         {
             if let Some(webview) = self.active_webview() {
                 webview.borrow_mut().set_visibility(true);
@@ -437,11 +437,7 @@ impl BrowserView {
         });
     }
 
-    fn handle_document_title(
-        &mut self,
-        msg: (TabId, String),
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn handle_document_title(&mut self, msg: (TabId, String), ctx: &mut ViewContext<Self>) {
         let (tab_id, title) = msg;
         if self.model.set_title_for(tab_id, title) {
             // Only resync the pane title if the active tab's title changed.
@@ -457,6 +453,14 @@ impl BrowserView {
             configuration.set_title(self.model.display_title(), ctx);
             configuration.set_title_secondary(self.model.current_url(), ctx);
         });
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn persist_open_state(&self, open: bool) {
+        let state = self.model.snapshot(open);
+        if let Err(err) = persistence::save_to_default_dir(&state) {
+            log::warn!("failed to persist browser state: {err}");
+        }
     }
 
     fn render_toolbar_button(
@@ -608,11 +612,7 @@ impl BrowserView {
         for (idx, tab) in self.model.tabs().iter().enumerate() {
             let title = tab.display_title().to_string();
             let tab_id = tab.id();
-            let ui_state = self
-                .tab_ui_states
-                .get(&tab_id)
-                .cloned()
-                .unwrap_or_default();
+            let ui_state = self.tab_ui_states.get(&tab_id).cloned().unwrap_or_default();
             let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
             let chip_with_margin = if idx == 0 {
                 chip
@@ -655,7 +655,11 @@ impl BrowserView {
         let active_text = theme.main_text_color(theme.background());
         let inactive_text = theme.sub_text_color(theme.background());
         let hover_bg = theme.surface_2();
-        let chip_text_color = if is_active { active_text } else { inactive_text };
+        let chip_text_color = if is_active {
+            active_text
+        } else {
+            inactive_text
+        };
         let title_text = title.to_string();
         let font_family = appearance.ui_font_family();
         let close_mouse = ui_state.close_mouse.clone();
@@ -678,9 +682,7 @@ impl BrowserView {
             }
             container.finish()
         })
-        .on_click(move |ctx, _, _| {
-            ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx))
-        })
+        .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
 
         let title_element = ConstrainedBox::new(
@@ -696,11 +698,7 @@ impl BrowserView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Min)
             .with_child(Expanded::new(1.0, title_element).finish())
-            .with_child(
-                Container::new(close_button)
-                    .with_margin_left(4.0)
-                    .finish(),
-            )
+            .with_child(Container::new(close_button).with_margin_left(4.0).finish())
             .finish();
 
         let chip_mouse = ui_state.chip_mouse.clone();
@@ -725,9 +723,7 @@ impl BrowserView {
             }
             container.finish()
         })
-        .on_click(move |ctx, _, _| {
-            ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx))
-        })
+        .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx)))
         .finish();
 
         ConstrainedBox::new(Align::new(chip).finish())
@@ -772,11 +768,11 @@ impl View for BrowserView {
         // Only the active tab's webview is rendered into the layout tree.
         // Inactive tabs keep their native views hidden via set_visibility(false).
         let webview_element: Box<dyn Element> = match self.active_webview() {
-            Some(webview) => Container::new(
-                NativeWebViewElement::new(webview.clone(), self.window_id).finish(),
-            )
-            .with_background(theme.background())
-            .finish(),
+            Some(webview) => {
+                Container::new(NativeWebViewElement::new(webview.clone(), self.window_id).finish())
+                    .with_background(theme.background())
+                    .finish()
+            }
             None => Container::new(Container::new(Flex::row().finish()).finish())
                 .with_background(theme.background())
                 .finish(),
@@ -830,6 +826,8 @@ impl BackingView for BrowserView {
     }
 
     fn close(&mut self, ctx: &mut ViewContext<Self>) {
+        #[cfg(not(target_family = "wasm"))]
+        self.persist_open_state(false);
         ctx.emit(BrowserViewEvent::Pane(PaneEvent::Close));
     }
 

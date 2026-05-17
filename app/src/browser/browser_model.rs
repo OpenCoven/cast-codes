@@ -288,13 +288,17 @@ impl BrowserModel {
     }
 
     pub fn set_pinned(&mut self, id: TabId, pinned: bool) -> bool {
-        let Some(idx) = self.index_of(id) else { return false; };
+        let Some(idx) = self.index_of(id) else {
+            return false;
+        };
         self.tabs[idx].set_pinned(pinned);
         true
     }
 
     pub fn set_favicon(&mut self, id: TabId, favicon: Option<String>) -> bool {
-        let Some(idx) = self.index_of(id) else { return false; };
+        let Some(idx) = self.index_of(id) else {
+            return false;
+        };
         self.tabs[idx].set_favicon(favicon);
         true
     }
@@ -323,7 +327,7 @@ impl BrowserModel {
             next_id: 0,
         };
         for snap in state.tabs {
-            let id = model.push_tab(snap.url);
+            model.push_tab(snap.url);
             let idx = model.tabs.len() - 1;
             model.tabs[idx].title = snap.title;
             model.tabs[idx].pinned = snap.pinned;
@@ -354,6 +358,7 @@ fn normalize_url(url: impl Into<String>) -> String {
         || url.starts_with("file://")
         || url.starts_with("about:")
         || url.starts_with("data:")
+        || url.starts_with("castcodes://")
     {
         url.to_string()
     } else {
@@ -385,6 +390,14 @@ mod tests {
     fn about_scheme_passes_through_normalize() {
         assert_eq!(normalize_url("about:home"), "about:home");
         assert_eq!(normalize_url("about:blank"), "about:blank");
+    }
+
+    #[test]
+    fn castcodes_scheme_passes_through_normalize() {
+        assert_eq!(
+            normalize_url("castcodes://settings"),
+            "castcodes://settings"
+        );
     }
 
     #[test]
