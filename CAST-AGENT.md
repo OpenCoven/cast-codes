@@ -87,6 +87,18 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   `active_session_view → model.lock() → block::current_working_directory()`,
   which is deeper than the hook can reach safely; wiring the terminal
   CWD is its own slice.
+- ✅ `recent_errors` publisher —
+  [`LocalCodeEditorView::publish_diagnostics_to_cast_agent`](app/src/code/language_server_extension.rs)
+  reads raw `lsp_types::Diagnostic`s from the LSP server for the
+  editor's current file, filters to Error+Warning (Info/Hint are too
+  noisy for the gateway), and pushes via `update_host_substrate` with
+  path-scoped replacement: existing `recent_errors` entries for that
+  path are dropped first, then the new ones appended. A 50-entry global
+  cap trims the oldest. Hooked into `refresh_diagnostics` so every LSP
+  `publishDiagnostics` event for an open code editor updates the
+  gateway's view. Files that aren't open as code editors don't
+  contribute — pushing diagnostics from a fully cross-server collector
+  would need a higher-level subscriber and is a follow-up.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
   agent panel switch to `stream_messages` for actual chat — see
   "Open follow-ups" below.

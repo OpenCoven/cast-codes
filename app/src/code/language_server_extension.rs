@@ -140,6 +140,13 @@ impl LocalCodeEditorView {
     pub(super) fn refresh_diagnostics(&mut self, ctx: &mut ViewContext<Self>) {
         // Update cached processed diagnostics.
         self.processed_diagnostics = self.compute_processed_diagnostics(ctx);
+        // Mirror the fresh diagnostics into the Cast Agent host substrate so
+        // the gateway can include them as `recent_errors` on the next
+        // `build_substrate` call. Path-scoped replacement: only entries for
+        // this file's path are touched, so concurrent publishers for other
+        // files keep their slices.
+        #[cfg(feature = "cast-agent")]
+        self.publish_diagnostics_to_cast_agent(ctx);
 
         // Convert processed diagnostics to decorations.
         let appearance = Appearance::as_ref(ctx);
@@ -161,6 +168,69 @@ impl LocalCodeEditorView {
 
         self.diagnostic_decorations = decorations;
         self.update_editor_decorations(ctx);
+    }
+
+    /// Reach into the LSP server's raw `Vec<lsp_types::Diagnostic>` for the
+    /// current file, filter to Error+Warning, and push the entries into the
+    /// Cast Agent host substrate's `recent_errors` slice.
+    ///
+    /// The push uses [`::ai::cast_agent::update_host_substrate`] with a
+    /// path-scoped replacement strategy: existing `recent_errors` entries
+    /// whose `file` matches the current path are dropped first, then the
+    /// new ones are appended. This keeps `recent_errors` correct when the
+    /// user fixes errors in a file (count drops or goes to zero) without
+    /// clobbering errors reported by other files. A global cap (50) is
+    /// enforced by trimming the oldest entries.
+    #[cfg(feature = "cast-agent")]
+    fn publish_diagnostics_to_cast_agent(&self, ctx: &ViewContext<Self>) {
+        const RECENT_ERRORS_MAX: usize = 50;
+
+        let Some(lsp_server) = self.lsp_server.as_ref() else {
+            return;
+        };
+        let Some(file_path) = self.file_path() else {
+            return;
+        };
+        let path = file_path.to_path_buf();
+
+        let entries: Vec<::ai::cast_agent::DiagnosticEntry> = match lsp_server
+            .as_ref(ctx)
+            .diagnostics_for_path(file_path)
+            .ok()
+            .flatten()
+        {
+            Some(doc_diagnostics) => doc_diagnostics
+                .diagnostics
+                .iter()
+                .filter_map(|d| {
+                    let severity = match d.severity {
+                        Some(lsp_types::DiagnosticSeverity::ERROR) => {
+                            ::ai::cast_agent::DiagnosticSeverity::Error
+                        }
+                        Some(lsp_types::DiagnosticSeverity::WARNING) => {
+                            ::ai::cast_agent::DiagnosticSeverity::Warning
+                        }
+                        _ => return None, // Info/Hint are too noisy for the gateway.
+                    };
+                    Some(::ai::cast_agent::DiagnosticEntry {
+                        file: path.clone(),
+                        line: d.range.start.line,
+                        severity,
+                        message: d.message.clone(),
+                    })
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+
+        ::ai::cast_agent::update_host_substrate(move |host| {
+            host.recent_errors.retain(|e| e.file != path);
+            host.recent_errors.extend(entries);
+            let len = host.recent_errors.len();
+            if len > RECENT_ERRORS_MAX {
+                host.recent_errors.drain(0..len - RECENT_ERRORS_MAX);
+            }
+        });
     }
 
     pub(super) fn clear_diagnostics(&mut self, ctx: &mut ViewContext<Self>) {
