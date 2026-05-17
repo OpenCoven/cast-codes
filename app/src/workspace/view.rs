@@ -13167,6 +13167,39 @@ impl Workspace {
         }
     }
 
+    /// Snapshot of every tab in the active browser pane, used by the
+    /// agent_api `list_tabs` surface. Empty list if no pane is open.
+    pub(crate) fn list_browser_tabs(
+        &self,
+        ctx: &warpui::AppContext,
+    ) -> Vec<crate::pane_group::pane::browser::agent_api::TabInfo> {
+        let group = self.active_tab_pane_group();
+        let group_ref = group.as_ref(ctx);
+        let Some(pane_id) = group_ref.pane_ids().find(|id| id.is_browser_pane()) else {
+            return vec![];
+        };
+        let Some(pane) = group_ref.downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
+        else {
+            return vec![];
+        };
+        let view = pane.browser_view(ctx);
+        let view_ref = view.as_ref(ctx);
+        let model = view_ref.model();
+        let active_idx = model.active_index();
+        model
+            .tabs()
+            .iter()
+            .enumerate()
+            .map(|(idx, tab)| crate::pane_group::pane::browser::agent_api::TabInfo {
+                id: tab.id(),
+                url: tab.current_url().to_string(),
+                title: tab.display_title().to_string(),
+                loading: tab.is_loading(),
+                active: idx == active_idx,
+            })
+            .collect()
+    }
+
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
     fn show_handoff_prepare_failed_toast(window_id: WindowId, ctx: &mut ViewContext<Self>) {
         WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
