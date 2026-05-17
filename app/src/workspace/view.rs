@@ -2633,16 +2633,21 @@ impl Workspace {
         // whenever the active session's `path_if_local` changes; the
         // observer below re-snapshots the panes whenever that fires.
         //
-        // Limitation: only the *active* tab's CWD updates this way.
-        // Background tabs whose CWD changes (e.g. a script `cd`s in a
-        // tab the user isn't focused on) still rely on the next tab event
-        // to publish their new CWD. Catching those would need per-pane
-        // subscriptions to each per-terminal `ActiveSessionEvent::UpdatedPwd`,
-        // which is more invasive than this observer pattern.
+        // The observer covers active-tab CWD changes. Background tab CWDs
+        // (e.g. a script `cd`s in a tab the user isn't focused on) are
+        // caught by the periodic republish kicked off below.
         #[cfg(feature = "cast-agent")]
-        ctx.observe(&ActiveSession::handle(ctx), |me, _, ctx| {
-            me.publish_open_panes_to_cast_agent(ctx);
-        });
+        {
+            ctx.observe(&ActiveSession::handle(ctx), |me, _, ctx| {
+                me.publish_open_panes_to_cast_agent(ctx);
+            });
+            // Periodic republish so background-tab CWDs converge within
+            // a bounded window. The active-tab observer above catches
+            // foreground updates immediately; this tick covers everything
+            // the observer can't see (per-pane subscriptions would be the
+            // alternative but require chasing TerminalView lifecycle).
+            Self::tick_publish_open_panes(ctx);
+        }
 
         // Handle theme updates when there is a cloud update to themes while the picker is open.
         ctx.subscribe_to_model(&ThemeSettings::handle(ctx), |me, _, _, ctx| {
@@ -5024,6 +5029,32 @@ impl Workspace {
         ::ai::cast_agent::update_host_substrate(move |host| {
             host.open_panes = panes;
         });
+    }
+
+    /// Periodic republish of `open_panes` so background tab CWDs converge
+    /// within bounded time. The `ActiveSession` observer hooked above
+    /// catches the foreground tab's CWD as soon as it changes; this tick
+    /// catches non-focused tabs whose CWD changed without flipping focus
+    /// (e.g. a script that `cd`s in a background pane). Self-rescheduling
+    /// via `ctx.spawn` + `Timer::after` — terminates automatically when
+    /// the `Workspace` view is dropped because the spawn lives on the
+    /// view's executor.
+    ///
+    /// 10s cadence trades latency for cheap renders: the cast_agent
+    /// `update_host_substrate` call is constant-time, but walking every
+    /// tab to read `display_title` + `active_session_path` is O(tabs *
+    /// pane-groups-per-tab) and we don't want to do it every frame.
+    #[cfg(feature = "cast-agent")]
+    fn tick_publish_open_panes(ctx: &mut ViewContext<Self>) {
+        use std::time::Duration;
+        use warpui::r#async::Timer;
+        ctx.spawn(
+            async move { Timer::after(Duration::from_secs(10)).await },
+            |view, _, ctx| {
+                view.publish_open_panes_to_cast_agent(ctx);
+                Self::tick_publish_open_panes(ctx);
+            },
+        );
     }
 
     fn left_panel_visibility_across_tabs_enabled(&self, ctx: &AppContext) -> bool {

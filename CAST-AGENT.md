@@ -78,14 +78,18 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
 - ✅ `open_panes` publisher —
   [`Workspace::publish_open_panes_to_cast_agent`](app/src/workspace/view.rs)
   walks `self.tabs`, builds a `Vec<PaneInfo>` (id, title, cwd, active
-  flag), and pushes it via `update_host_substrate`. Wired into
-  `activate_tab_internal` (covers open + activate, since
-  `add_tab_with_pane_layout` ends by activating the new tab) and into
-  `close_tabs` (covers the last-tab-removed edge case). Also
-  re-publishes via `ctx.observe(&ActiveSession::handle(...))` so the
-  active tab's CWD updates inside the prompt cycle when the user `cd`s
-  — not just on tab event. Background tabs whose CWD changes without
-  focus still rely on the next tab event to update.
+  flag), and pushes it via `update_host_substrate`. Three converging
+  refresh paths:
+  - **Tab lifecycle** — `activate_tab_internal` (covers open + activate,
+    since `add_tab_with_pane_layout` ends by activating) and
+    `close_tabs` (covers last-tab-removed).
+  - **Active-tab CWD updates** — `ctx.observe(&ActiveSession::handle(...))`
+    re-publishes when the focused session's `path_if_local` changes
+    (e.g. user `cd`s in the active tab).
+  - **Background tabs** — `Workspace::tick_publish_open_panes` schedules
+    a 10s `ctx.spawn` + `Timer::after` recursion that re-publishes
+    unconditionally. Catches non-focused tabs whose CWD changes
+    without flipping focus (e.g. a script `cd`s in a background pane).
   Per-pane `cwd` comes from
   [`PaneGroup::active_session_path`](app/src/pane_group/mod.rs); falls
   back to an empty `PathBuf` for non-local sessions (SSH).
