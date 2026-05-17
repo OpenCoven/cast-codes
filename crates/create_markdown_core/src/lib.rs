@@ -5,27 +5,35 @@
 //! TypeScript) but exposes a Rust-idiomatic snake_case API. See the README
 //! for the JS→Rust naming map.
 //!
-//! Tracks `@create-markdown/core@2.0.3`. This is the scaffold commit — types,
-//! utils, and the public version constant are complete; block factories,
-//! document operations, parser, and serializer are filled in by subsequent
-//! commits.
+//! Tracks `@create-markdown/core@2.0.3`. Block types, utils, and factories
+//! are complete; document operations, parser, and serializer follow.
 
+pub mod blocks;
 pub mod types;
 pub mod utils;
 
+pub use blocks::{
+    add_children, append_content, block_quote, bold, bullet_list, callout, check_list,
+    check_list_item, code, code_block, create_block, danger_callout, divider, h1, h2, h3, h4, h5,
+    h6, heading, highlight, image, info_callout, italic, link, note_callout, numbered_list,
+    paragraph, prepend_content, set_content, spans, strikethrough, styled, table, text,
+    tip_callout, underline, update_props, warning_callout, CheckItem, ImageOptions, IntoContent,
+    ListItem,
+};
 pub use types::{
     Block, BlockProps, BlockType, BlockquoteBlock, BulletChar, BulletListBlock, CalloutBlock,
     CalloutProps, CalloutType, CheckListBlock, CheckListProps, CodeBlockBlock, CodeBlockProps,
     CodeBlockStyle, DividerBlock, Document, DocumentMeta, DocumentOptions, EmphasisChar,
-    EmptyProps, HeadingBlock, HeadingProps, HeadingStyle, ImageBlock, ImageProps, InlineStyle,
-    LineEnding, LinkData, MarkdownParseOptions, MarkdownSerializeOptions, NumberedListBlock,
-    ParagraphBlock, TableAlignment, TableBlock, TableProps, TextSpan,
+    EmptyProps, HeadingBlock, HeadingProps, HeadingStyle, IdGenerator, ImageBlock, ImageProps,
+    InlineStyle, LineEnding, LinkData, MarkdownParseOptions, MarkdownSerializeOptions,
+    NumberedListBlock, ParagraphBlock, TableAlignment, TableBlock, TableProps, TextSpan,
 };
 pub use utils::{
-    convert_line_endings, deep_clone, deep_clone_block, deep_clone_blocks, escape_code_block,
-    escape_markdown, generate_id, has_children, has_content, indent, is_valid_block_type,
-    is_valid_heading_level, normalize_line_endings, plain_content, plain_span, spans_to_plain_text,
-    trim_blank_lines, trim_trailing_whitespace, unescape_markdown,
+    block_plain_text, convert_line_endings, deep_clone, deep_clone_block, deep_clone_block_with,
+    deep_clone_blocks, escape_code_block, escape_markdown, generate_id, generate_id_with_length,
+    has_children, has_content, indent, is_valid_block_type, is_valid_heading_level,
+    normalize_line_endings, plain_content, plain_span, spans_to_plain_text, trim_blank_lines,
+    trim_trailing_whitespace, unescape_markdown,
 };
 
 /// Package version. Mirrors the npm package's exported `VERSION`.
