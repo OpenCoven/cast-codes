@@ -27,7 +27,85 @@ use crate::{
     document::AIDocumentId,
     skills::SkillReference,
 };
-pub use warp_multi_agent_api::LifecycleEventType;
+/// `crates/ai`-owned mirror of `warp_multi_agent_api::LifecycleEventType`.
+///
+/// Phase A part 1 of the gating roadmap (see `CAST-AGENT.md`):
+/// downstream consumers used to depend on the wire enum via
+/// `pub use warp_multi_agent_api::LifecycleEventType`. Now they depend
+/// on this `ai`-owned mirror at the same path, so removing the wire
+/// crate (Phase C) won't break their `use` statements. The variants
+/// and discriminants match the wire enum exactly so the `From` /
+/// `TryFrom<i32>` round-trips are lossless.
+///
+/// Subsequent Phase A PRs will internalize the other re-exported
+/// wire types (`FileContent`, `AnyFileContent`, `SkillReference`).
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum LifecycleEventType {
+    Unspecified = 0,
+    Started = 1,
+    Idle = 2,
+    Restarted = 3,
+    Errored = 4,
+    Cancelled = 5,
+    Blocked = 6,
+    InProgress = 7,
+    Succeeded = 8,
+    Failed = 9,
+}
+
+#[allow(deprecated)]
+impl From<warp_multi_agent_api::LifecycleEventType> for LifecycleEventType {
+    fn from(wire: warp_multi_agent_api::LifecycleEventType) -> Self {
+        use warp_multi_agent_api::LifecycleEventType as Wire;
+        match wire {
+            Wire::Unspecified => Self::Unspecified,
+            Wire::Started => Self::Started,
+            Wire::Idle => Self::Idle,
+            Wire::Restarted => Self::Restarted,
+            Wire::Errored => Self::Errored,
+            Wire::Cancelled => Self::Cancelled,
+            Wire::Blocked => Self::Blocked,
+            Wire::InProgress => Self::InProgress,
+            Wire::Succeeded => Self::Succeeded,
+            Wire::Failed => Self::Failed,
+        }
+    }
+}
+
+#[allow(deprecated)]
+impl From<LifecycleEventType> for warp_multi_agent_api::LifecycleEventType {
+    fn from(local: LifecycleEventType) -> Self {
+        use warp_multi_agent_api::LifecycleEventType as Wire;
+        match local {
+            LifecycleEventType::Unspecified => Wire::Unspecified,
+            LifecycleEventType::Started => Wire::Started,
+            LifecycleEventType::Idle => Wire::Idle,
+            LifecycleEventType::Restarted => Wire::Restarted,
+            LifecycleEventType::Errored => Wire::Errored,
+            LifecycleEventType::Cancelled => Wire::Cancelled,
+            LifecycleEventType::Blocked => Wire::Blocked,
+            LifecycleEventType::InProgress => Wire::InProgress,
+            LifecycleEventType::Succeeded => Wire::Succeeded,
+            LifecycleEventType::Failed => Wire::Failed,
+        }
+    }
+}
+
+impl TryFrom<i32> for LifecycleEventType {
+    type Error = ();
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        warp_multi_agent_api::LifecycleEventType::try_from(value)
+            .map(Self::from)
+            .map_err(|_| ())
+    }
+}
+
+impl From<LifecycleEventType> for i32 {
+    fn from(value: LifecycleEventType) -> i32 {
+        value as i32
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, EnumDiscriminants)]
 pub enum AIAgentActionType {
