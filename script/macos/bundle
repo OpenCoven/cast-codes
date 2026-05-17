@@ -539,7 +539,7 @@ if [[ "$ARTIFACT" == "app" ]]; then
   cat > "$CLI_SCRIPT_PATH" << 'EOF'
 #!/bin/bash
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec -a "$0" "$script_dir/../../MacOS/WARP_BIN_PLACEHOLDER" "$@"
+WARP_CLI_MODE=1 exec -a "$0" "$script_dir/../../MacOS/WARP_BIN_PLACEHOLDER" "$@"
 EOF
   
   # Replace the placeholder with the actual binary name

@@ -1,0 +1,232 @@
+{
+  "$schema": "https://registry.scalar.com/@scalar/schemas/config",
+  "scalar": "2.0.0",
+  "info": {
+    "title": "CastCodes",
+    "description": "CastCodes — an OpenCoven-native code editor and terminal powered by Cast Agent and the Coven Gateway. Fast, branded, and built for the Coven ecosystem."
+  },
+  "siteConfig": {
+    "logo": {
+      "darkMode": "https://raw.githubusercontent.com/OpenCoven/cast-codes/main/assets/icons/logo.svg",
+      "lightMode": "https://raw.githubusercontent.com/OpenCoven/cast-codes/main/assets/icons/logo.svg"
+    },
+    "theme": "purple",
+    "head": [
+      {
+        "tag": "meta",
+        "attributes": {
+          "name": "theme-color",
+          "content": "#7c3aed"
+        }
+      },
+      {
+        "tag": "link",
+        "attributes": {
+          "rel": "preconnect",
+          "href": "https://fonts.googleapis.com"
+        }
+      },
+      {
+        "tag": "style",
+        "content": ":root { --scalar-color-1: #7c3aed; --scalar-color-2: #d4a84b; --scalar-background-1: #0f0f12; --scalar-background-2: #161619; --scalar-background-3: #1e1e22; --scalar-color-accent: #7c3aed; }"
+      }
+    ]
+  },
+  "navigation": {
+    "header": [
+      {
+        "type": "link",
+        "title": "CastCodes",
+        "to": "/"
+      },
+      {
+        "type": "spacer"
+      },
+      {
+        "type": "link",
+        "title": "GitHub",
+        "icon": "phosphor/regular/github-logo",
+        "to": "https://github.com/OpenCoven/cast-codes",
+        "newTab": true
+      },
+      {
+        "type": "link",
+        "title": "OpenCoven",
+        "to": "https://opencoven.dev",
+        "newTab": true
+      },
+      {
+        "type": "link",
+        "title": "Download",
+        "style": "button",
+        "icon": "phosphor/regular/download-simple",
+        "to": "https://github.com/OpenCoven/cast-codes/releases/latest",
+        "newTab": true
+      }
+    ],
+    "sidebar": [
+      {
+        "title": "GitHub",
+        "url": "https://github.com/OpenCoven/cast-codes",
+        "icon": "phosphor/regular/github-logo"
+      },
+      {
+        "title": "OpenCoven",
+        "url": "https://opencoven.dev",
+        "icon": "phosphor/regular/sparkle"
+      }
+    ],
+    "routes": {
+      "/": {
+        "title": "Introduction",
+        "type": "page",
+        "filepath": "docs/introduction.md"
+      },
+      "/getting-started": {
+        "title": "Getting Started",
+        "type": "group",
+        "pages": [
+          {
+            "title": "Installation",
+            "type": "page",
+            "filepath": "docs/getting-started/installation.md"
+          },
+          {
+            "title": "Homebrew Install",
+            "type": "page",
+            "filepath": "docs/getting-started/homebrew.md"
+          },
+          {
+            "title": "First Launch",
+            "type": "page",
+            "filepath": "docs/getting-started/first-launch.md"
+          },
+          {
+            "title": "Connecting to Coven Gateway",
+            "type": "page",
+            "filepath": "docs/getting-started/coven-gateway.md"
+          }
+        ]
+      },
+      "/cast-agent": {
+        "title": "Cast Agent",
+        "type": "group",
+        "pages": [
+          {
+            "title": "Overview",
+            "type": "page",
+            "filepath": "docs/cast-agent/overview.md"
+          },
+          {
+            "title": "Architecture",
+            "type": "page",
+            "filepath": "CAST-AGENT.md"
+          },
+          {
+            "title": "Substrate",
+            "type": "page",
+            "filepath": "docs/cast-agent/substrate.md"
+          },
+          {
+            "title": "Coven Sessions",
+            "type": "page",
+            "filepath": "docs/cast-agent/sessions.md"
+          },
+          {
+            "title": "Comux Bridge",
+            "type": "page",
+            "filepath": "docs/cast-agent/comux-bridge.md"
+          },
+          {
+            "title": "Configuration",
+            "type": "page",
+            "filepath": "docs/cast-agent/configuration.md"
+          }
+        ]
+      },
+      "/ui": {
+        "title": "Interface",
+        "type": "group",
+        "pages": [
+          {
+            "title": "Design System",
+            "type": "page",
+            "filepath": "DESIGN-CHANGES.md"
+          },
+          {
+            "title": "Tab Bar",
+            "type": "page",
+            "filepath": "docs/ui/tab-bar.md"
+          },
+          {
+            "title": "Themes",
+            "type": "page",
+            "filepath": "docs/ui/themes.md"
+          },
+          {
+            "title": "Keyboard Shortcuts",
+            "type": "page",
+            "filepath": "docs/ui/shortcuts.md"
+          }
+        ]
+      },
+      "/coven": {
+        "title": "Coven Integration",
+        "type": "group",
+        "pages": [
+          {
+            "title": "Overview",
+            "type": "page",
+            "filepath": "docs/coven/overview.md"
+          },
+          {
+            "title": "Coven CLI",
+            "type": "page",
+            "filepath": "docs/coven/cli.md"
+          },
+          {
+            "title": "Comux",
+            "type": "page",
+            "filepath": "docs/coven/comux.md"
+          },
+          {
+            "title": "Gateway API",
+            "type": "page",
+            "filepath": "docs/coven/gateway-api.md"
+          }
+        ]
+      },
+      "/development": {
+        "title": "Development",
+        "type": "group",
+        "pages": [
+          {
+            "title": "Building from Source",
+            "type": "page",
+            "filepath": "docs/development/building.md"
+          },
+          {
+            "title": "Contributing",
+            "type": "page",
+            "filepath": "CONTRIBUTING.md"
+          },
+          {
+            "title": "Releasing",
+            "type": "page",
+            "filepath": "docs/development/releasing.md"
+          },
+          {
+            "title": "Architecture Overview",
+            "type": "page",
+            "filepath": "docs/development/architecture.md"
+          }
+        ]
+      },
+      "/changelog": {
+        "title": "Changelog",
+        "type": "page",
+        "filepath": "CHANGELOG.md"
+      }
+    }
+  }
+}

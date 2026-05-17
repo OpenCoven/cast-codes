@@ -743,10 +743,10 @@ pub fn run() -> Result<()> {
 
     // If running as a standalone CLI binary or invoked through a CastCodes CLI
     // wrapper, print help instead of launching the GUI app.
-    let is_cli_binary = cfg!(feature = "standalone")
-        || warp_cli::binary_name().is_some_and(|name| name.starts_with("cast-codes"))
-        || std::env::var_os("WARP_CLI_MODE").is_some();
-    if is_cli_binary {
+    if should_print_cli_help(
+        cfg!(feature = "standalone"),
+        std::env::var_os("WARP_CLI_MODE").is_some(),
+    ) {
         warp_cli::Args::clap_command().print_help()?;
         return Ok(());
     }
@@ -756,6 +756,30 @@ pub fn run() -> Result<()> {
         args: args.into_app_args(),
         api_key,
     })
+}
+
+fn should_print_cli_help(is_standalone_binary: bool, cli_mode_env_present: bool) -> bool {
+    is_standalone_binary || cli_mode_env_present
+}
+
+#[cfg(test)]
+mod launch_mode_tests {
+    use super::should_print_cli_help;
+
+    #[test]
+    fn cast_codes_app_binary_launches_gui_without_cli_mode_env() {
+        assert!(!should_print_cli_help(false, false));
+    }
+
+    #[test]
+    fn cli_wrapper_can_request_cli_mode_explicitly() {
+        assert!(should_print_cli_help(false, true));
+    }
+
+    #[test]
+    fn standalone_build_still_prints_cli_help() {
+        assert!(should_print_cli_help(true, false));
+    }
 }
 
 /// Runs an integration test using the provided test driver.
