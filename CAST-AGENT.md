@@ -81,15 +81,14 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   flag), and pushes it via `update_host_substrate`. Wired into
   `activate_tab_internal` (covers open + activate, since
   `add_tab_with_pane_layout` ends by activating the new tab) and into
-  `close_tabs` (covers the last-tab-removed edge case where
-  `activate_tab_internal` doesn't fire). Per-pane `cwd` comes from
-  [`PaneGroup::active_session_path`](app/src/pane_group/mod.rs) — the
-  active local terminal session's CWD; falls back to an empty
-  `PathBuf` for non-local sessions (SSH, etc.). The CWD is
-  resnapshotted on every tab event, not on every shell prompt, so a
-  tab whose CWD changes during a long-running command shows its
-  pre-command CWD until the next tab event — good enough for the
-  gateway and no debounce needed.
+  `close_tabs` (covers the last-tab-removed edge case). Also
+  re-publishes via `ctx.observe(&ActiveSession::handle(...))` so the
+  active tab's CWD updates inside the prompt cycle when the user `cd`s
+  — not just on tab event. Background tabs whose CWD changes without
+  focus still rely on the next tab event to update.
+  Per-pane `cwd` comes from
+  [`PaneGroup::active_session_path`](app/src/pane_group/mod.rs); falls
+  back to an empty `PathBuf` for non-local sessions (SSH).
 - ✅ `recent_errors` publisher (per-editor) —
   [`LocalCodeEditorView::publish_diagnostics_to_cast_agent`](app/src/code/language_server_extension.rs)
   reads raw `lsp_types::Diagnostic`s from the LSP server for the

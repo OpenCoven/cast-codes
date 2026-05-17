@@ -2626,6 +2626,24 @@ impl Workspace {
         let auth_manager = AuthManager::handle(ctx);
         ctx.subscribe_to_model(&auth_manager, Self::handle_auth_manager_event);
 
+        // Observe the workspace `ActiveSession` singleton so the
+        // `open_panes` view shipped to the Coven Gateway picks up CWD
+        // changes within the prompt cycle — not just on tab open / activate
+        // / close. `ActiveSession::set_session_state` calls `ctx.notify()`
+        // whenever the active session's `path_if_local` changes; the
+        // observer below re-snapshots the panes whenever that fires.
+        //
+        // Limitation: only the *active* tab's CWD updates this way.
+        // Background tabs whose CWD changes (e.g. a script `cd`s in a
+        // tab the user isn't focused on) still rely on the next tab event
+        // to publish their new CWD. Catching those would need per-pane
+        // subscriptions to each per-terminal `ActiveSessionEvent::UpdatedPwd`,
+        // which is more invasive than this observer pattern.
+        #[cfg(feature = "cast-agent")]
+        ctx.observe(&ActiveSession::handle(ctx), |me, _, ctx| {
+            me.publish_open_panes_to_cast_agent(ctx);
+        });
+
         // Handle theme updates when there is a cloud update to themes while the picker is open.
         ctx.subscribe_to_model(&ThemeSettings::handle(ctx), |me, _, _, ctx| {
             if me.is_theme_chooser_open() {
