@@ -78,6 +78,8 @@ use crate::workspace::view::{
     TOGGLE_WARP_DRIVE_BINDING_NAME,
 };
 #[cfg(not(target_family = "wasm"))]
+use crate::workspace::view::TOGGLE_BROWSER_PANE_BINDING_NAME;
+#[cfg(not(target_family = "wasm"))]
 use crate::workspace::view::TOGGLE_CLI_CHAT_PANEL_BINDING_NAME;
 pub use one_time_modal_model::OneTimeModalModel;
 pub use registry::WorkspaceRegistry;
@@ -737,6 +739,16 @@ pub fn init(app: &mut AppContext) {
         .with_custom_action(CustomAction::ToggleCliChatPanel)
         .with_mac_key_binding("cmd-shift-H")
         .with_linux_or_windows_key_binding("ctrl-shift-H"),
+        #[cfg(not(target_family = "wasm"))]
+        EditableBinding::new(
+            TOGGLE_BROWSER_PANE_BINDING_NAME,
+            BindingDescription::new("Toggle Browser Pane"),
+            WorkspaceAction::ToggleBrowserPane,
+        )
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging"))
+        .with_mac_key_binding("cmd-alt-b")
+        .with_linux_or_windows_key_binding("ctrl-alt-b"),
         EditableBinding::new(
             "workspace:open_browser_pane",
             BindingDescription::new("Open Browser Pane"),

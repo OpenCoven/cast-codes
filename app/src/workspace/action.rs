@@ -715,6 +715,9 @@ pub enum WorkspaceAction {
     OpenBrowserPane {
         url: Option<String>,
     },
+    /// Toggles the browser pane: opens it if absent from the active pane
+    /// group, closes it if present. Bound to ⌘⌥B by default.
+    ToggleBrowserPane,
 }
 
 impl From<&WorkspaceAction> for LoginGatedFeature {
@@ -993,7 +996,8 @@ impl WorkspaceAction {
             | FixSettingsWithOz { .. }
             | OpenLocalToCloudHandoffPane { .. }
             | OpenNetworkLogPane
-            | OpenBrowserPane { .. } => false,
+            | OpenBrowserPane { .. }
+            | ToggleBrowserPane => false,
             #[cfg(debug_assertions)]
             ShowHoaOnboardingFlow => false,
             #[cfg(target_family = "wasm")]

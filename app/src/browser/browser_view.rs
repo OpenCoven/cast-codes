@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
-#[cfg(target_os = "macos")]
-use std::{ffi::c_void, ptr::NonNull};
 
 use pathfinder_geometry::{
     rect::RectF,
@@ -34,7 +32,22 @@ use crate::{
     ui_components::{blended_colors, buttons::icon_button_with_color, icons::Icon},
 };
 
+use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
+use super::persistence;
+use super::url_input::{resolve, Resolved};
+use super::webview_host::NativeBrowserWebView;
+
+/// Map a model-side URL to the URL the webview should actually load.
+/// `about:home` is rendered from a bundled HTML page served as a `data:` URL;
+/// every other URL is loaded verbatim.
+fn webview_url_for(model_url: &str) -> String {
+    if model_url == "about:home" {
+        about_home::url()
+    } else {
+        model_url.to_string()
+    }
+}
 
 const URL_BAR_HEIGHT: f32 = 32.0;
 const TOOLBAR_HEIGHT: f32 = 48.0;
@@ -49,7 +62,7 @@ const TOOLBAR_BUTTON_GAP: f32 = 6.0;
 const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
-const URL_BAR_PLACEHOLDER: &str = "Enter URL";
+const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -64,210 +77,14 @@ pub enum BrowserViewAction {
     NewTab,
     CloseTab(usize),
     SelectTab(usize),
+    OpenExternal,
+    Collapse,
 }
 
 #[derive(Default, Clone)]
 struct TabUiState {
     chip_mouse: MouseStateHandle,
     close_mouse: MouseStateHandle,
-}
-
-struct NativeBrowserWebView {
-    tab_id: TabId,
-    #[cfg(not(target_family = "wasm"))]
-    webview: Option<wry::WebView>,
-    title_tx: async_channel::Sender<(TabId, String)>,
-    pending_url: Option<String>,
-    bounds: Option<RectF>,
-    desired_visible: bool,
-    attach_error_logged: bool,
-}
-
-impl NativeBrowserWebView {
-    fn new(
-        tab_id: TabId,
-        initial_url: impl Into<String>,
-        title_tx: async_channel::Sender<(TabId, String)>,
-        desired_visible: bool,
-    ) -> Self {
-        Self {
-            tab_id,
-            #[cfg(not(target_family = "wasm"))]
-            webview: None,
-            title_tx,
-            pending_url: Some(initial_url.into()),
-            bounds: None,
-            desired_visible,
-            attach_error_logged: false,
-        }
-    }
-
-    fn load_url(&mut self, url: &str) {
-        self.pending_url = Some(url.to_string());
-
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(webview) = &self.webview {
-            if let Err(err) = webview.load_url(url) {
-                log::warn!("failed to load browser pane URL {url}: {err}");
-            }
-        }
-    }
-
-    fn go_back(&self) {
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(webview) = &self.webview {
-            if let Err(err) = webview.evaluate_script("history.back()") {
-                log::warn!("failed to navigate browser pane back: {err}");
-            }
-        }
-    }
-
-    fn go_forward(&self) {
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(webview) = &self.webview {
-            if let Err(err) = webview.evaluate_script("history.forward()") {
-                log::warn!("failed to navigate browser pane forward: {err}");
-            }
-        }
-    }
-
-    fn reload(&self) {
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(webview) = &self.webview {
-            if let Err(err) = webview.evaluate_script("location.reload()") {
-                log::warn!("failed to reload browser pane: {err}");
-            }
-        }
-    }
-
-    fn set_visibility(&mut self, visible: bool) {
-        self.desired_visible = visible;
-
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(webview) = &self.webview {
-            if let Err(err) = webview.set_visible(visible) {
-                log::warn!("failed to update browser pane visibility: {err}");
-            }
-        }
-    }
-
-    fn set_bounds(&mut self, window_id: WindowId, bounds: RectF, app: &AppContext) {
-        self.bounds = Some(bounds);
-        self.attach_if_needed(window_id, bounds, app);
-
-        #[cfg(not(target_family = "wasm"))]
-        if let Some(webview) = &self.webview {
-            let rect = Self::wry_rect(bounds);
-
-            if let Err(err) = webview.set_bounds(rect) {
-                log::warn!("failed to resize browser pane webview: {err}");
-            }
-            if self.desired_visible {
-                if let Err(err) = webview.set_visible(true) {
-                    log::warn!("failed to show browser pane webview: {err}");
-                }
-            }
-        }
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn wry_rect(bounds: RectF) -> wry::Rect {
-        let size = bounds.size();
-        wry::Rect {
-            x: bounds.min_x().round() as i32,
-            y: bounds.min_y().round() as i32,
-            width: size.x().max(0.0).round() as u32,
-            height: size.y().max(0.0).round() as u32,
-        }
-    }
-
-    fn attach_if_needed(&mut self, window_id: WindowId, bounds: RectF, app: &AppContext) {
-        #[cfg(target_os = "macos")]
-        {
-            if self.webview.is_some()
-                || self.attach_error_logged
-                || app.windows().active_window() != Some(window_id)
-            {
-                return;
-            }
-
-            let Some(parent) = active_appkit_view_handle() else {
-                return;
-            };
-
-            let url = self.pending_url.clone().unwrap_or_default();
-            let title_tx = self.title_tx.clone();
-            let tab_id = self.tab_id;
-            match wry::WebViewBuilder::new_as_child(&parent)
-                .with_url(url)
-                .with_bounds(Self::wry_rect(bounds))
-                .with_visible(self.desired_visible)
-                .with_accept_first_mouse(true)
-                .with_document_title_changed_handler(move |title| {
-                    let _ = title_tx.try_send((tab_id, title));
-                })
-                .build()
-            {
-                Ok(webview) => {
-                    self.webview = Some(webview);
-                }
-                Err(err) => {
-                    self.attach_error_logged = true;
-                    log::warn!("failed to attach browser pane webview: {err}");
-                }
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        let _ = (window_id, bounds, app);
-    }
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Clone, Copy)]
-struct BorrowedAppKitView {
-    native_view: NonNull<c_void>,
-}
-
-#[cfg(target_os = "macos")]
-impl wry::raw_window_handle::HasWindowHandle for BorrowedAppKitView {
-    fn window_handle(
-        &self,
-    ) -> Result<wry::raw_window_handle::WindowHandle<'_>, wry::raw_window_handle::HandleError> {
-        let appkit_window_handle =
-            wry::raw_window_handle::AppKitWindowHandle::new(self.native_view.cast());
-        Ok(unsafe {
-            wry::raw_window_handle::WindowHandle::borrow_raw(
-                wry::raw_window_handle::RawWindowHandle::AppKit(appkit_window_handle),
-            )
-        })
-    }
-}
-
-#[cfg(target_os = "macos")]
-#[allow(deprecated)]
-fn active_appkit_view_handle() -> Option<BorrowedAppKitView> {
-    use cocoa::{
-        appkit::NSApp,
-        base::{id, nil},
-    };
-    use objc::{msg_send, sel, sel_impl};
-
-    unsafe {
-        let app = NSApp();
-        if app == nil {
-            return None;
-        }
-
-        let window: id = msg_send![app, keyWindow];
-        if window == nil {
-            return None;
-        }
-
-        let native_view: id = msg_send![window, contentView];
-        NonNull::new(native_view as *mut c_void)
-            .map(|native_view| BorrowedAppKitView { native_view })
-    }
 }
 
 struct NativeWebViewElement {
@@ -359,6 +176,16 @@ pub struct BrowserView {
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
     new_tab_button_mouse_state: MouseStateHandle,
+    collapse_button_mouse_state: MouseStateHandle,
+    open_external_button_mouse_state: MouseStateHandle,
+}
+
+impl BrowserView {
+    /// Read-only access to the underlying model. Used by the workspace to
+    /// snapshot tab state for persistence.
+    pub(crate) fn model(&self) -> &BrowserModel {
+        &self.model
+    }
 }
 
 impl BrowserView {
@@ -371,7 +198,7 @@ impl BrowserView {
         let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             initial_tab_id,
-            model.current_url().to_string(),
+            webview_url_for(model.current_url()),
             title_tx.clone(),
             true,
         )));
@@ -419,6 +246,8 @@ impl BrowserView {
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
             new_tab_button_mouse_state: MouseStateHandle::default(),
+            collapse_button_mouse_state: MouseStateHandle::default(),
+            open_external_button_mouse_state: MouseStateHandle::default(),
         }
     }
 
@@ -439,8 +268,11 @@ impl BrowserView {
     }
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
-        let url = self.url_editor.as_ref(ctx).buffer_text(ctx);
-        self.navigate(url, ctx);
+        let raw_text = self.url_editor.as_ref(ctx).buffer_text(ctx);
+        let target = match resolve(&raw_text) {
+            Resolved::Url(u) | Resolved::Search(u) => u,
+        };
+        self.navigate(target, ctx);
     }
 
     fn navigate(&mut self, url: impl Into<String>, ctx: &mut ViewContext<Self>) {
@@ -449,7 +281,7 @@ impl BrowserView {
                 editor.set_buffer_text_with_base_buffer(&url, ctx);
             });
             if let Some(webview) = self.active_webview() {
-                webview.borrow_mut().load_url(&url);
+                webview.borrow_mut().load_url(&webview_url_for(&url));
             }
             self.sync_pane_title(ctx);
             ctx.notify();
@@ -500,7 +332,7 @@ impl BrowserView {
         let (tab_id, _idx) = self.model.add_tab(DEFAULT_BROWSER_URL);
         let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             tab_id,
-            DEFAULT_BROWSER_URL.to_string(),
+            webview_url_for(DEFAULT_BROWSER_URL),
             self.title_tx.clone(),
             true,
         )));
@@ -535,7 +367,7 @@ impl BrowserView {
         if let Some(new_tab_id) = result.new_tab_id {
             let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
                 new_tab_id,
-                DEFAULT_BROWSER_URL.to_string(),
+                webview_url_for(DEFAULT_BROWSER_URL),
                 self.title_tx.clone(),
                 true,
             )));
@@ -546,8 +378,7 @@ impl BrowserView {
         // If the active tab changed, surface the new tab's URL & title; if the
         // previously-active webview is still around (e.g. we closed a non-active
         // tab), leave it as-is.
-        if self.model.active_index() != prior_active_idx
-            || result.removed_index == prior_active_idx
+        if self.model.active_index() != prior_active_idx || result.removed_index == prior_active_idx
         {
             if let Some(webview) = self.active_webview() {
                 webview.borrow_mut().set_visibility(true);
@@ -606,11 +437,7 @@ impl BrowserView {
         });
     }
 
-    fn handle_document_title(
-        &mut self,
-        msg: (TabId, String),
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn handle_document_title(&mut self, msg: (TabId, String), ctx: &mut ViewContext<Self>) {
         let (tab_id, title) = msg;
         if self.model.set_title_for(tab_id, title) {
             // Only resync the pane title if the active tab's title changed.
@@ -626,6 +453,14 @@ impl BrowserView {
             configuration.set_title(self.model.display_title(), ctx);
             configuration.set_title_secondary(self.model.current_url(), ctx);
         });
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn persist_open_state(&self, open: bool) {
+        let state = self.model.snapshot(open);
+        if let Err(err) = persistence::save_to_default_dir(&state) {
+            log::warn!("failed to persist browser state: {err}");
+        }
     }
 
     fn render_toolbar_button(
@@ -670,14 +505,27 @@ impl BrowserView {
             .with_main_axis_size(MainAxisSize::Max);
 
         toolbar.add_child(self.render_toolbar_button(
-            Icon::ArrowLeft,
-            "Back",
-            self.back_button_mouse_state.clone(),
+            Icon::LeftSidebarClose,
+            "Toggle browser pane (⌘⌥B)",
+            self.collapse_button_mouse_state.clone(),
             false,
-            !self.model.can_go_back(),
-            BrowserViewAction::Back,
+            false,
+            BrowserViewAction::Collapse,
             app,
         ));
+        toolbar.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::ArrowLeft,
+                "Back",
+                self.back_button_mouse_state.clone(),
+                false,
+                !self.model.can_go_back(),
+                BrowserViewAction::Back,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
         toolbar.add_child(
             Container::new(self.render_toolbar_button(
                 Icon::ArrowRight,
@@ -728,6 +576,20 @@ impl BrowserView {
             .finish(),
         );
 
+        toolbar.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::LinkExternal,
+                "Open in default browser",
+                self.open_external_button_mouse_state.clone(),
+                false,
+                false,
+                BrowserViewAction::OpenExternal,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .finish(),
+        );
+
         ConstrainedBox::new(
             Container::new(toolbar.finish())
                 .with_horizontal_padding(TOOLBAR_HORIZONTAL_PADDING)
@@ -750,11 +612,7 @@ impl BrowserView {
         for (idx, tab) in self.model.tabs().iter().enumerate() {
             let title = tab.display_title().to_string();
             let tab_id = tab.id();
-            let ui_state = self
-                .tab_ui_states
-                .get(&tab_id)
-                .cloned()
-                .unwrap_or_default();
+            let ui_state = self.tab_ui_states.get(&tab_id).cloned().unwrap_or_default();
             let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
             let chip_with_margin = if idx == 0 {
                 chip
@@ -797,7 +655,11 @@ impl BrowserView {
         let active_text = theme.main_text_color(theme.background());
         let inactive_text = theme.sub_text_color(theme.background());
         let hover_bg = theme.surface_2();
-        let chip_text_color = if is_active { active_text } else { inactive_text };
+        let chip_text_color = if is_active {
+            active_text
+        } else {
+            inactive_text
+        };
         let title_text = title.to_string();
         let font_family = appearance.ui_font_family();
         let close_mouse = ui_state.close_mouse.clone();
@@ -820,9 +682,7 @@ impl BrowserView {
             }
             container.finish()
         })
-        .on_click(move |ctx, _, _| {
-            ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx))
-        })
+        .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
 
         let title_element = ConstrainedBox::new(
@@ -838,14 +698,11 @@ impl BrowserView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Min)
             .with_child(Expanded::new(1.0, title_element).finish())
-            .with_child(
-                Container::new(close_button)
-                    .with_margin_left(4.0)
-                    .finish(),
-            )
+            .with_child(Container::new(close_button).with_margin_left(4.0).finish())
             .finish();
 
         let chip_mouse = ui_state.chip_mouse.clone();
+        let accent = theme.accent();
         let chip = Hoverable::new(chip_mouse, move |hover_state| {
             let background = if is_active {
                 Some(active_bg)
@@ -861,11 +718,12 @@ impl BrowserView {
             if let Some(bg) = background {
                 container = container.with_background(bg);
             }
+            if is_active {
+                container = container.with_border(Border::all(1.0).with_border_fill(accent));
+            }
             container.finish()
         })
-        .on_click(move |ctx, _, _| {
-            ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx))
-        })
+        .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx)))
         .finish();
 
         ConstrainedBox::new(Align::new(chip).finish())
@@ -910,11 +768,11 @@ impl View for BrowserView {
         // Only the active tab's webview is rendered into the layout tree.
         // Inactive tabs keep their native views hidden via set_visibility(false).
         let webview_element: Box<dyn Element> = match self.active_webview() {
-            Some(webview) => Container::new(
-                NativeWebViewElement::new(webview.clone(), self.window_id).finish(),
-            )
-            .with_background(theme.background())
-            .finish(),
+            Some(webview) => {
+                Container::new(NativeWebViewElement::new(webview.clone(), self.window_id).finish())
+                    .with_background(theme.background())
+                    .finish()
+            }
             None => Container::new(Container::new(Flex::row().finish()).finish())
                 .with_background(theme.background())
                 .finish(),
@@ -940,6 +798,16 @@ impl TypedActionView for BrowserView {
             BrowserViewAction::NewTab => self.new_tab(ctx),
             BrowserViewAction::CloseTab(idx) => self.close_tab(*idx, ctx),
             BrowserViewAction::SelectTab(idx) => self.select_tab(*idx, ctx),
+            BrowserViewAction::OpenExternal => {
+                let url = self.model.current_url().to_string();
+                ctx.open_url(&url);
+            }
+            BrowserViewAction::Collapse => {
+                // The `workspace:toggle_browser_pane` global action is
+                // registered in Phase 7; dispatching by string name resolves
+                // at runtime, so it's safe to land before the handler exists.
+                ctx.dispatch_global_action("workspace:toggle_browser_pane", &());
+            }
         }
     }
 }
@@ -958,6 +826,8 @@ impl BackingView for BrowserView {
     }
 
     fn close(&mut self, ctx: &mut ViewContext<Self>) {
+        #[cfg(not(target_family = "wasm"))]
+        self.persist_open_state(false);
         ctx.emit(BrowserViewEvent::Pane(PaneEvent::Close));
     }
 
