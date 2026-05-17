@@ -16,6 +16,28 @@ CastCodes accepts small, focused patches that preserve the existing architecture
 ./script/run
 ```
 
+### Worktree-by-default branching
+
+CastCodes is built across many concurrent branches (feature work, review checkouts,
+release prep). The default workflow for any non-trivial branch is to put it in its
+own git worktree so builds and target/ caches don't collide:
+
+```bash
+./script/worktree feat/my-thing                 # new branch off HEAD in .worktrees/feat/my-thing
+./script/worktree feat/my-thing origin/main     # base off something other than HEAD
+./script/worktree --list                        # see active worktrees
+./script/worktree --remove feat/my-thing        # tear it down when done
+```
+
+The script always creates a *new* branch (it refuses to reuse an existing local
+branch name) and always lands the worktree under `.worktrees/` at the repo root,
+which is gitignored. A branch can only live in one worktree at a time — that's a
+`git worktree` rule, not a CastCodes rule.
+
+**Override:** the wrapper is a convention, not a gate. Work directly in the
+primary checkout, or call `git worktree add` yourself, whenever the extra
+isolation isn't worth it.
+
 For rebrand-sensitive work:
 
 ```bash
