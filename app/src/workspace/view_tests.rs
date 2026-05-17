@@ -200,6 +200,8 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(|ctx| {
         CodebaseIndexManager::new_for_test(ServerApiProvider::as_ref(ctx).get(), ctx)
     });
+    // Initialize workspace-wide singletons before models that depend on them.
+    app.update(workspace::init);
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
     app.add_singleton_model(|_| ProjectContextModel::default());
     app.add_singleton_model(|_| PricingInfoModel::new());
@@ -212,9 +214,6 @@ fn initialize_app(app: &mut App) {
     // `WarpManagedPathsWatcher`, `DetectedRepositories`, and `RepoMetadataModel`
     // because `SkillWatcher::new` subscribes to all of them.
     app.add_singleton_model(SkillManager::new);
-
-    // Make sure to initialize the keybindings so that they are available for subviews
-    app.update(workspace::init);
 }
 
 fn mock_workspace(app: &mut App) -> ViewHandle<Workspace> {
@@ -3037,5 +3036,64 @@ fn test_tab_mru_order() {
 
             assert_eq!(workspace.tab_mru_order(), &[id_a, id_c, id_b]);
         });
+    });
+}
+
+#[cfg(feature = "cast-agent")]
+#[test]
+fn test_open_panes_publish_only_from_active_workspace() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        ::ai::cast_agent::set_host_substrate(::ai::cast_agent::HostSubstrate::default());
+
+        let first_workspace = mock_workspace(&mut app);
+        let second_workspace = mock_workspace(&mut app);
+        second_workspace.update(&mut app, |workspace, ctx| {
+            workspace.add_terminal_tab(false, ctx);
+        });
+
+        let first_window = first_workspace.read(&app, |workspace, _| workspace.window_id);
+        let second_window = second_workspace.read(&app, |workspace, _| workspace.window_id);
+
+        WindowManager::handle(&app).update(&mut app, |manager, ctx| {
+            manager.overwrite_for_test(ApplicationStage::Active, Some(first_window));
+            ctx.notify();
+        });
+
+        first_workspace.update(&mut app, |workspace, ctx| {
+            workspace.publish_open_panes_to_cast_agent(ctx);
+        });
+        second_workspace.update(&mut app, |workspace, ctx| {
+            workspace.publish_open_panes_to_cast_agent(ctx);
+        });
+
+        let panes = ::ai::cast_agent::global()
+            .expect("cast agent runtime should initialize")
+            .host_substrate()
+            .open_panes;
+        assert_eq!(
+            panes.len(),
+            1,
+            "inactive workspace must not overwrite the active window's open_panes"
+        );
+
+        WindowManager::handle(&app).update(&mut app, |manager, ctx| {
+            manager.overwrite_for_test(ApplicationStage::Active, Some(second_window));
+            ctx.notify();
+        });
+        second_workspace.update(&mut app, |workspace, ctx| {
+            workspace.publish_open_panes_to_cast_agent(ctx);
+        });
+
+        let panes = ::ai::cast_agent::global()
+            .expect("cast agent runtime should initialize")
+            .host_substrate()
+            .open_panes;
+        assert_eq!(
+            panes.len(),
+            2,
+            "focusing another workspace should publish that window's open_panes"
+        );
     });
 }
