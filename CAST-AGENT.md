@@ -77,16 +77,19 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   lifecycle, LSP) keep their slices when they land.
 - ✅ `open_panes` publisher —
   [`Workspace::publish_open_panes_to_cast_agent`](app/src/workspace/view.rs)
-  walks `self.tabs`, builds a `Vec<PaneInfo>` (id, title, active flag),
-  and pushes it via `update_host_substrate`. Wired into
+  walks `self.tabs`, builds a `Vec<PaneInfo>` (id, title, cwd, active
+  flag), and pushes it via `update_host_substrate`. Wired into
   `activate_tab_internal` (covers open + activate, since
   `add_tab_with_pane_layout` ends by activating the new tab) and into
   `close_tabs` (covers the last-tab-removed edge case where
-  `activate_tab_internal` doesn't fire). Per-pane `cwd` is left empty
-  for now — it lives behind
-  `active_session_view → model.lock() → block::current_working_directory()`,
-  which is deeper than the hook can reach safely; wiring the terminal
-  CWD is its own slice.
+  `activate_tab_internal` doesn't fire). Per-pane `cwd` comes from
+  [`PaneGroup::active_session_path`](app/src/pane_group/mod.rs) — the
+  active local terminal session's CWD; falls back to an empty
+  `PathBuf` for non-local sessions (SSH, etc.). The CWD is
+  resnapshotted on every tab event, not on every shell prompt, so a
+  tab whose CWD changes during a long-running command shows its
+  pre-command CWD until the next tab event — good enough for the
+  gateway and no debounce needed.
 - ✅ `recent_errors` publisher —
   [`LocalCodeEditorView::publish_diagnostics_to_cast_agent`](app/src/code/language_server_extension.rs)
   reads raw `lsp_types::Diagnostic`s from the LSP server for the

@@ -133,6 +133,44 @@ fn update_host_substrate_patches_one_field_without_clobbering_others() {
 }
 
 #[test]
+fn pane_info_carries_terminal_cwd_through_build_substrate() {
+    install_crypto_provider_once();
+
+    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
+        .expect("runtime boots");
+
+    // Simulate the post-#38-enrichment shape: each pane carries its
+    // terminal session's CWD. The gateway should see the same CWDs back
+    // through `build_substrate` after the host pushes them.
+    runtime.set_host_substrate(HostSubstrate {
+        active_file: None,
+        open_panes: vec![
+            PaneInfo {
+                id: "tab-0".into(),
+                title: "zsh ~/proj/a".into(),
+                cwd: PathBuf::from("/home/u/proj/a"),
+                active: true,
+            },
+            PaneInfo {
+                id: "tab-1".into(),
+                title: "zsh /tmp".into(),
+                cwd: PathBuf::from("/tmp"),
+                active: false,
+            },
+        ],
+        recent_errors: Vec::new(),
+    });
+
+    let built = runtime
+        .handle()
+        .block_on(runtime.build_substrate())
+        .expect("build substrate");
+    assert_eq!(built.open_panes.len(), 2);
+    assert_eq!(built.open_panes[0].cwd, PathBuf::from("/home/u/proj/a"));
+    assert_eq!(built.open_panes[1].cwd, PathBuf::from("/tmp"));
+}
+
+#[test]
 fn update_host_substrate_path_replaces_recent_errors() {
     install_crypto_provider_once();
 

@@ -4967,11 +4967,15 @@ impl Workspace {
     /// `self.tabs` and writes a sync `RwLock`. Called from any path that
     /// mutates the tab list — open, activate, close.
     ///
-    /// The per-pane `cwd` is left empty for now because the terminal model
-    /// lives behind `active_session_view → model.lock() → block::current_working_directory()`,
-    /// which is too deep to reach safely from this hook. A follow-up that
-    /// wires the terminal CWD will fill it in. `title` and `active` are
-    /// enough for the gateway to disambiguate tabs in the meantime.
+    /// Per-pane `cwd` is the active terminal session's local CWD via
+    /// `PaneGroup::active_session_path` (returns `None` for non-local
+    /// sessions like SSH, in which case we fall back to an empty
+    /// `PathBuf`). The CWD churns during shell command execution; we
+    /// resnapshot it whenever `publish_open_panes_to_cast_agent` is
+    /// called, which is tab-lifecycle-scoped rather than every shell
+    /// prompt — so a tab whose CWD changes during a long-running command
+    /// will show its pre-command CWD until the next tab event. Good
+    /// enough for the gateway, and no debounce needed.
     #[cfg(feature = "cast-agent")]
     fn publish_open_panes_to_cast_agent(&self, ctx: &warpui::AppContext) {
         let panes: Vec<::ai::cast_agent::PaneInfo> = self
@@ -4979,11 +4983,15 @@ impl Workspace {
             .iter()
             .enumerate()
             .map(|(idx, tab)| {
-                let title = tab.pane_group.as_ref(ctx).display_title(ctx);
+                let pane_group = tab.pane_group.as_ref(ctx);
+                let title = pane_group.display_title(ctx);
+                let cwd = pane_group
+                    .active_session_path(ctx)
+                    .unwrap_or_else(std::path::PathBuf::new);
                 ::ai::cast_agent::PaneInfo {
                     id: format!("tab-{idx}"),
                     title,
-                    cwd: std::path::PathBuf::new(),
+                    cwd,
                     active: idx == self.active_tab_index,
                 }
             })
