@@ -9,9 +9,18 @@
 //! are complete; document operations, parser, and serializer follow.
 
 pub mod blocks;
+pub mod document;
 pub mod types;
 pub mod utils;
 
+pub use document::{
+    append_block, append_block_content, clear_blocks, clone_document, create_document,
+    empty_document, filter_blocks, find_block, find_blocks_by_type, get_block_at, get_block_count,
+    get_block_index, get_first_block, get_last_block, get_meta_field, has_block, insert_block,
+    insert_blocks, is_empty, map_blocks, move_block, prepend_block, remove_block, remove_blocks,
+    replace_block, set_block_content, set_blocks, set_meta_field, swap_blocks, update_block,
+    update_meta, BlockUpdate,
+};
 pub use blocks::{
     add_children, append_content, block_quote, bold, bullet_list, callout, check_list,
     check_list_item, code, code_block, create_block, danger_callout, divider, h1, h2, h3, h4, h5,
