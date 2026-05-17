@@ -147,7 +147,8 @@ pub struct AIAssistantPanelView {
 #[cfg(feature = "cast-agent")]
 #[derive(Default)]
 struct CovenStreamState {
-    /// Accumulated `Delta` content rendered into the panel.
+    /// Accumulated `Delta` content rendered into the panel for the
+    /// currently in-flight (or most recently completed) stream.
     text: String,
     /// Whether the cast_agent task is still producing chunks. The poll
     /// loop stops scheduling when this flips to `false`.
@@ -157,7 +158,30 @@ struct CovenStreamState {
     /// Conversation id of the active stream (for log correlation in
     /// the rendered output).
     conversation_id: String,
+    /// `JoinHandle` for the cast_agent tokio task driving the current
+    /// stream. Held so a fresh invocation can `abort()` the previous
+    /// task and replace it cleanly — without this, back-to-back
+    /// `cmd+shift+m` presses produced an interleaved jumble in `text`.
+    /// `Option` so the initial state is "no task running."
+    active_task: Option<tokio::task::JoinHandle<()>>,
+    /// Bounded ring of completed streams. Oldest is at index 0; the
+    /// renderer shows newest-first above the live section. Caps at
+    /// [`COVEN_STREAM_HISTORY_MAX`] so the panel doesn't grow
+    /// unbounded over a long session.
+    history: std::collections::VecDeque<CovenStreamHistoryEntry>,
 }
+
+#[cfg(feature = "cast-agent")]
+#[derive(Clone)]
+struct CovenStreamHistoryEntry {
+    /// Conversation id (used as a stable disambiguator in the UI).
+    conversation_id: String,
+    /// Final rendered text for the completed stream.
+    text: String,
+}
+
+#[cfg(feature = "cast-agent")]
+const COVEN_STREAM_HISTORY_MAX: usize = 5;
 
 #[derive(Debug, Clone)]
 pub enum AIAssistantAction {
@@ -869,15 +893,36 @@ impl AIAssistantPanelView {
             body: serde_json::json!({ "text": prompt }),
         };
 
-        // Reset shared state for the new stream. Concurrent streams from
-        // back-to-back invocations clobber each other into the same
-        // buffer; for v1 the user just sees them interleaved.
+        // Reset shared state for the new stream. If a previous stream
+        // is still running (back-to-back keybind presses), abort its
+        // tokio task and archive whatever text it produced into history
+        // before clearing — so the user sees their old streams as a
+        // newest-first ring above the live section, not as interleaved
+        // garbage in the active text.
         {
             let mut state = self
                 .coven_stream
                 .lock()
                 .unwrap_or_else(|p| p.into_inner());
-            state.text.clear();
+            if let Some(previous) = state.active_task.take() {
+                previous.abort();
+                log::info!(
+                    "cast_agent: aborting previous stream {} for new conversation {conversation_id}",
+                    state.conversation_id
+                );
+            }
+            if !state.text.is_empty() {
+                let archived = CovenStreamHistoryEntry {
+                    conversation_id: state.conversation_id.clone(),
+                    text: std::mem::take(&mut state.text),
+                };
+                state.history.push_back(archived);
+                while state.history.len() > COVEN_STREAM_HISTORY_MAX {
+                    state.history.pop_front();
+                }
+            } else {
+                state.text.clear();
+            }
             state.pending_chunks.clear();
             state.in_flight = true;
             state.conversation_id = conversation_id.clone();
@@ -887,7 +932,7 @@ impl AIAssistantPanelView {
         log::info!("cast_agent: opening stream for conversation {conversation_id}");
         let buffer = self.coven_stream.clone();
         let conversation_id_for_task = conversation_id.clone();
-        runtime.handle().spawn(async move {
+        let join = runtime.handle().spawn(async move {
             let stream = match agent.stream_messages(msg).await {
                 Ok(stream) => stream,
                 Err(err) => {
@@ -933,6 +978,15 @@ impl AIAssistantPanelView {
             state.in_flight = false;
         });
 
+        // Stash the join handle so a subsequent invocation can abort it.
+        {
+            let mut state = self
+                .coven_stream
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            state.active_task = Some(join);
+        }
+
         // Kick off the UI drain loop.
         self.poll_coven_stream(ctx);
     }
@@ -968,22 +1022,28 @@ impl AIAssistantPanelView {
         );
     }
 
-    /// Render the accumulated stream text below the transcript when
-    /// non-empty. Hidden during the idle state so the panel doesn't
-    /// gain dead chrome.
+    /// Render the Coven Gateway stream section below the transcript.
+    /// Shows up to [`COVEN_STREAM_HISTORY_MAX`] completed streams above
+    /// the live (or most recent) one, newest-first. Hidden entirely
+    /// when there's nothing — neither history nor live text — so the
+    /// panel doesn't grow chrome on idle.
     #[cfg(feature = "cast-agent")]
     fn render_coven_stream_section(&self, appearance: &Appearance) -> Box<dyn Element> {
         const SECTION_HEADER_FONT_SIZE: f32 = 10.;
         const BODY_FONT_SIZE: f32 = 13.;
 
-        let (text, in_flight) = {
+        let (text, in_flight, history) = {
             let state = self
                 .coven_stream
                 .lock()
                 .unwrap_or_else(|p| p.into_inner());
-            (state.text.clone(), state.in_flight)
+            (
+                state.text.clone(),
+                state.in_flight,
+                state.history.clone(),
+            )
         };
-        if text.is_empty() && !in_flight {
+        if text.is_empty() && !in_flight && history.is_empty() {
             return Empty::new().finish();
         }
 
@@ -992,60 +1052,79 @@ impl AIAssistantPanelView {
         let ui_builder = appearance.ui_builder();
         let ui_font = appearance.ui_font_family();
 
-        let header_label = if in_flight {
-            "COVEN STREAM • LIVE".to_string()
-        } else {
-            "COVEN STREAM".to_string()
-        };
-        let body_text = if text.is_empty() && in_flight {
-            "Awaiting first chunk…".to_string()
-        } else {
-            text
-        };
+        let make_entry =
+            |label: String, body_text: String, dim: bool| -> Box<dyn Element> {
+                let body_color = if dim { OPENCOVEN_MUTED } else { primary };
+                let header = Container::new(
+                    ui_builder
+                        .wrappable_text(label, false)
+                        .with_style(UiComponentStyles {
+                            font_family_id: Some(ui_font),
+                            font_size: Some(SECTION_HEADER_FONT_SIZE),
+                            font_weight: Some(warpui::fonts::Weight::Semibold),
+                            font_color: Some(OPENCOVEN_MUTED),
+                            ..Default::default()
+                        })
+                        .build()
+                        .finish(),
+                )
+                .with_padding_bottom(4.)
+                .finish();
+                let body = Container::new(
+                    ui_builder
+                        .wrappable_text(body_text, true)
+                        .with_style(UiComponentStyles {
+                            font_family_id: Some(ui_font),
+                            font_size: Some(BODY_FONT_SIZE),
+                            font_color: Some(body_color),
+                            ..Default::default()
+                        })
+                        .build()
+                        .finish(),
+                )
+                .finish();
+                Container::new(
+                    Flex::column()
+                        .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                        .with_child(header)
+                        .with_child(body)
+                        .finish(),
+                )
+                .with_padding_bottom(8.)
+                .finish()
+            };
 
-        let header = Container::new(
-            ui_builder
-                .wrappable_text(header_label, false)
-                .with_style(UiComponentStyles {
-                    font_family_id: Some(ui_font),
-                    font_size: Some(SECTION_HEADER_FONT_SIZE),
-                    font_weight: Some(warpui::fonts::Weight::Semibold),
-                    font_color: Some(OPENCOVEN_MUTED),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        )
-        .with_padding_bottom(4.)
-        .finish();
+        let mut column = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Start);
 
-        let body = Container::new(
-            ui_builder
-                .wrappable_text(body_text, true)
-                .with_style(UiComponentStyles {
-                    font_family_id: Some(ui_font),
-                    font_size: Some(BODY_FONT_SIZE),
-                    font_color: Some(primary),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        )
-        .finish();
+        // History: newest-first (history is push_back'd so the back is
+        // most recent), dimmed to distinguish from the live section.
+        for entry in history.iter().rev() {
+            let label = format!("COVEN STREAM • {}", entry.conversation_id);
+            column.add_child(make_entry(label, entry.text.clone(), true));
+        }
 
-        Container::new(
-            Flex::column()
-                .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(header)
-                .with_child(body)
-                .finish(),
-        )
-        .with_padding_left(PANEL_HORIZONTAL_PADDING)
-        .with_padding_right(PANEL_HORIZONTAL_PADDING)
-        .with_padding_top(8.)
-        .with_padding_bottom(8.)
-        .with_border(Border::top(1.).with_border_fill(theme.outline()))
-        .finish()
+        // Active stream (live or most recently completed).
+        if !text.is_empty() || in_flight {
+            let label = if in_flight {
+                "COVEN STREAM • LIVE".to_string()
+            } else {
+                "COVEN STREAM".to_string()
+            };
+            let body_text = if text.is_empty() && in_flight {
+                "Awaiting first chunk…".to_string()
+            } else {
+                text
+            };
+            column.add_child(make_entry(label, body_text, false));
+        }
+
+        Container::new(column.finish())
+            .with_padding_left(PANEL_HORIZONTAL_PADDING)
+            .with_padding_right(PANEL_HORIZONTAL_PADDING)
+            .with_padding_top(8.)
+            .with_padding_bottom(8.)
+            .with_border(Border::top(1.).with_border_fill(theme.outline()))
+            .finish()
     }
 
     /// Small coloured dot next to the title indicating Coven Gateway

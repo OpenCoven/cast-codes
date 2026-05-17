@@ -119,10 +119,12 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   `cmd+shift+m`; skips when `is_available()` is `false`. Cross-thread
   plumbing: the cast_agent tokio task pushes chunks into a shared
   `Arc<std::sync::Mutex<CovenStreamState>>`; a UI-side poll loop
-  (`poll_coven_stream`) drains the buffer every 100ms via `ctx.spawn`
-  + `Timer::after`, appends to `text`, calls `ctx.notify()`, and
-  reschedules itself while the stream is in flight. Each chunk is
-  also logged for protocol-level debugging.
+  drains the buffer every 100ms via `ctx.spawn` + `Timer::after`,
+  appends to `text`, calls `ctx.notify()`, and reschedules itself
+  while the stream is in flight. Concurrent invocations abort the
+  previous tokio task via `JoinHandle::abort` and archive its text
+  into a bounded `VecDeque` of up to 5 completed streams, rendered
+  dimmed and newest-first above the live section.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation — see
   "Open follow-ups" below.
 
