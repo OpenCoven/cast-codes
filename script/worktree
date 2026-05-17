@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+#
+# script/worktree — create an isolated git worktree for parallel branch work.
+#
+# CastCodes uses worktrees by default so multiple branches can be built and
+# tested simultaneously without checkout collisions. Branch and pathing rules
+# follow `git worktree`'s safe defaults (each branch lives in exactly one
+# worktree at a time).
+#
+# Usage:
+#   script/worktree <branch>                  Create .worktrees/<branch> on a new branch off HEAD
+#   script/worktree <branch> <base-ref>       Branch off <base-ref> instead of HEAD (e.g. origin/main)
+#   script/worktree --list                    Show existing worktrees
+#   script/worktree --remove <branch>         Remove .worktrees/<branch>
+#   script/worktree -h | --help               Show this help
+#
+# Override: skip the script and run `git worktree add` directly, or work in the
+# primary checkout. This wrapper is a convention, not a gate.
+
+set -euo pipefail
+
+usage() {
+  sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$repo_root" ]]; then
+  echo "error: not inside a git repository" >&2
+  exit 1
+fi
+cd "$repo_root"
+
+worktree_dir=".worktrees"
+
+ensure_gitignored() {
+  # Probe with a synthetic child so a `dir/` pattern in .gitignore is honored
+  # whether or not the directory exists yet.
+  if ! git check-ignore -q "$worktree_dir/.probe" 2>/dev/null; then
+    echo "warning: $worktree_dir/ is not gitignored." >&2
+    echo "         Add this line to .gitignore and commit it before pushing:" >&2
+    echo "             $worktree_dir/" >&2
+    echo "         Continuing anyway — worktree contents will appear in 'git status'." >&2
+  fi
+}
+
+cmd_list() {
+  git worktree list
+}
+
+cmd_remove() {
+  local branch="$1"
+  local path="$worktree_dir/$branch"
+  if [[ ! -d "$path" ]]; then
+    echo "error: no worktree at $path" >&2
+    exit 1
+  fi
+  git worktree remove "$path"
+  echo "removed $path"
+}
+
+cmd_create() {
+  local branch="$1"
+  local base="${2:-HEAD}"
+  local path="$worktree_dir/$branch"
+
+  if [[ -e "$path" ]]; then
+    echo "error: $path already exists. Use --remove first, or pick a different branch name." >&2
+    exit 1
+  fi
+
+  ensure_gitignored
+
+  # `-b` always creates a new branch, sidestepping the "branch already checked
+  # out elsewhere" collision. If <branch> already exists as a ref, abort rather
+  # than silently reusing it.
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    echo "error: branch '$branch' already exists locally." >&2
+    echo "       Pick a new name, or check out the existing branch with:" >&2
+    echo "           git worktree add $path $branch" >&2
+    exit 1
+  fi
+
+  git worktree add "$path" -b "$branch" "$base"
+
+  cat <<EOF
+
+worktree ready
+  path:   $repo_root/$path
+  branch: $branch (off $base)
+
+next steps:
+  cd $path
+  ./script/run                # or your usual build command
+
+when finished:
+  script/worktree --remove $branch
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+fi
+
+case "$1" in
+  -h|--help)
+    usage
+    ;;
+  --list)
+    cmd_list
+    ;;
+  --remove)
+    shift
+    [[ $# -ge 1 ]] || { echo "error: --remove requires a branch name" >&2; exit 1; }
+    cmd_remove "$1"
+    ;;
+  -*)
+    echo "error: unknown flag '$1'" >&2
+    usage
+    exit 1
+    ;;
+  *)
+    [[ $# -le 2 ]] || { echo "error: too many arguments" >&2; usage; exit 1; }
+    cmd_create "$@"
+    ;;
+esac
