@@ -134,15 +134,25 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   — loaded on panel construction, saved (atomic temp + rename) on
   every archive. Lives outside CastCodes' workspace serialization so
   it follows the user across workspaces.
-- 🟡 Phase A (in progress) — internalizing `warp_multi_agent_api` types
-  one at a time so `crates/ai`'s public API stops re-exporting wire
-  types (per the gating roadmap below). **`LifecycleEventType` done**:
-  ai-owned mirror at `crates/ai/src/agent/action/mod.rs` with
-  bidirectional `From`s + `TryFrom<i32>` delegating to the wire enum.
-  Remaining wire types to internalize: `FileContent`, `AnyFileContent`,
-  `SkillReference`.
+- 🟡 Phase A (paused, scope re-evaluated) — `LifecycleEventType` was
+  internalized in PR #52 (ai-owned mirror at
+  `crates/ai/src/agent/action/mod.rs` with bidirectional `From`s +
+  `TryFrom<i32>` delegating to the wire enum). Attempting the same
+  pattern for `FileContent` / `AnyFileContent` / `SkillReference`
+  surfaced that the wire-type leak is **structural**, not concentrated
+  in a few re-exports: 50+ `app/src/` files import
+  `warp_multi_agent_api` directly (not via `crates/ai` re-exports),
+  and the 7163-LOC `app/src/ai/agent/api/` conversion module is a
+  symmetric wire-protocol translation layer that fundamentally exists
+  to bridge ai's runtime types to/from wire types. Per-type
+  internalization doesn't reduce the gate surface meaningfully. The
+  Phase A → Phase B → Phase C decomposition from the original audit
+  remains directionally correct, but Phase A as "internalize types one
+  at a time" is the wrong unit of work. See the **revised roadmap**
+  in [Feature-gating audit](#feature-gating-audit-warp-agent-vs-cast-agent)
+  below.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation
-  (Phase C) — waits on Phase A completion.
+  (Phase C) — waits on the revised Phase A landing.
 
 ## Architecture
 
@@ -299,15 +309,11 @@ codebase is different: the only meaningful gating opportunity is
 `warp_multi_agent_api`, and even that needs preparation before the
 `#[cfg(...)]` can land safely.
 
-**Phase A — stop leaking wire types through `crates/ai`'s public API.**
-Today `crates/ai/src/agent/action/mod.rs` does
-`pub use warp_multi_agent_api::LifecycleEventType;`, and several
-`From<warp_multi_agent_api::FileContent> for FileContext` impls live in
-`agent/action/convert.rs`. Downstream `app/src/` consumers depend on
-these. Step one is to keep all `warp_multi_agent_api` references
-*internal* to `crates/ai`: define `crates/ai`-owned types for anything
-that's re-exported, with `From` conversions kept inside the agent
-subtree. No behaviour change, no feature flags yet.
+**Phase A (original framing) — stop leaking wire types through
+`crates/ai`'s public API.** Premise: define `crates/ai`-owned types
+for anything that re-exports `warp_multi_agent_api::*`, with `From`
+conversions kept inside the agent subtree. No behaviour change, no
+feature flags.
 
 **Phase B — `cast_agent`-native parallel types.** Introduce equivalent
 types inside `cast_agent` (or a new `agent_wire_types` crate that both
@@ -331,12 +337,98 @@ warp-agent = ["dep:warp_multi_agent_api"]
 `cast-agent`-only builds will then skip the protobuf compilation and
 the dep entirely.
 
-### What this PR is not
+### Phase A revision (post-PR #52 finding)
 
-This PR ships **no code changes** beyond the documentation update —
-explicitly per scope choice. The work above is multi-PR; landing Phase
-A alone would touch every `agent/` and `skills/` consumer. Future
-agents should treat the per-dep verdict table as ground truth before
-attempting `#[cfg(feature = "warp-agent")]` blocks. Most warp_* deps
-will never be gateable in `crates/ai` because their use is not
-agent-related — and that's a real architectural answer, not a TODO.
+PR #52 landed the `LifecycleEventType` internalization successfully:
+small i32 enum, single re-export site, clean mirror with
+bidirectional `From`s + `TryFrom<i32>`. Attempting the same pattern
+for `FileContent` / `AnyFileContent` / `SkillReference` revealed that
+the **wire-type leak is not concentrated in `crates/ai`'s public
+re-exports** — it is spread across the host crate:
+
+- 50+ `app/src/` files import `warp_multi_agent_api` **directly** (not
+  via `crates/ai`). They use wire types for conversation persistence,
+  streaming/orchestration events, code-review comment payloads,
+  agent-mode integration tests, terminal/blocklist controllers, and
+  more.
+- `app/src/ai/agent/api/` (`convert_to.rs` + `convert_from.rs` +
+  `convert_conversation.rs` + `impl.rs` and their test siblings —
+  7163 LOC total) is a **symmetric wire-protocol translation layer**.
+  Its entire purpose is to bridge ai's runtime types to/from
+  `warp_multi_agent_api` types; per-type internalization in
+  `crates/ai` doesn't reduce its dep on the wire crate at all.
+- Persistence (`app/src/persistence/agent.rs`,
+  `app/src/ai/agent/conversation_yaml.rs`) stores wire-typed conversation
+  structures. Renaming `crates/ai::FileContent` to a mirror without
+  also rewriting on-disk schema would silently desync persisted
+  conversations.
+
+**Implication:** internalizing wire types one at a time inside
+`crates/ai` makes `crates/ai`'s public API marginally cleaner but
+doesn't move the gating needle. The dep `warp_multi_agent_api` would
+remain unconditional in `app/src/` until every file in the list above
+is also migrated. **The original Phase A is a small grooming step,
+not the gate prerequisite.**
+
+### Revised Phase A — pick one of three strategies
+
+**Strategy 1 — Wholesale module gating.** Treat
+`app/src/ai/agent/api/` (the 7163 LOC conversion layer) plus the
+~40 `app/src/ai/*` consumer files as a single unit. Gate the entire
+subtree behind `#[cfg(feature = "warp-agent")]`. `cast-agent`-only
+builds drop the whole agent-protocol translation layer. The
+`cast-agent`-native path goes through `cast_agent::gateway` (the
+streaming consumer already wired in PR #42) instead of the
+`warp_multi_agent_api` conversion path. **One large PR**; high
+review burden but unambiguous result. Requires the cast_agent panel
+path to be feature-complete enough to be the *only* path on the
+`cast-agent`-only build — currently it is log-only / streaming-only,
+so this strategy waits on full panel parity.
+
+**Strategy 2 — Accept the wire types as ai's protocol surface.**
+Stop trying to hide `warp_multi_agent_api` behind ai-owned mirrors;
+declare it the canonical agent-protocol crate. Re-export it
+explicitly from `crates/ai` so `app/src/` consumers depend on
+`crates/ai::wire::*` rather than `warp_multi_agent_api::*` directly.
+A `warp-agent`-vs-`cast-agent` build still requires `cast_agent` to
+implement compatible message shapes (which it largely does — see
+`crates/cast_agent/src/gateway.rs`'s `MessageChunk` / `AgentMessage`),
+but the host crate no longer pretends to own protocol-shaped types
+it doesn't own. **One medium PR**; smallest behavioural change.
+
+**Strategy 3 — Defer Phase A indefinitely; gate at runtime.** Skip
+compile-time gating entirely. The agent backend is already selected
+at runtime (`is_available()` on the cast_agent global, plus the
+existing `warp_multi_agent_api`-backed path). Continue shipping both
+backends in every build until cast_agent achieves panel parity, then
+remove the warp-agent path entirely in a single delete-PR. **Zero
+PRs needed now**; the warp-agent path remains the fallback.
+
+### Recommendation
+
+Strategy 3 for now (defer Phase A) — the runtime gate is already
+serving the user-visible purpose ("show the gateway pill, route
+panel input via cast_agent when available"), and the compile-time
+gate's *only* benefit is build leanness, which is a second-order
+concern while cast_agent's panel surface is still maturing
+(streaming consumer landed in #42; gating, history, and persistence
+landed in #46–#50; full message-send round-trip is still TBD).
+
+Strategy 1 becomes the right move once the cast_agent panel can
+service every request that the warp-agent path currently services —
+including conversation persistence, orchestration events, code-review
+threads, and agent-mode integration tests. That's a feature-parity
+gate, not a refactoring gate.
+
+Strategy 2 is a fallback if the brief's "lean cast-agent-only build"
+requirement turns out to be load-bearing before parity lands.
+
+### What this section is not
+
+The per-dep verdict table above remains ground truth — six of seven
+`warp_*` crates are non-agent shared infrastructure and will never be
+gateable in `crates/ai`. This roadmap revision only concerns
+`warp_multi_agent_api`, the one dep where gating is theoretically
+possible. Future agents picking up Phase A should choose a strategy
+explicitly before opening PRs; the original "internalize types one
+at a time" framing produces zero gating benefit on its own.
