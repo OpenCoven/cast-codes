@@ -133,6 +133,72 @@ fn update_host_substrate_patches_one_field_without_clobbering_others() {
 }
 
 #[test]
+fn update_host_substrate_path_replaces_recent_errors() {
+    install_crypto_provider_once();
+
+    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
+        .expect("runtime boots");
+
+    let path_a = PathBuf::from("/repo/a.rs");
+    let path_b = PathBuf::from("/repo/b.rs");
+
+    // First publish: file A has 2 errors, file B has 1 error.
+    runtime.update_host_substrate(|h| {
+        h.recent_errors.extend([
+            DiagnosticEntry {
+                file: path_a.clone(),
+                line: 10,
+                severity: DiagnosticSeverity::Error,
+                message: "unused".into(),
+            },
+            DiagnosticEntry {
+                file: path_a.clone(),
+                line: 20,
+                severity: DiagnosticSeverity::Warning,
+                message: "shadowed".into(),
+            },
+            DiagnosticEntry {
+                file: path_b.clone(),
+                line: 5,
+                severity: DiagnosticSeverity::Error,
+                message: "syntax".into(),
+            },
+        ]);
+    });
+
+    // Second publish: file A now has only 1 entry. Path-scoped replacement
+    // should drop A's old 2 entries before appending the new 1 — file B
+    // stays untouched.
+    let path_a_for_replace = path_a.clone();
+    let path_b_for_assert = path_b.clone();
+    runtime.update_host_substrate(move |h| {
+        h.recent_errors.retain(|e| e.file != path_a_for_replace);
+        h.recent_errors.push(DiagnosticEntry {
+            file: path_a_for_replace.clone(),
+            line: 10,
+            severity: DiagnosticSeverity::Error,
+            message: "unused".into(),
+        });
+    });
+
+    let after = runtime.host_substrate();
+    let from_a: Vec<_> = after
+        .recent_errors
+        .iter()
+        .filter(|e| e.file == path_a)
+        .collect();
+    let from_b: Vec<_> = after
+        .recent_errors
+        .iter()
+        .filter(|e| e.file == path_b_for_assert)
+        .collect();
+    assert_eq!(from_a.len(), 1, "file A replaced from 2 entries to 1");
+    assert_eq!(from_a[0].message, "unused");
+    assert_eq!(from_b.len(), 1, "file B untouched by file A's replacement");
+    assert_eq!(from_b[0].message, "syntax");
+}
+
+#[test]
 fn update_host_substrate_replaces_open_panes_atomically() {
     install_crypto_provider_once();
 
