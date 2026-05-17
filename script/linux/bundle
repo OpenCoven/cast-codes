@@ -185,10 +185,7 @@ fi
 if [[ "$ARTIFACT" == "cli" ]]; then
   FEATURES="$FEATURES,standalone"
 elif [[ "$ARTIFACT" == "app" ]]; then
-  FEATURES="$FEATURES,gui,nld_improvements"
-fi
-
-BUNDLE_ID="dev.castcodes.$APP_NAME"
+  FEATURES="$FEATURES,gui,cast-agent,nld_improvements"
 EXECUTABLE_PATH="$CARGO_TARGET_OUTPUT_DIR/$WARP_BIN"
 DEBUG_EXECUTABLE_PATH="$EXECUTABLE_PATH.debug"
 
