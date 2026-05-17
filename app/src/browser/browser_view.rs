@@ -172,6 +172,21 @@ pub struct BrowserView {
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
+    /// Shared WebKit data context — points at the app-private data dir so
+    /// CastCodes' cookies/localStorage are isolated from the system browser.
+    /// All tabs in this pane share the same context.
+    #[cfg(not(target_family = "wasm"))]
+    web_context: super::webview_host::SharedWebContext,
+    /// Whether WebKit DevTools are enabled for tabs in this pane. Captured
+    /// once at pane open from `BrowserSettings.devtools_enabled`; toggling
+    /// the setting requires reopening the pane to take effect.
+    #[cfg(not(target_family = "wasm"))]
+    devtools_enabled: bool,
+    /// Sender used by the wry `new_window_req_handler` to forward popup
+    /// URLs back into the pane. Each tab clones this when constructing
+    /// its `NativeBrowserWebView`.
+    #[cfg(not(target_family = "wasm"))]
+    new_window_tx: async_channel::Sender<String>,
     back_button_mouse_state: MouseStateHandle,
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
@@ -186,6 +201,22 @@ impl BrowserView {
     pub(crate) fn model(&self) -> &BrowserModel {
         &self.model
     }
+
+    /// Receiver for popup / new-window requests routed back from the wry
+    /// `new_window_req_handler`. Applies `popup_policy::decide` here (where
+    /// a warpui `ViewContext` is available) so OS hand-offs use
+    /// `ctx.open_url`.
+    #[cfg(not(target_family = "wasm"))]
+    fn handle_new_window_request(view: &mut Self, url: String, ctx: &mut ViewContext<Self>) {
+        use super::popup_policy::{decide, PopupAction};
+        match decide(&url) {
+            PopupAction::Tab(u) => view.new_tab_at(u, ctx),
+            PopupAction::External(u) => ctx.open_url(&u),
+            PopupAction::Block => {
+                log::debug!("browser popup_policy: blocked new-window request to {url}");
+            }
+        }
+    }
 }
 
 impl BrowserView {
@@ -194,6 +225,17 @@ impl BrowserView {
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
         let (title_tx, title_rx) = async_channel::unbounded::<(TabId, String)>();
+        #[cfg(not(target_family = "wasm"))]
+        let (new_window_tx, new_window_rx) = async_channel::unbounded::<String>();
+
+        // Read security settings once at pane open. Subsequent setting
+        // changes require reopening the pane to take effect (acceptable
+        // for power-user toggles).
+        #[cfg(not(target_family = "wasm"))]
+        let web_context = super::webview_host::new_web_context();
+        #[cfg(not(target_family = "wasm"))]
+        let devtools_enabled = crate::settings::BrowserSettings::handle(ctx)
+            .read(ctx, |s, _| *s.devtools_enabled);
 
         let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
@@ -201,6 +243,12 @@ impl BrowserView {
             webview_url_for(model.current_url()),
             title_tx.clone(),
             true,
+            #[cfg(not(target_family = "wasm"))]
+            web_context.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            devtools_enabled,
+            #[cfg(not(target_family = "wasm"))]
+            new_window_tx.clone(),
         )));
 
         let mut tab_ui_states = HashMap::new();
@@ -232,6 +280,8 @@ impl BrowserView {
             }
         });
         ctx.spawn_stream_local(title_rx, Self::handle_document_title, |_, _| {});
+        #[cfg(not(target_family = "wasm"))]
+        ctx.spawn_stream_local(new_window_rx, Self::handle_new_window_request, |_, _| {});
 
         Self {
             model,
@@ -242,6 +292,12 @@ impl BrowserView {
             webviews: vec![native_webview],
             title_tx,
             tab_ui_states,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
+            #[cfg(not(target_family = "wasm"))]
+            devtools_enabled,
+            #[cfg(not(target_family = "wasm"))]
+            new_window_tx,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
@@ -324,17 +380,29 @@ impl BrowserView {
     }
 
     fn new_tab(&mut self, ctx: &mut ViewContext<Self>) {
+        self.new_tab_at(DEFAULT_BROWSER_URL.to_string(), ctx);
+    }
+
+    /// Adds a tab at the given URL and makes it active.
+    fn new_tab_at(&mut self, url: String, ctx: &mut ViewContext<Self>) {
         // Hide the currently active tab before adding the new one.
         if let Some(prev_active) = self.webviews.get(self.model.active_index()) {
             prev_active.borrow_mut().set_visibility(false);
         }
 
-        let (tab_id, _idx) = self.model.add_tab(DEFAULT_BROWSER_URL);
+        let (tab_id, _idx) = self.model.add_tab(url.as_str());
+        let load_url = webview_url_for(self.model.current_url());
         let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             tab_id,
-            webview_url_for(DEFAULT_BROWSER_URL),
+            load_url,
             self.title_tx.clone(),
             true,
+            #[cfg(not(target_family = "wasm"))]
+            self.web_context.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            self.devtools_enabled,
+            #[cfg(not(target_family = "wasm"))]
+            self.new_window_tx.clone(),
         )));
         self.webviews.push(webview);
         self.tab_ui_states.insert(tab_id, TabUiState::default());
@@ -370,6 +438,12 @@ impl BrowserView {
                 webview_url_for(DEFAULT_BROWSER_URL),
                 self.title_tx.clone(),
                 true,
+                #[cfg(not(target_family = "wasm"))]
+                self.web_context.clone(),
+                #[cfg(not(target_family = "wasm"))]
+                self.devtools_enabled,
+                #[cfg(not(target_family = "wasm"))]
+                self.new_window_tx.clone(),
             )));
             self.webviews.push(webview);
             self.tab_ui_states.insert(new_tab_id, TabUiState::default());

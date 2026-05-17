@@ -1,3 +1,7 @@
+#[cfg(not(target_family = "wasm"))]
+use std::cell::RefCell;
+#[cfg(not(target_family = "wasm"))]
+use std::rc::Rc;
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
@@ -6,11 +10,32 @@ use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
 
+/// Shared WebKit data context for a single browser pane. Cloning this
+/// Rc across the pane's tabs makes them share cookies/localStorage.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) type SharedWebContext = Rc<RefCell<wry::WebContext>>;
+
+/// Builds a fresh `SharedWebContext` pointing at the app-private data
+/// directory (`super::data_dir::path()`).
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn new_web_context() -> SharedWebContext {
+    Rc::new(RefCell::new(wry::WebContext::new(super::data_dir::path())))
+}
+
 pub(crate) struct NativeBrowserWebView {
     tab_id: TabId,
     #[cfg(not(target_family = "wasm"))]
     webview: Option<wry::WebView>,
+    #[cfg(not(target_family = "wasm"))]
+    web_context: SharedWebContext,
+    #[cfg(not(target_family = "wasm"))]
+    devtools_enabled: bool,
     title_tx: async_channel::Sender<(TabId, String)>,
+    /// Channel for popup / new-window-requested URLs. Every webview in
+    /// the same pane sends to the same receiver; the pane creates a new
+    /// tab for each URL it gets.
+    #[cfg(not(target_family = "wasm"))]
+    new_window_tx: async_channel::Sender<String>,
     pending_url: Option<String>,
     bounds: Option<RectF>,
     desired_visible: bool,
@@ -23,12 +48,21 @@ impl NativeBrowserWebView {
         initial_url: impl Into<String>,
         title_tx: async_channel::Sender<(TabId, String)>,
         desired_visible: bool,
+        #[cfg(not(target_family = "wasm"))] web_context: SharedWebContext,
+        #[cfg(not(target_family = "wasm"))] devtools_enabled: bool,
+        #[cfg(not(target_family = "wasm"))] new_window_tx: async_channel::Sender<String>,
     ) -> Self {
         Self {
             tab_id,
             #[cfg(not(target_family = "wasm"))]
             webview: None,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
+            #[cfg(not(target_family = "wasm"))]
+            devtools_enabled,
             title_tx,
+            #[cfg(not(target_family = "wasm"))]
+            new_window_tx,
             pending_url: Some(initial_url.into()),
             bounds: None,
             desired_visible,
@@ -131,14 +165,26 @@ impl NativeBrowserWebView {
 
             let url = self.pending_url.clone().unwrap_or_default();
             let title_tx = self.title_tx.clone();
+            let new_window_tx = self.new_window_tx.clone();
             let tab_id = self.tab_id;
+            let mut web_context = self.web_context.borrow_mut();
             match wry::WebViewBuilder::new_as_child(&parent)
+                .with_web_context(&mut web_context)
+                .with_devtools(self.devtools_enabled)
                 .with_url(url)
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
                 .with_document_title_changed_handler(move |title| {
                     let _ = title_tx.try_send((tab_id, title));
+                })
+                .with_new_window_req_handler(move |requested_url: String| -> bool {
+                    // Forward the raw URL — the receiver applies popup_policy
+                    // with a warpui ctx available so OS hand-offs use
+                    // ctx.open_url() rather than dragging in an `opener` dep.
+                    let _ = new_window_tx.try_send(requested_url);
+                    // Never let wry pop a native window.
+                    false
                 })
                 .build()
             {
