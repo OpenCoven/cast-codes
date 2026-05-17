@@ -360,12 +360,12 @@ fn parse_table(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Block {
                 cur.advance();
             }
             TokenType::TableRow => {
-                let cells: Vec<String> = t
+                let row = t
                     .content
-                    .split('|')
-                    .map(|c| c.trim().to_string())
-                    .filter(|c| !c.is_empty())
-                    .collect();
+                    .trim()
+                    .trim_start_matches('|')
+                    .trim_end_matches('|');
+                let cells: Vec<String> = row.split('|').map(|c| c.trim().to_string()).collect();
                 if is_first && !has_separator {
                     headers = cells;
                     is_first = false;
