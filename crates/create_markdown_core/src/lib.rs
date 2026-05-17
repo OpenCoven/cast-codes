@@ -15,9 +15,23 @@ pub mod serializers;
 pub mod types;
 pub mod utils;
 
+pub use parsers::inline::{extract_plain_text, parse_inline};
+pub use parsers::markdown::{
+    markdown_to_blocks, markdown_to_document, parse, parse_inline_content,
+};
 pub use parsers::tokenizer::{
     group_tokens, is_code_token, is_list_token, tokenize, Token, TokenMeta, TokenType,
 };
+
+/// Convenience: parse markdown into a [`Document`]. Mirrors the JS `fromMarkdown`.
+pub fn from_markdown(markdown: &str) -> Document {
+    markdown_to_document(markdown, &MarkdownParseOptions::default())
+}
+
+/// Convenience: serialize blocks to a markdown string. Mirrors the JS `toMarkdown`.
+pub fn to_markdown(blocks: &[Block]) -> String {
+    blocks_to_markdown(blocks, &MarkdownSerializeOptions::default())
+}
 
 pub use serializers::markdown::{
     blocks_to_markdown, document_to_markdown, serialize_block, serialize_inline_content,
