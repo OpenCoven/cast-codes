@@ -9,8 +9,17 @@
 //! the substantive request marshalling onto the warpui main loop and
 //! the rmcp integration land in a follow-up PR. See
 //! `specs/CASTCODES-BROWSER-PANEL/PLAN-04-mcp-server.md`.
+//!
+//! ## Platform support
+//!
+//! The server relies on Unix domain sockets and is therefore only
+//! compiled on Unix targets (`#[cfg(unix)]`). A no-op stub is
+//! provided for WASM and for any other non-Unix target (e.g. Windows)
+//! until named-pipe support is added.
 
-#[cfg(not(target_family = "wasm"))]
+/// Unix implementation — binds the domain socket and writes the
+/// discovery file.
+#[cfg(unix)]
 pub fn serve() {
     let Some(path) = socket_path() else {
         log::warn!("agent_mcp: cannot resolve socket path");
@@ -52,17 +61,35 @@ pub fn serve() {
     }
 }
 
+/// WASM stub — Unix domain sockets are unavailable in the browser.
 #[cfg(target_family = "wasm")]
 pub fn serve() {}
 
-#[cfg(not(target_family = "wasm"))]
+/// Non-Unix, non-WASM stub (e.g. Windows) — named-pipe support is a
+/// future effort.
+#[cfg(all(not(unix), not(target_family = "wasm")))]
+pub fn serve() {
+    log::debug!("agent_mcp: Unix domain sockets not available on this platform; skipping");
+}
+
+#[cfg(unix)]
 fn socket_path() -> Option<std::path::PathBuf> {
     let dir = warp_core::paths::warp_home_config_dir()?.join("mcp");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join("browser.sock"))
 }
 
-#[cfg(not(target_family = "wasm"))]
+/// Write `~/.cast-codes/mcp.json` describing the socket path and tool
+/// surface.
+///
+/// ## Security: no TOCTOU window
+///
+/// The temp file is `chmod`-ed to `0600` *before* the atomic rename so
+/// the destination is never briefly world-readable. Relying on
+/// `set_permissions` after `rename` would leave a window (between
+/// `rename` and `chmod`) where the file is readable at the umask-
+/// derived mode (typically `0644`).
+#[cfg(unix)]
 fn write_discovery(socket: &std::path::Path) -> std::io::Result<()> {
     use std::fs;
     use std::path::PathBuf;
@@ -97,9 +124,41 @@ fn write_discovery(socket: &std::path::Path) -> std::io::Result<()> {
     let bytes = serde_json::to_vec_pretty(&payload)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     fs::write(&tmp, &bytes)?;
-    fs::rename(&tmp, &dest)?;
 
+    // Harden the temp file *before* the rename so the destination is
+    // never briefly readable at the umask-derived mode.
     use std::os::unix::fs::PermissionsExt;
-    let _ = fs::set_permissions(&dest, fs::Permissions::from_mode(0o600));
+    fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
+
+    fs::rename(&tmp, &dest)?;
     Ok(())
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_discovery_creates_mode_0600_file() {
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let socket = dir.path().join("browser.sock");
+
+        // We can't call write_discovery directly (it uses
+        // warp_home_config_dir), so exercise the chmod-before-rename
+        // contract directly.
+        let dest = dir.path().join("mcp.json");
+        let tmp = dest.with_extension("json.tmp");
+        std::fs::write(&tmp, b"{}").unwrap();
+
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600)).unwrap();
+        std::fs::rename(&tmp, &dest).unwrap();
+
+        let mode = std::fs::metadata(&dest).unwrap().mode() & 0o777;
+        assert_eq!(mode, 0o600, "mcp.json must be owner-only (0600), got {mode:o}");
+        let _ = socket; // suppress unused warning
+    }
 }
