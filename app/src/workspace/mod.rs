@@ -113,10 +113,10 @@ pub fn init(app: &mut AppContext) {
         WorkspaceAction::DispatchToSettingsTab(settings_action)
     });
     global_actions::init_global_actions(app);
+    lsp::init(app);
     notebooks::init(app);
     code::init(app);
     sync_inputs::init(app);
-    lsp::init(app);
 
     app.register_fixed_bindings([FixedBinding::empty(
         "Dump debug info",

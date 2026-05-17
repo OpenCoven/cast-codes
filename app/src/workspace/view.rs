@@ -4995,19 +4995,22 @@ impl Workspace {
     /// so the gateway sees a fresh `open_panes` list on its next
     /// `build_substrate` call. Cheap on the UI thread: just walks
     /// `self.tabs` and writes a sync `RwLock`. Called from any path that
-    /// mutates the tab list — open, activate, close.
+    /// mutates the active window's tab list — open, activate, close — and
+    /// when the active app window changes.
     ///
     /// Per-pane `cwd` is the active terminal session's local CWD via
     /// `PaneGroup::active_session_path` (returns `None` for non-local
     /// sessions like SSH, in which case we fall back to an empty
     /// `PathBuf`). The CWD churns during shell command execution; we
-    /// resnapshot it whenever `publish_open_panes_to_cast_agent` is
-    /// called, which is tab-lifecycle-scoped rather than every shell
-    /// prompt — so a tab whose CWD changes during a long-running command
-    /// will show its pre-command CWD until the next tab event. Good
-    /// enough for the gateway, and no debounce needed.
+    /// resnapshot it whenever `publish_open_panes_to_cast_agent` is called.
+    /// Active-tab changes publish through the ActiveSession observer; background
+    /// tab changes converge through the periodic active-window tick.
     #[cfg(feature = "cast-agent")]
     fn publish_open_panes_to_cast_agent(&self, ctx: &warpui::AppContext) {
+        if WindowManager::as_ref(ctx).state().active_window != Some(self.window_id) {
+            return;
+        }
+
         let panes: Vec<::ai::cast_agent::PaneInfo> = self
             .tabs
             .iter()
@@ -5034,8 +5037,10 @@ impl Workspace {
     /// Periodic republish of `open_panes` so background tab CWDs converge
     /// within bounded time. The `ActiveSession` observer hooked above
     /// catches the foreground tab's CWD as soon as it changes; this tick
-    /// catches non-focused tabs whose CWD changed without flipping focus
-    /// (e.g. a script that `cd`s in a background pane). Self-rescheduling
+    /// catches non-focused tabs in the active window whose CWD changed
+    /// without flipping focus (e.g. a script that `cd`s in a background
+    /// pane). Inactive windows are skipped so they cannot overwrite the
+    /// process-global snapshot. Self-rescheduling
     /// via `ctx.spawn` + `Timer::after` — terminates automatically when
     /// the `Workspace` view is dropped because the spawn lives on the
     /// view's executor.
@@ -16482,6 +16487,9 @@ impl Workspace {
                 if cached_window_is_active
                     && (did_window_change_focus || (app_became_active && platform_window_is_active))
                 {
+                    #[cfg(feature = "cast-agent")]
+                    self.publish_open_panes_to_cast_agent(ctx);
+
                     if let Some(terminal_view) = self
                         .active_tab_pane_group()
                         .as_ref(ctx)
