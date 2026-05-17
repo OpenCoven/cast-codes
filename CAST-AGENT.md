@@ -102,20 +102,20 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   gateway's view. Files that aren't open as code editors don't
   contribute — pushing diagnostics from a fully cross-server collector
   would need a higher-level subscriber and is a follow-up.
-- ✅ Streaming UI consumer (v1, log-only) —
+- ✅ Streaming UI consumer with live rendering —
   [`AIAssistantAction::SendViaCovenGateway`](app/src/ai_assistant/panel.rs)
-  reads the agent panel's editor buffer, builds an `AgentMessage`, and
-  drives a `stream_messages` call on the cast_agent runtime. Each
-  `Delta` chunk is logged via `log::info!` (`cast_agent[<conv-id>]
-  delta: …`); `Done` and `Error` are logged too. Bound to
-  `cmd+shift+m` on the agent panel; skips silently when
-  `is_available()` is `false`. This is the dev-mode wiring that
-  proves the streaming path is reachable from the chat panel.
-  Rendering streamed chunks into the transcript needs a cross-thread
-  bridge from cast_agent's tokio runtime to the GPUI render loop and
-  is the next slice.
-- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
-  live in-panel rendering of streamed `MessageChunk::Delta`s — see
+  reads the agent panel's editor buffer, builds an `AgentMessage`,
+  drives a `stream_messages` call on the cast_agent runtime, and
+  renders each `MessageChunk::Delta` into a `COVEN STREAM • LIVE`
+  section below the transcript as chunks arrive. Bound to
+  `cmd+shift+m`; skips when `is_available()` is `false`. Cross-thread
+  plumbing: the cast_agent tokio task pushes chunks into a shared
+  `Arc<std::sync::Mutex<CovenStreamState>>`; a UI-side poll loop
+  (`poll_coven_stream`) drains the buffer every 100ms via `ctx.spawn`
+  + `Timer::after`, appends to `text`, calls `ctx.notify()`, and
+  reschedules itself while the stream is in flight. Each chunk is
+  also logged for protocol-level debugging.
+- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation — see
   "Open follow-ups" below.
 
 ## Architecture

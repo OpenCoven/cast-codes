@@ -133,6 +133,30 @@ pub struct AIAssistantPanelView {
 
     resizable_state_handle: ResizableStateHandle,
     mouse_state_handles: MouseStateHandles,
+
+    /// Shared buffer for the Coven Gateway streaming consumer. The
+    /// `cast_agent` tokio task pushes `MessageChunk`s into
+    /// `pending_chunks`; a UI-side poll loop (`poll_coven_stream`)
+    /// drains them on every tick and appends `Delta`s to `text` so the
+    /// rendered output grows live. `Arc<Mutex<…>>` (std, not tokio) so
+    /// both sides can lock without entering a tokio runtime.
+    #[cfg(feature = "cast-agent")]
+    coven_stream: Arc<std::sync::Mutex<CovenStreamState>>,
+}
+
+#[cfg(feature = "cast-agent")]
+#[derive(Default)]
+struct CovenStreamState {
+    /// Accumulated `Delta` content rendered into the panel.
+    text: String,
+    /// Whether the cast_agent task is still producing chunks. The poll
+    /// loop stops scheduling when this flips to `false`.
+    in_flight: bool,
+    /// Chunks the cast_agent task has emitted since the last UI drain.
+    pending_chunks: Vec<::ai::cast_agent::MessageChunk>,
+    /// Conversation id of the active stream (for log correlation in
+    /// the rendered output).
+    conversation_id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -272,6 +296,8 @@ impl AIAssistantPanelView {
 
             resizable_state_handle,
             mouse_state_handles: Default::default(),
+            #[cfg(feature = "cast-agent")]
+            coven_stream: Arc::new(std::sync::Mutex::new(CovenStreamState::default())),
         };
 
         panel.tick(ctx);
@@ -795,21 +821,21 @@ impl AIAssistantPanelView {
     }
 
     /// Stream the current editor buffer through the Cast Agent
-    /// `stream_messages` primitive. First UI consumer of the streaming
-    /// path shipped in PR #29; intentionally minimal for v1.
+    /// `stream_messages` primitive and render the streamed chunks live
+    /// in the agent panel.
     ///
-    /// This v1 logs each `MessageChunk::Delta` via `log::info!` rather
-    /// than rendering chunks into the panel. Live rendering requires a
-    /// cross-thread bridge between cast_agent's tokio runtime and the
-    /// GPUI render loop (each `Delta` would need to wake the UI to
-    /// repaint), which is its own follow-up. With this PR, a developer
-    /// can already exercise the full streaming path end-to-end by
-    /// invoking the action and tailing the log — proving the chat
-    /// pipeline is connected to the Coven Gateway.
+    /// Cross-thread plumbing: the cast_agent tokio task pushes chunks
+    /// into `self.coven_stream.pending_chunks` (a shared
+    /// `Arc<std::sync::Mutex<…>>`). A UI-side poll loop
+    /// (`poll_coven_stream`) drains the buffer every 100ms via
+    /// `ctx.spawn` + `Timer::after`, appends `Delta` content to
+    /// `text`, calls `ctx.notify()`, and reschedules itself while
+    /// `in_flight` is true.
     ///
-    /// Skips silently if `cast_agent::is_available()` is `false` so
-    /// pressing the keybind when the gateway is down isn't a hard
-    /// failure.
+    /// Logs each chunk too — useful for debugging when the rendered
+    /// output looks wrong and you want raw protocol detail.
+    ///
+    /// Skips silently if `cast_agent::is_available()` is `false`.
     #[cfg(feature = "cast-agent")]
     fn send_via_coven_gateway(&self, ctx: &mut ViewContext<Self>) {
         use futures::StreamExt;
@@ -830,8 +856,7 @@ impl AIAssistantPanelView {
 
         let agent = runtime.agent().clone();
         // Lightweight per-invocation id: monotonic wall-clock nanos. Good
-        // enough to disambiguate concurrent streams in logs; the gateway
-        // probably assigns its own conversation id internally.
+        // enough to disambiguate concurrent streams in logs.
         let conversation_id = format!(
             "coven-{}",
             std::time::SystemTime::now()
@@ -843,36 +868,184 @@ impl AIAssistantPanelView {
             conversation_id: conversation_id.clone(),
             body: serde_json::json!({ "text": prompt }),
         };
+
+        // Reset shared state for the new stream. Concurrent streams from
+        // back-to-back invocations clobber each other into the same
+        // buffer; for v1 the user just sees them interleaved.
+        {
+            let mut state = self
+                .coven_stream
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            state.text.clear();
+            state.pending_chunks.clear();
+            state.in_flight = true;
+            state.conversation_id = conversation_id.clone();
+        }
+        ctx.notify();
+
         log::info!("cast_agent: opening stream for conversation {conversation_id}");
+        let buffer = self.coven_stream.clone();
+        let conversation_id_for_task = conversation_id.clone();
         runtime.handle().spawn(async move {
             let stream = match agent.stream_messages(msg).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     log::warn!(
-                        "cast_agent: stream_messages open failed for {conversation_id}: {err}"
+                        "cast_agent: stream_messages open failed for {conversation_id_for_task}: {err}"
                     );
+                    let mut state = buffer.lock().unwrap_or_else(|p| p.into_inner());
+                    state.in_flight = false;
                     return;
                 }
             };
             let mut stream = stream;
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
-                    Ok(::ai::cast_agent::MessageChunk::Delta { content, .. }) => {
-                        log::info!("cast_agent[{conversation_id}] delta: {content}");
-                    }
-                    Ok(::ai::cast_agent::MessageChunk::Done { .. }) => {
-                        log::info!("cast_agent[{conversation_id}] done");
-                    }
-                    Ok(::ai::cast_agent::MessageChunk::Error { message, .. }) => {
-                        log::warn!("cast_agent[{conversation_id}] error: {message}");
+                    Ok(chunk) => {
+                        match &chunk {
+                            ::ai::cast_agent::MessageChunk::Delta { content, .. } => {
+                                log::info!(
+                                    "cast_agent[{conversation_id_for_task}] delta: {content}"
+                                );
+                            }
+                            ::ai::cast_agent::MessageChunk::Done { .. } => {
+                                log::info!("cast_agent[{conversation_id_for_task}] done");
+                            }
+                            ::ai::cast_agent::MessageChunk::Error { message, .. } => {
+                                log::warn!(
+                                    "cast_agent[{conversation_id_for_task}] error: {message}"
+                                );
+                            }
+                        }
+                        let mut state = buffer.lock().unwrap_or_else(|p| p.into_inner());
+                        state.pending_chunks.push(chunk);
                     }
                     Err(err) => {
-                        log::warn!("cast_agent[{conversation_id}] transport: {err}");
+                        log::warn!(
+                            "cast_agent[{conversation_id_for_task}] transport: {err}"
+                        );
                         break;
                     }
                 }
             }
+            let mut state = buffer.lock().unwrap_or_else(|p| p.into_inner());
+            state.in_flight = false;
         });
+
+        // Kick off the UI drain loop.
+        self.poll_coven_stream(ctx);
+    }
+
+    /// UI-side tick that drains `pending_chunks` into rendered `text`
+    /// and reschedules itself while the stream is in flight. Lives on
+    /// the GPUI executor (`ctx.spawn` + `Timer::after`) so each tick
+    /// runs on the UI thread with full `view + ctx` access — no
+    /// cross-thread notify primitive needed.
+    #[cfg(feature = "cast-agent")]
+    fn poll_coven_stream(&self, ctx: &mut ViewContext<Self>) {
+        ctx.spawn(
+            async move { Timer::after(Duration::from_millis(100)).await },
+            |view, _, ctx| {
+                let still_in_flight = {
+                    let mut state = view
+                        .coven_stream
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner());
+                    let drained: Vec<_> = state.pending_chunks.drain(..).collect();
+                    for chunk in drained {
+                        if let ::ai::cast_agent::MessageChunk::Delta { content, .. } = chunk {
+                            state.text.push_str(&content);
+                        }
+                    }
+                    state.in_flight
+                };
+                ctx.notify();
+                if still_in_flight {
+                    view.poll_coven_stream(ctx);
+                }
+            },
+        );
+    }
+
+    /// Render the accumulated stream text below the transcript when
+    /// non-empty. Hidden during the idle state so the panel doesn't
+    /// gain dead chrome.
+    #[cfg(feature = "cast-agent")]
+    fn render_coven_stream_section(&self, appearance: &Appearance) -> Box<dyn Element> {
+        const SECTION_HEADER_FONT_SIZE: f32 = 10.;
+        const BODY_FONT_SIZE: f32 = 13.;
+
+        let (text, in_flight) = {
+            let state = self
+                .coven_stream
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            (state.text.clone(), state.in_flight)
+        };
+        if text.is_empty() && !in_flight {
+            return Empty::new().finish();
+        }
+
+        let theme = appearance.theme();
+        let primary: pathfinder_color::ColorU = theme.active_ui_text_color().into();
+        let ui_builder = appearance.ui_builder();
+        let ui_font = appearance.ui_font_family();
+
+        let header_label = if in_flight {
+            "COVEN STREAM • LIVE".to_string()
+        } else {
+            "COVEN STREAM".to_string()
+        };
+        let body_text = if text.is_empty() && in_flight {
+            "Awaiting first chunk…".to_string()
+        } else {
+            text
+        };
+
+        let header = Container::new(
+            ui_builder
+                .wrappable_text(header_label, false)
+                .with_style(UiComponentStyles {
+                    font_family_id: Some(ui_font),
+                    font_size: Some(SECTION_HEADER_FONT_SIZE),
+                    font_weight: Some(warpui::fonts::Weight::Semibold),
+                    font_color: Some(OPENCOVEN_MUTED),
+                    ..Default::default()
+                })
+                .build()
+                .finish(),
+        )
+        .with_padding_bottom(4.)
+        .finish();
+
+        let body = Container::new(
+            ui_builder
+                .wrappable_text(body_text, true)
+                .with_style(UiComponentStyles {
+                    font_family_id: Some(ui_font),
+                    font_size: Some(BODY_FONT_SIZE),
+                    font_color: Some(primary),
+                    ..Default::default()
+                })
+                .build()
+                .finish(),
+        )
+        .finish();
+
+        Container::new(
+            Flex::column()
+                .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                .with_child(header)
+                .with_child(body)
+                .finish(),
+        )
+        .with_padding_left(PANEL_HORIZONTAL_PADDING)
+        .with_padding_right(PANEL_HORIZONTAL_PADDING)
+        .with_padding_top(8.)
+        .with_padding_bottom(8.)
+        .with_border(Border::top(1.).with_border_fill(theme.outline()))
+        .finish()
     }
 
     /// Small coloured dot next to the title indicating Coven Gateway
@@ -1388,6 +1561,8 @@ impl View for AIAssistantPanelView {
         panel.add_child(Shrinkable::new(1., body).finish());
 
         panel.add_child(self.render_sessions_section(appearance));
+        #[cfg(feature = "cast-agent")]
+        panel.add_child(self.render_coven_stream_section(appearance));
 
         if matches!(self.request_status(app), RequestStatus::NotInFlight) {
             let buffer_text = self.editor.as_ref(app).buffer_text(app);
