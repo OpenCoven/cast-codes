@@ -22,16 +22,20 @@ pub fn decide(url: &str) -> PopupAction {
     if trimmed.is_empty() {
         return PopupAction::Block;
     }
-    for scheme in ["mailto:", "tel:", "sms:", "castcodes:"] {
-        if trimmed.starts_with(scheme) {
-            return PopupAction::External(trimmed.to_string());
-        }
-    }
-    // `javascript:` URLs in new-window context are a classic XSS vector.
-    // Every modern browser blocks them; we do too.
-    if trimmed.starts_with("javascript:") {
+
+    let scheme = trimmed.split_once(':').map(|(scheme, _)| scheme);
+    if scheme.is_some_and(|scheme| scheme.eq_ignore_ascii_case("javascript")) {
         return PopupAction::Block;
     }
+
+    if scheme.is_some_and(|scheme| {
+        ["mailto", "tel", "sms", "castcodes"]
+            .iter()
+            .any(|external| scheme.eq_ignore_ascii_case(external))
+    }) {
+        return PopupAction::External(trimmed.to_string());
+    }
+
     PopupAction::Tab(trimmed.to_string())
 }
 
@@ -64,6 +68,15 @@ mod tests {
     #[test]
     fn javascript_scheme_is_blocked() {
         assert_eq!(decide("javascript:alert(1)"), PopupAction::Block);
+        assert_eq!(decide("JaVaScRiPt:alert(1)"), PopupAction::Block);
+    }
+
+    #[test]
+    fn external_schemes_are_case_insensitive() {
+        assert_eq!(
+            decide("MAILTO:hi@example.com"),
+            PopupAction::External("MAILTO:hi@example.com".into())
+        );
     }
 
     #[test]
