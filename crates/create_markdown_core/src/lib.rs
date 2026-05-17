@@ -10,9 +10,14 @@
 
 pub mod blocks;
 pub mod document;
+pub mod parsers;
 pub mod serializers;
 pub mod types;
 pub mod utils;
+
+pub use parsers::tokenizer::{
+    group_tokens, is_code_token, is_list_token, tokenize, Token, TokenMeta, TokenType,
+};
 
 pub use serializers::markdown::{
     blocks_to_markdown, document_to_markdown, serialize_block, serialize_inline_content,
