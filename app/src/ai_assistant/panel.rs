@@ -145,6 +145,15 @@ pub enum AIAssistantAction {
     CopyAnswerToClipboard(Arc<String>),
     FocusTerminalInput,
     FocusEditor,
+    /// Send the panel's current editor buffer through the Cast Agent
+    /// streaming endpoint (`/v1/messages/stream` on the Coven Gateway).
+    /// First UI consumer of the streaming primitive shipped in PR #29.
+    /// This first cut logs each delta via `log::info!`; rendering the
+    /// streamed text into the transcript is a follow-up that needs a
+    /// cross-thread bridge between the cast_agent tokio runtime and
+    /// the GPUI render loop.
+    #[cfg(feature = "cast-agent")]
+    SendViaCovenGateway,
 }
 
 pub fn init(app: &mut AppContext) {
@@ -180,6 +189,15 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("AIAssistantPanel"))
         .with_key_binding(cmd_or_ctrl_shift("k")),
     ]);
+
+    #[cfg(feature = "cast-agent")]
+    app.register_editable_bindings([EditableBinding::new(
+        "ai_assistant_panel:send_via_coven_gateway",
+        "Stream a message through the Coven Gateway",
+        AIAssistantAction::SendViaCovenGateway,
+    )
+    .with_context_predicate(id!("AIAssistantPanel"))
+    .with_key_binding(cmd_or_ctrl_shift("m"))]);
 }
 
 impl AIAssistantPanelView {
@@ -776,6 +794,87 @@ impl AIAssistantPanelView {
         header.finish()
     }
 
+    /// Stream the current editor buffer through the Cast Agent
+    /// `stream_messages` primitive. First UI consumer of the streaming
+    /// path shipped in PR #29; intentionally minimal for v1.
+    ///
+    /// This v1 logs each `MessageChunk::Delta` via `log::info!` rather
+    /// than rendering chunks into the panel. Live rendering requires a
+    /// cross-thread bridge between cast_agent's tokio runtime and the
+    /// GPUI render loop (each `Delta` would need to wake the UI to
+    /// repaint), which is its own follow-up. With this PR, a developer
+    /// can already exercise the full streaming path end-to-end by
+    /// invoking the action and tailing the log — proving the chat
+    /// pipeline is connected to the Coven Gateway.
+    ///
+    /// Skips silently if `cast_agent::is_available()` is `false` so
+    /// pressing the keybind when the gateway is down isn't a hard
+    /// failure.
+    #[cfg(feature = "cast-agent")]
+    fn send_via_coven_gateway(&self, ctx: &mut ViewContext<Self>) {
+        use futures::StreamExt;
+
+        let prompt = self.editor.as_ref(ctx).buffer_text(ctx).to_string();
+        if prompt.trim().is_empty() {
+            log::debug!("cast_agent: SendViaCovenGateway invoked with empty prompt; skipping");
+            return;
+        }
+        let Some(runtime) = ::ai::cast_agent::global() else {
+            log::warn!("cast_agent: runtime unavailable, cannot stream");
+            return;
+        };
+        if !runtime.is_available() {
+            log::info!("cast_agent: gateway offline, not streaming");
+            return;
+        }
+
+        let agent = runtime.agent().clone();
+        // Lightweight per-invocation id: monotonic wall-clock nanos. Good
+        // enough to disambiguate concurrent streams in logs; the gateway
+        // probably assigns its own conversation id internally.
+        let conversation_id = format!(
+            "coven-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let msg = ::ai::cast_agent::AgentMessage {
+            conversation_id: conversation_id.clone(),
+            body: serde_json::json!({ "text": prompt }),
+        };
+        log::info!("cast_agent: opening stream for conversation {conversation_id}");
+        runtime.handle().spawn(async move {
+            let stream = match agent.stream_messages(msg).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    log::warn!(
+                        "cast_agent: stream_messages open failed for {conversation_id}: {err}"
+                    );
+                    return;
+                }
+            };
+            let mut stream = stream;
+            while let Some(chunk_result) = stream.next().await {
+                match chunk_result {
+                    Ok(::ai::cast_agent::MessageChunk::Delta { content, .. }) => {
+                        log::info!("cast_agent[{conversation_id}] delta: {content}");
+                    }
+                    Ok(::ai::cast_agent::MessageChunk::Done { .. }) => {
+                        log::info!("cast_agent[{conversation_id}] done");
+                    }
+                    Ok(::ai::cast_agent::MessageChunk::Error { message, .. }) => {
+                        log::warn!("cast_agent[{conversation_id}] error: {message}");
+                    }
+                    Err(err) => {
+                        log::warn!("cast_agent[{conversation_id}] transport: {err}");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     /// Small coloured dot next to the title indicating Coven Gateway
     /// reachability. Green when `is_available()`, amber otherwise.
     /// Reads the cached availability bit from the cast_agent runtime
@@ -1243,6 +1342,8 @@ impl TypedActionView for AIAssistantPanelView {
                     ctx
                 );
             }
+            #[cfg(feature = "cast-agent")]
+            SendViaCovenGateway => self.send_via_coven_gateway(ctx),
             FocusTerminalInput => ctx.emit(AIAssistantPanelEvent::FocusTerminalInput),
             FocusEditor => {
                 self.focus_state = PanelFocusState::Editor;

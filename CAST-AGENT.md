@@ -102,8 +102,20 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   gateway's view. Files that aren't open as code editors don't
   contribute — pushing diagnostics from a fully cross-server collector
   would need a higher-level subscriber and is a follow-up.
+- ✅ Streaming UI consumer (v1, log-only) —
+  [`AIAssistantAction::SendViaCovenGateway`](app/src/ai_assistant/panel.rs)
+  reads the agent panel's editor buffer, builds an `AgentMessage`, and
+  drives a `stream_messages` call on the cast_agent runtime. Each
+  `Delta` chunk is logged via `log::info!` (`cast_agent[<conv-id>]
+  delta: …`); `Done` and `Error` are logged too. Bound to
+  `cmd+shift+m` on the agent panel; skips silently when
+  `is_available()` is `false`. This is the dev-mode wiring that
+  proves the streaming path is reachable from the chat panel.
+  Rendering streamed chunks into the transcript needs a cross-thread
+  bridge from cast_agent's tokio runtime to the GPUI render loop and
+  is the next slice.
 - ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation,
-  agent panel switch to `stream_messages` for actual chat — see
+  live in-panel rendering of streamed `MessageChunk::Delta`s — see
   "Open follow-ups" below.
 
 ## Architecture
