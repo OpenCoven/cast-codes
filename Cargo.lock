@@ -3499,6 +3499,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "create_markdown_core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "criterion"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
