@@ -134,8 +134,15 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   — loaded on panel construction, saved (atomic temp + rename) on
   every archive. Lives outside CastCodes' workspace serialization so
   it follows the user across workspaces.
-- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation — see
-  "Open follow-ups" below.
+- 🟡 Phase A (in progress) — internalizing `warp_multi_agent_api` types
+  one at a time so `crates/ai`'s public API stops re-exporting wire
+  types (per the gating roadmap below). **`LifecycleEventType` done**:
+  ai-owned mirror at `crates/ai/src/agent/action/mod.rs` with
+  bidirectional `From`s + `TryFrom<i32>` delegating to the wire enum.
+  Remaining wire types to internalize: `FileContent`, `AnyFileContent`,
+  `SkillReference`.
+- ⏳ Per-call `#[cfg(feature = "warp-agent")]` gating implementation
+  (Phase C) — waits on Phase A completion.
 
 ## Architecture
 

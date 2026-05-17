@@ -1421,7 +1421,11 @@ fn convert_lifecycle_events(events: &[AgentRunEvent], self_run_id: &str) -> Vec<
             Some(build_lifecycle_event(
                 event_id,
                 event.run_id.clone(),
-                lifecycle_type,
+                // Convert wire-typed `api::LifecycleEventType` to the
+                // `crates/ai`-owned `LifecycleEventType` expected by
+                // `build_lifecycle_event` after Phase A part 1
+                // internalized the latter (see `CAST-AGENT.md`).
+                lifecycle_type.into(),
                 timestamp,
                 &detail,
             ))
