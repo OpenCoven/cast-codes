@@ -106,6 +106,8 @@ pub mod footer;
 mod icon;
 
 pub mod active_file;
+#[cfg(feature = "cast-agent")]
+pub mod cast_agent_diagnostics;
 pub mod opened_files;
 pub use icon::icon_from_file_path;
 
@@ -118,6 +120,8 @@ pub fn init(app: &mut AppContext) {
     self::file_tree::init(app);
     #[cfg(not(target_family = "wasm"))]
     self::find_references_view::init(app);
+    #[cfg(feature = "cast-agent")]
+    self::cast_agent_diagnostics::init(app);
 }
 
 /// The diff that results from editing a file.

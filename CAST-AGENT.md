@@ -90,7 +90,7 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   tab whose CWD changes during a long-running command shows its
   pre-command CWD until the next tab event — good enough for the
   gateway and no debounce needed.
-- ✅ `recent_errors` publisher —
+- ✅ `recent_errors` publisher (per-editor) —
   [`LocalCodeEditorView::publish_diagnostics_to_cast_agent`](app/src/code/language_server_extension.rs)
   reads raw `lsp_types::Diagnostic`s from the LSP server for the
   editor's current file, filters to Error+Warning (Info/Hint are too
@@ -99,9 +99,18 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   path are dropped first, then the new ones appended. A 50-entry global
   cap trims the oldest. Hooked into `refresh_diagnostics` so every LSP
   `publishDiagnostics` event for an open code editor updates the
-  gateway's view. Files that aren't open as code editors don't
-  contribute — pushing diagnostics from a fully cross-server collector
-  would need a higher-level subscriber and is a follow-up.
+  gateway's view.
+- ✅ Cross-server diagnostics collector —
+  [`CastAgentDiagnosticsCollector`](app/src/code/cast_agent_diagnostics.rs)
+  is a singleton model that subscribes to `LspManagerModel`'s
+  `ServerStarted` events at app startup and chain-subscribes to every
+  `LspServerModel`'s `LspEvent::DiagnosticsUpdated`. On each event it
+  applies the same path-scoped replacement strategy as the per-editor
+  publisher, so files **not currently open in a code editor** also
+  contribute to `recent_errors`. Both publishers can fire for the same
+  path; the calls are idempotent (second overwrites first with
+  identical content). Closes the coverage gap left by the per-editor
+  publisher.
 - ✅ Streaming UI consumer with live rendering —
   [`AIAssistantAction::SendViaCovenGateway`](app/src/ai_assistant/panel.rs)
   reads the agent panel's editor buffer, builds an `AgentMessage`,
