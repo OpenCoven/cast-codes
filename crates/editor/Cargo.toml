@@ -1,6 +1,6 @@
 [package]
 name = "warp_editor"
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 version = "0.1.0"
 edition = "2024"
 description = "Text editing for Warp"

@@ -1,6 +1,6 @@
 [package]
 name = "warp_util"
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 version = "0.1.0"
 edition = "2021"
 description = "General utilities and helpers used across warp crates"

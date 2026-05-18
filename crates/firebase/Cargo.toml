@@ -1,6 +1,6 @@
 [package]
 name = "firebase"
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 version = "0.1.0"
 edition = "2021"
 description = "Utilities for firebase client APIs"

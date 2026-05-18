@@ -2,7 +2,7 @@
 name = "lsp"
 version = "0.1.0"
 edition = "2021"
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 publish.workspace = true
 license.workspace = true
 description = "Language Server Protocol implementation for Warp"
