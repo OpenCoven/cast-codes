@@ -7,7 +7,10 @@
 //! - `GET  /v1/sessions`            — list active Coven sessions.
 //! - `POST /v1/sessions`            — open a session by name.
 //! - `DELETE /v1/sessions/:id`      — close a session.
-//! - `GET  /v1/substrate`           — gateway-managed slices of substrate context.
+//!
+//! Substrate is collected client-side (see `crate::substrate`) and is not
+//! fetched from the gateway today. See `CAST-AGENT.md` for the proposed
+//! Runs / Substrate wire contracts.
 //!
 //! Auth header is `Authorization: Bearer <token>` when [`CastAgentConfig::token`] is set.
 
