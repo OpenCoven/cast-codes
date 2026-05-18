@@ -413,17 +413,31 @@ mod smoke_tests {
     fn smoke_managed_typescript_lsp_install_from_env() {
         install_crypto_provider();
 
-        let data_profile = std::env::var("CAST_CODES_DATA_PROFILE")
-            .expect("CAST_CODES_DATA_PROFILE is required for managed install smoke");
+        let data_profile = match std::env::var("CAST_CODES_DATA_PROFILE") {
+            Ok(value) => value,
+            Err(_) => {
+                eprintln!(
+                    "skipping smoke_managed_typescript_lsp_install_from_env: \
+CAST_CODES_DATA_PROFILE is not set"
+                );
+                return;
+            }
+        };
         assert!(
             data_profile.contains("ts-lsp-smoke"),
             "managed install smoke must use an isolated data profile"
         );
 
-        let workspace_root = PathBuf::from(
-            std::env::var("CASTCODES_TS_LSP_MISSING_REPO")
-                .expect("CASTCODES_TS_LSP_MISSING_REPO is required"),
-        );
+        let workspace_root = match std::env::var("CASTCODES_TS_LSP_MISSING_REPO") {
+            Ok(value) => PathBuf::from(value),
+            Err(_) => {
+                eprintln!(
+                    "skipping smoke_managed_typescript_lsp_install_from_env: \
+CASTCODES_TS_LSP_MISSING_REPO is not set"
+                );
+                return;
+            }
+        };
         let path_env = std::env::var("PATH").ok();
         let executor = Arc::new(Background::default());
 
