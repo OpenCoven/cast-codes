@@ -6,7 +6,7 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-crash_reporting = ["dep:sentry", "dep:sentry-log"]
+crash_reporting = ["dep:sentry"]
 integration_tests = []
 local_fs = []
 release_bundle = []
@@ -16,10 +16,8 @@ test-util = ["dep:mockito", "warp_features/test-util"]
 anyhow.workspace = true
 cfg-if.workspace = true
 command-corrections.workspace = true
-dashmap.workspace = true
 dirs.workspace = true
 directories.workspace = true
-shellexpand.workspace = true
 enum-iterator.workspace = true
 warp_features.workspace = true
 itertools.workspace = true
@@ -34,7 +32,6 @@ settings.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
 sentry = { workspace = true, optional = true }
-sentry-log = { workspace = true, optional = true }
 strum.workspace = true
 strum_macros.workspace = true
 sysinfo.workspace = true
@@ -53,10 +50,8 @@ line-ending.workspace = true
 warpui.workspace = true
 warpui_extras = { workspace = true, features = ["default"] }
 mockito = { workspace = true, optional = true }
-asset_macro.workspace = true
 string-offset.workspace = true
 inventory = "0.3.20"
-chrono.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio.workspace = true
@@ -78,3 +73,6 @@ serde_yaml.workspace = true
 
 [build-dependencies]
 anyhow.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["concat-idents"]

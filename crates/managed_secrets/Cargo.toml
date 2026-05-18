@@ -19,7 +19,6 @@ thiserror.workspace = true
 tink-core = "0.3"
 tink-proto = "0.3"
 tink-hybrid = "0.3"
-zeroize = "1.8"
 warpui.workspace = true
 warp_core.workspace = true
 warp_graphql.workspace = true
@@ -36,3 +35,6 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 tink-core = { version = "0.3", features = ["json", "insecure"] }
+
+[package.metadata.cargo-machete]
+ignored = ["log"]

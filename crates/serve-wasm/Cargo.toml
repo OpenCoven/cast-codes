@@ -7,7 +7,6 @@ license.workspace = true
 
 [dependencies]
 axum.workspace = true
-axum-extra = "0.10.1"
 clap = { workspace = true, features = ["derive"] }
 tokio = { version = "1.43", features = ["full"] }
 tower.workspace = true

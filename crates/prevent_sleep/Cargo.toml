@@ -6,7 +6,6 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
-cfg-if.workspace = true
 futures.workspace = true
 log.workspace = true
 pin-project.workspace = true

@@ -18,7 +18,6 @@ itertools.workspace = true
 lazy_static.workspace = true
 log.workspace = true
 pathfinder_color.workspace = true
-regex.workspace = true
 serde.workspace = true
 session-sharing-protocol.workspace = true
 smol_str.workspace = true

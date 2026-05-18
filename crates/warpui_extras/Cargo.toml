@@ -17,7 +17,6 @@ user_preferences-toml = ["user_preferences", "dep:serde", "dep:serde_json", "dep
 [dependencies]
 anyhow.workspace = true
 log.workspace = true
-async-channel.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 sha2.workspace = true

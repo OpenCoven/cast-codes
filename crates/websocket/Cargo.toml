@@ -15,7 +15,6 @@ itertools.workspace = true
 futures.workspace = true
 futures-util.workspace = true
 http.workspace = true
-cfg-if.workspace = true
 log.workspace = true
 thiserror.workspace = true
 pin-project.workspace = true

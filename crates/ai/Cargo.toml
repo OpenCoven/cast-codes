@@ -95,3 +95,6 @@ warp_core = { workspace = true, features = ["test-util"] }
 
 [build-dependencies]
 anyhow.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["sentry", "strum"]

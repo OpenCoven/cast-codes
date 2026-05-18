@@ -12,7 +12,6 @@ async-channel.workspace = true
 chrono.workspace = true
 cynic.workspace = true
 http_client.workspace = true
-futures-util.workspace = true
 futures.workspace = true
 http.workspace = true
 instant.workspace = true
