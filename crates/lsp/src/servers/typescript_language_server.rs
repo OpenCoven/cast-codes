@@ -283,6 +283,8 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
         };
 
         cmd.arg("install")
+            .arg("--prefix")
+            .arg(&install_dir)
             .arg("--ignore-scripts")
             .arg(format!("typescript-language-server@{}", metadata.version))
             .arg("typescript")
@@ -341,5 +343,139 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
 
     async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
         todo!()
+    }
+}
+
+#[cfg(all(test, feature = "local_fs"))]
+mod smoke_tests {
+    use super::*;
+    use crate::config::LspServerConfig;
+    use crate::supported_servers::LSPServerType;
+    use crate::LspServiceInitializationResult;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Once};
+    use warpui::r#async::executor::Background;
+
+    static INSTALL_CRYPTO_PROVIDER: Once = Once::new();
+
+    fn install_crypto_provider() {
+        INSTALL_CRYPTO_PROVIDER.call_once(|| {
+            rustls::crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .expect("failed to install default rustls crypto provider");
+        });
+    }
+
+    #[test]
+    fn smoke_workspace_local_typescript_lsp_from_env() {
+        install_crypto_provider();
+
+        let workspace_root = PathBuf::from(
+            std::env::var("CASTCODES_TS_LSP_SMOKE_REPO")
+                .expect("CASTCODES_TS_LSP_SMOKE_REPO is required"),
+        );
+        let path_env = std::env::var("PATH").ok();
+        let executor = Arc::new(Background::default());
+
+        warpui::r#async::block_on(async move {
+            let command_executor = crate::CommandBuilder::new(path_env.clone());
+            let workspace_config = TypeScriptLanguageServerCandidate::find_workspace_binary_config(
+                &workspace_root,
+                path_env.as_deref(),
+                &command_executor,
+            )
+            .await
+            .expect("workspace-local typescript-language-server should be discovered");
+
+            assert_eq!(
+                workspace_config.binary_path,
+                workspace_root.join(TypeScriptLanguageServerCandidate::LOCAL_BIN_PATH)
+            );
+            assert!(workspace_config.prepend_args.is_empty());
+
+            let config = LspServerConfig::new(
+                LSPServerType::TypeScriptLanguageServer,
+                workspace_root,
+                path_env,
+                "castcodes-smoke".to_owned(),
+                Arc::new(http_client::Client::new()),
+            );
+
+            let LspServiceInitializationResult { service, .. } =
+                crate::spawn_lsp_service(config, executor, None).await?;
+            service.shutdown().await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn smoke_managed_typescript_lsp_install_from_env() {
+        install_crypto_provider();
+
+        let data_profile = match std::env::var("CAST_CODES_DATA_PROFILE") {
+            Ok(value) => value,
+            Err(_) => {
+                eprintln!(
+                    "skipping smoke_managed_typescript_lsp_install_from_env: \
+CAST_CODES_DATA_PROFILE is not set"
+                );
+                return;
+            }
+        };
+        assert!(
+            data_profile.contains("ts-lsp-smoke"),
+            "managed install smoke must use an isolated data profile"
+        );
+
+        let workspace_root = match std::env::var("CASTCODES_TS_LSP_MISSING_REPO") {
+            Ok(value) => PathBuf::from(value),
+            Err(_) => {
+                eprintln!(
+                    "skipping smoke_managed_typescript_lsp_install_from_env: \
+CASTCODES_TS_LSP_MISSING_REPO is not set"
+                );
+                return;
+            }
+        };
+        let path_env = std::env::var("PATH").ok();
+        let executor = Arc::new(Background::default());
+
+        warpui::r#async::block_on(async move {
+            let command_executor = crate::CommandBuilder::new(path_env.clone());
+            assert!(
+                TypeScriptLanguageServerCandidate::find_workspace_binary_config(
+                    &workspace_root,
+                    path_env.as_deref(),
+                    &command_executor,
+                )
+                .await
+                .is_none(),
+                "missing workspace should not have local TypeScript LSP tooling"
+            );
+
+            let candidate =
+                TypeScriptLanguageServerCandidate::new(Arc::new(http_client::Client::new()));
+            let metadata = candidate.fetch_latest_server_metadata().await?;
+            candidate.install(metadata, &command_executor).await?;
+
+            TypeScriptLanguageServerCandidate::find_installed_binary_config(path_env.as_deref())
+                .await
+                .expect("managed TypeScript LSP install should be usable");
+
+            let config = LspServerConfig::new(
+                LSPServerType::TypeScriptLanguageServer,
+                workspace_root,
+                path_env,
+                "castcodes-smoke".to_owned(),
+                Arc::new(http_client::Client::new()),
+            );
+
+            let LspServiceInitializationResult { service, .. } =
+                crate::spawn_lsp_service(config, executor, None).await?;
+            service.shutdown().await?;
+            Ok::<_, anyhow::Error>(())
+        })
+        .unwrap();
     }
 }

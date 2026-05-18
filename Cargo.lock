@@ -7977,6 +7977,7 @@ dependencies = [
  "nix 0.26.4",
  "node_runtime",
  "repo_metadata",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -8098,14 +8099,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "managed_secrets_wasm"
-version = "0.1.0"
-dependencies = [
- "warp_managed_secrets",
- "wasm-bindgen",
 ]
 
 [[package]]

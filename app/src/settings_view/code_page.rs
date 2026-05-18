@@ -42,7 +42,7 @@ use ai::index::full_source_code_embedding::manager::{
 use ai::index::full_source_code_embedding::SyncProgress;
 use ai::project_context::model::{ProjectContextModel, ProjectContextModelEvent};
 use ai::workspace::WorkspaceMetadata;
-use lsp::supported_servers::LSPServerType;
+use lsp::supported_servers::{LSPServerType, LspStartupFailureReason};
 use lsp::{LspManagerModel, LspManagerModelEvent, LspServerModel, LspState};
 use pathfinder_color::ColorU;
 use std::borrow::Cow;
@@ -91,7 +91,7 @@ const INDEXING_WORKSPACE_ENABLED_ADMIN_TEXT: &str = "Team admins have enabled co
 const INDEXING_DISABLED_GLOBAL_AI_TEXT: &str =
     "AI Features must be enabled to use codebase indexing.";
 const CODEBASE_INDEX_LIMIT_REACHED: &str = "You have reached the maximum number of codebase indices for your plan. Delete existing indices to auto-index new codebases.";
-const TYPESCRIPT_LSP_REPAIR_LABEL: &str = "Install/repair TypeScript language server";
+const TYPESCRIPT_LSP_MISSING_STATUS: &str = "Missing binary";
 
 /// Identifies which subpage of the Code settings the user is viewing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1847,7 +1847,8 @@ impl CodePageWidget {
         let mut left_content = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
 
         // Language initial badge with status dot overlay (using Avatar component)
-        let (status_color, status_text) = self.get_lsp_status_info(server_model, app, theme);
+        let (status_color, status_text) =
+            self.get_lsp_status_info(server_model, server_type, app, theme);
         let is_failed = server_model
             .is_some_and(|model| matches!(model.as_ref(app).state(), LspState::Failed { .. }));
         let is_repairable_failure = self.is_repairable_lsp_failure(server_model, server_type, app);
@@ -2044,6 +2045,7 @@ impl CodePageWidget {
     fn get_lsp_status_info(
         &self,
         server_model: Option<&warpui::ModelHandle<LspServerModel>>,
+        server_type: LSPServerType,
         app: &AppContext,
         theme: &warp_core::ui::theme::WarpTheme,
     ) -> (ColorU, Cow<'static, str>) {
@@ -2063,12 +2065,13 @@ impl CodePageWidget {
                             .into(),
                         Cow::Borrowed("Busy"),
                     ),
-                    LspState::Failed { error } => {
-                        let status_text = if error.contains(TYPESCRIPT_LSP_REPAIR_LABEL) {
-                            Cow::Borrowed(TYPESCRIPT_LSP_REPAIR_LABEL)
-                        } else {
-                            Cow::Borrowed("Failed")
-                        };
+                    LspState::Failed { failure_reason, .. } => {
+                        let status_text =
+                            if is_repairable_missing_binary_failure(server_type, *failure_reason) {
+                                Cow::Borrowed(TYPESCRIPT_LSP_MISSING_STATUS)
+                            } else {
+                                Cow::Borrowed("Failed")
+                            };
                         (
                             AnsiColorIdentifier::Red
                                 .to_ansi_color(&theme.terminal_colors().normal)
@@ -2095,14 +2098,27 @@ impl CodePageWidget {
         server_type: LSPServerType,
         app: &AppContext,
     ) -> bool {
-        server_type == LSPServerType::TypeScriptLanguageServer
-            && server_model.is_some_and(|model| {
-                matches!(
-                    model.as_ref(app).state(),
-                    LspState::Failed { error } if error.contains(TYPESCRIPT_LSP_REPAIR_LABEL)
-                )
-            })
+        server_model.is_some_and(|model| {
+            matches!(
+                model.as_ref(app).state(),
+                LspState::Failed {
+                    failure_reason, ..
+                } if is_repairable_missing_binary_failure(server_type, *failure_reason)
+            )
+        })
     }
+}
+
+fn is_repairable_missing_binary_failure(
+    server_type: LSPServerType,
+    failure_reason: Option<LspStartupFailureReason>,
+) -> bool {
+    matches!(
+        failure_reason,
+        Some(LspStartupFailureReason::MissingBinary {
+            server_type: failed_server_type,
+        }) if failed_server_type == server_type
+    )
 }
 
 /// A simple widget that renders a subheader title for a Code subpage.

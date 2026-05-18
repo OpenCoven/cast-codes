@@ -98,11 +98,7 @@ impl GatewayClient {
     }
 
     fn url(&self, path: &str) -> String {
-        format!(
-            "{}{}",
-            self.config.gateway_url.trim_end_matches('/'),
-            path
-        )
+        format!("{}{}", self.config.gateway_url.trim_end_matches('/'), path)
     }
 
     pub async fn send_message(&self, msg: AgentMessage) -> anyhow::Result<AgentResponse> {
@@ -195,10 +191,7 @@ impl GatewayClient {
     ///
     /// Boxed so the returned stream is `Unpin` and callers can drive it
     /// with `.next().await` without manual pinning.
-    pub async fn stream_messages(
-        &self,
-        msg: AgentMessage,
-    ) -> anyhow::Result<MessageStream> {
+    pub async fn stream_messages(&self, msg: AgentMessage) -> anyhow::Result<MessageStream> {
         let url = self.ws_url("/v1/messages/stream");
         let mut request = url
             .as_str()
@@ -246,5 +239,4 @@ impl GatewayClient {
 /// Boxed message stream returned by [`GatewayClient::stream_messages`].
 /// Boxing makes the stream `Unpin`, so callers can drive it with
 /// `.next().await` without manual `pin_mut!`.
-pub type MessageStream =
-    std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<MessageChunk>> + Send>>;
+pub type MessageStream = std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<MessageChunk>> + Send>>;

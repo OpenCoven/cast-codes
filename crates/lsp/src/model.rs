@@ -1,7 +1,7 @@
 use crate::{
     config::{lsp_uri_to_path, LanguageId},
     server_repo_watcher::LspRepoWatcher,
-    supported_servers::LSPServerType,
+    supported_servers::{LSPServerType, LspStartupError, LspStartupFailureReason},
     types::{
         DefinitionLocation, DocumentVersion, HoverResult, Location, ReferenceLocation,
         TextDocumentContentChangeEvent, TextEdit, WatchedFileChangeEvent,
@@ -71,6 +71,7 @@ pub enum LspState {
     },
     Failed {
         error: String,
+        failure_reason: Option<LspStartupFailureReason>,
     },
 }
 
@@ -251,7 +252,7 @@ impl LspServerModel {
             LspState::Starting => Err(anyhow::anyhow!("Server is starting")),
             LspState::Stopped { .. } => Err(anyhow::anyhow!("Server is stopped")),
             LspState::Stopping { .. } => Err(anyhow::anyhow!("Server is stopping")),
-            LspState::Failed { error } => Err(anyhow::anyhow!("Server has failed: {error}")),
+            LspState::Failed { error, .. } => Err(anyhow::anyhow!("Server has failed: {error}")),
         }
     }
 
@@ -312,8 +313,14 @@ impl LspServerModel {
                         }
                         Err(e) => {
                             log::error!("Failed to start LSP server: {e}");
+                            let failure_reason = e
+                                .downcast_ref::<LspStartupError>()
+                                .map(|startup_error| startup_error.reason());
                             let error = format!("{e:#}");
-                            me.server_state = LspState::Failed { error };
+                            me.server_state = LspState::Failed {
+                                error,
+                                failure_reason,
+                            };
                             ctx.emit(LspEvent::Failed(e));
                         }
                     },
