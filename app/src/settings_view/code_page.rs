@@ -2063,19 +2063,12 @@ impl CodePageWidget {
                             .into(),
                         Cow::Borrowed("Busy"),
                     ),
-                    LspState::Failed { error } => {
-                        let status_text = if error.contains(TYPESCRIPT_LSP_REPAIR_LABEL) {
-                            Cow::Borrowed(TYPESCRIPT_LSP_REPAIR_LABEL)
-                        } else {
-                            Cow::Borrowed("Failed")
-                        };
-                        (
-                            AnsiColorIdentifier::Red
-                                .to_ansi_color(&theme.terminal_colors().normal)
-                                .into(),
-                            status_text,
-                        )
-                    }
+                    LspState::Failed { .. } => (
+                        AnsiColorIdentifier::Red
+                            .to_ansi_color(&theme.terminal_colors().normal)
+                            .into(),
+                        Cow::Borrowed("Failed"),
+                    ),
                     LspState::Stopped { .. } | LspState::Stopping { .. } => (
                         theme.disabled_ui_text_color().into_solid(),
                         Cow::Borrowed("Stopped"),
