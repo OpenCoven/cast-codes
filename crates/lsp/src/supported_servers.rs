@@ -47,20 +47,29 @@ pub struct ResolvedLspBinaryConfig {
     pub custom_config: Option<CustomBinaryConfig>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+pub const TYPESCRIPT_LSP_REPAIR_ACTION: &str = "Install/repair TypeScript language server";
+
+const TYPESCRIPT_LSP_MISSING_BINARY_PREFIX: &str = "typescript-language-server is not available.";
+
 pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
     match server_type {
-        LSPServerType::TypeScriptLanguageServer => concat!(
-            "typescript-language-server is not available. ",
-            "Install/repair TypeScript language server from Codebase Indexing settings, ",
-            "or add typescript and typescript-language-server to this workspace so ",
-            "node_modules/.bin/typescript-language-server exists. A global install is not required."
-        )
-        .to_string(),
+        LSPServerType::TypeScriptLanguageServer => format!(
+            "{TYPESCRIPT_LSP_MISSING_BINARY_PREFIX} {TYPESCRIPT_LSP_REPAIR_ACTION} from Codebase Indexing settings, or add typescript and typescript-language-server to this workspace so node_modules/.bin/typescript-language-server exists. A global install is not required."
+        ),
         _ => format!(
             "{} is not available. Install the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
             server_type.binary_name()
         ),
+    }
+}
+
+pub fn is_repairable_missing_binary_error(server_type: LSPServerType, error: &str) -> bool {
+    match server_type {
+        LSPServerType::TypeScriptLanguageServer => {
+            error.contains(TYPESCRIPT_LSP_MISSING_BINARY_PREFIX)
+                && error.contains(TYPESCRIPT_LSP_REPAIR_ACTION)
+        }
+        _ => false,
     }
 }
 
@@ -76,6 +85,13 @@ pub(crate) fn resolve_lsp_binary_config(
         return Ok(ResolvedLspBinaryConfig {
             source: LspBinarySource::Custom,
             custom_config: Some(custom_config),
+        });
+    }
+
+    if server_type != LSPServerType::TypeScriptLanguageServer && is_working_on_path {
+        return Ok(ResolvedLspBinaryConfig {
+            source: LspBinarySource::Path,
+            custom_config: None,
         });
     }
 
@@ -390,5 +406,24 @@ mod tests {
         assert!(error.contains("Install/repair TypeScript language server"));
         assert!(error.contains("node_modules/.bin/typescript-language-server"));
         assert!(error.contains("global install is not required"));
+        assert!(is_repairable_missing_binary_error(
+            LSPServerType::TypeScriptLanguageServer,
+            &error
+        ));
+    }
+
+    #[test]
+    fn non_typescript_path_is_preserved_before_managed() {
+        let resolved = resolve_lsp_binary_config(
+            LSPServerType::RustAnalyzer,
+            None,
+            None,
+            Some(config("/managed/rust-analyzer")),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.source, LspBinarySource::Path);
+        assert!(resolved.custom_config.is_none());
     }
 }
