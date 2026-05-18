@@ -13,3 +13,6 @@ itertools.workspace = true
 string-offset.workspace = true
 anyhow.workspace = true
 unindent = "0.2.4"
+
+[package.metadata.cargo-machete]
+ignored = ["log"]

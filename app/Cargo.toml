@@ -66,7 +66,6 @@ base64.workspace = true
 bimap = "0.6.2"
 bincode.workspace = true
 bitflags.workspace = true
-bitflags-serde-legacy.workspace = true
 blocking.workspace = true
 bounded-vec-deque = "0.1"
 bytecount = "0.6.9"
@@ -81,7 +80,6 @@ command-corrections.workspace = true
 command-signatures-v2 = { workspace = true, optional = true }
 computer_use.workspace = true
 crc.workspace = true
-content_inspector = "0.2.4"
 concat-idents.workspace = true
 csv = "1.3.1"
 cynic.workspace = true
@@ -107,7 +105,6 @@ futures-lite.workspace = true
 futures-util.workspace = true
 futures.workspace = true
 fuzzy_match.workspace = true
-getset.workspace = true
 handlebars.workspace = true
 hex.workspace = true
 http.workspace = true
@@ -132,7 +129,6 @@ lazy_static.workspace = true
 libc.workspace = true
 line-ending.workspace = true
 log.workspace = true
-log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 lsp.workspace = true
 warp_logging.workspace = true
 sentry = { workspace = true, optional = true }
@@ -182,7 +178,6 @@ settings_value = { workspace = true, features = ["derive"] }
 sha2.workspace = true
 shellexpand.workspace = true
 shell-words = "1.1.0"
-shlex = "1.3.0"
 siphasher = "0.3.11"
 similar.workspace = true
 simple_logger.workspace = true
@@ -232,13 +227,11 @@ languages.workspace = true
 warp_terminal.workspace = true
 websocket.workspace = true
 wgpu = { workspace = true, optional = true }
-natural_language_detection.workspace = true
 onboarding.workspace = true
 aho-corasick = "1.1.3"
 strum.workspace = true
 strum_macros.workspace = true
 reqwest-eventsource = { workspace = true }
-lasso.workspace = true
 counter = "0.6.0"
 typed-path.workspace = true
 urlencoding = "2.1.3"
@@ -963,3 +956,6 @@ short_description = "The CastCodes terminal and code workspace, local developer 
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["embed_plist"]
+
+[package.metadata.cargo-machete]
+ignored = ["concat-idents", "serde_bytes", "serde_regex"]

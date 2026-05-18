@@ -537,17 +537,10 @@ checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 name = "app-installation-detection"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "axum",
- "axum-extra",
- "command",
- "nix 0.26.4",
- "tokio",
  "tower",
  "tower-http",
  "tracing",
- "tracing-subscriber",
- "warp_cli",
  "win32job",
 ]
 
@@ -1951,28 +1944,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-extra"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45bf463831f5131b7d3c756525b305d40f1185b688565648a92e1392ca35713d"
-dependencies = [
- "axum",
- "axum-core",
- "bytes",
- "futures-util",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "rustversion",
- "serde",
- "tower",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3108,7 +3079,6 @@ version = "0.0.0"
 dependencies = [
  "ashpd",
  "async-trait",
- "cfg-if",
  "cfg_aliases 0.2.1",
  "clap",
  "command",
@@ -6589,7 +6559,6 @@ dependencies = [
  "axum",
  "log",
  "tokio",
- "tower",
  "tower-http",
  "warpui",
 ]
@@ -7023,7 +6992,6 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "candle-onnx",
- "cfg-if",
  "clap",
  "fasttext",
  "futures",
@@ -7077,7 +7045,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "app-installation-detection",
- "backtrace",
  "cfg-if",
  "chrono",
  "clap",
@@ -7089,25 +7056,19 @@ dependencies = [
  "itertools 0.14.0",
  "lazy_static",
  "log",
- "mockito",
  "nix 0.26.4",
  "parking_lot",
  "pathfinder_geometry",
- "rand 0.8.6",
  "regex",
  "rust-embed 8.7.2",
- "serde",
  "serde_json",
  "settings",
- "simplelog",
  "strum",
  "strum_macros",
  "sum_tree",
  "sysinfo",
  "version-compare 0.1.1",
  "warp-app",
- "warp-command-signatures",
- "warp-workflows",
  "warp_cli",
  "warp_core",
  "warp_multi_agent_api",
@@ -8101,14 +8062,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "managed_secrets_wasm"
-version = "0.1.0"
-dependencies = [
- "warp_managed_secrets",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "mappings"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8132,7 +8085,6 @@ dependencies = [
  "markup5ever_rcdom",
  "nom 7.1.3",
  "serde_yaml",
- "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -8768,7 +8720,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-fs",
- "async-trait",
  "cfg-if",
  "command",
  "flate2",
@@ -8777,7 +8728,6 @@ dependencies = [
  "log",
  "semver",
  "serde",
- "serde_json",
  "sha2 0.10.9",
  "tar",
  "warp_core",
@@ -10401,7 +10351,6 @@ dependencies = [
 name = "prevent_sleep"
 version = "0.0.0"
 dependencies = [
- "cfg-if",
  "cfg_aliases 0.2.1",
  "futures",
  "itertools 0.14.0",
@@ -11401,15 +11350,11 @@ dependencies = [
  "itertools 0.14.0",
  "log",
  "notify-debouncer-full",
- "once_cell",
- "serde",
  "serde_json",
  "strum",
  "strum_macros",
- "tempfile",
  "thiserror 2.0.17",
  "virtual-fs",
- "walkdir",
  "warp_core",
  "warp_util",
  "warpui",
@@ -12572,7 +12517,6 @@ name = "serve-wasm"
 version = "0.1.0"
 dependencies = [
  "axum",
- "axum-extra",
  "clap",
  "tokio",
  "tower",
@@ -13288,13 +13232,11 @@ dependencies = [
  "futures",
  "futures-lite 1.13.0",
  "languages",
- "log",
  "parking_lot",
  "rangemap",
  "streaming-iterator",
  "string-offset",
  "warp_editor",
- "warp_util",
  "warpui",
 ]
 
@@ -14939,7 +14881,6 @@ dependencies = [
  "dunce",
  "getset",
  "tempfile",
- "typed-path 0.10.0",
 ]
 
 [[package]]
@@ -15060,7 +15001,6 @@ dependencies = [
  "bimap",
  "bincode",
  "bitflags 2.9.4",
- "bitflags-serde-legacy",
  "block",
  "blocking",
  "bounded-vec-deque",
@@ -15082,7 +15022,6 @@ dependencies = [
  "computer_use",
  "concat-idents",
  "console_error_panic_hook",
- "content_inspector",
  "core-foundation 0.10.1",
  "counter 0.6.0",
  "crash-handler",
@@ -15120,7 +15059,6 @@ dependencies = [
  "fuzzy_match",
  "gethostname",
  "getrandom 0.2.16",
- "getset",
  "git2",
  "gloo",
  "handlebars",
@@ -15146,13 +15084,11 @@ dependencies = [
  "jsonschema",
  "kmeans_colors",
  "languages",
- "lasso",
  "lazy_static",
  "libc",
  "libsqlite3-sys",
  "line-ending",
  "log",
- "log-panics",
  "lsp",
  "lsp-types",
  "lz4_flex 0.11.6",
@@ -15166,7 +15102,6 @@ dependencies = [
  "mio",
  "mockall",
  "mockito",
- "natural_language_detection",
  "nix 0.26.4",
  "notify-debouncer-full",
  "num-traits",
@@ -15225,7 +15160,6 @@ dependencies = [
  "sha2 0.10.9",
  "shell-words",
  "shellexpand",
- "shlex",
  "signal-hook",
  "signal-hook-mio",
  "similar",
@@ -15393,7 +15327,6 @@ dependencies = [
  "clap",
  "command",
  "derive-new",
- "dirs 6.0.0",
  "futures",
  "fuzzy_match",
  "getset",
@@ -15405,7 +15338,6 @@ dependencies = [
  "regex",
  "rquickjs",
  "serde",
- "shellexpand",
  "smol_str",
  "string-offset",
  "thiserror 2.0.17",
@@ -15424,14 +15356,11 @@ name = "warp_core"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "asset_macro",
  "async-broadcast",
  "cfg-if",
- "chrono",
  "cocoa 0.26.0",
  "command-corrections",
  "concat-idents",
- "dashmap",
  "directories",
  "dirs 6.0.0",
  "enum-iterator",
@@ -15453,14 +15382,12 @@ dependencies = [
  "reqwest",
  "schemars",
  "sentry",
- "sentry-log",
  "serde",
  "serde_json",
  "serde_with",
  "serde_yaml",
  "settings",
  "settings_value",
- "shellexpand",
  "string-offset",
  "strum",
  "strum_macros",
@@ -15501,7 +15428,6 @@ dependencies = [
  "markdown_parser",
  "markup5ever 0.35.0",
  "mermaid_to_svg",
- "mime_guess",
  "num-traits",
  "ordered-float 3.9.2",
  "parking_lot",
@@ -15545,7 +15471,6 @@ dependencies = [
  "remote_server",
  "repo_metadata",
  "tempfile",
- "thiserror 2.0.17",
  "warp_core",
  "warp_util",
  "warpui",
@@ -15562,7 +15487,6 @@ dependencies = [
  "cynic",
  "cynic-codegen",
  "futures",
- "futures-util",
  "graphql-ws-client",
  "http 1.4.0",
  "http_client",
@@ -15660,7 +15584,6 @@ dependencies = [
  "warp_graphql",
  "warp_isolation_platform",
  "warpui",
- "zeroize",
 ]
 
 [[package]]
@@ -15686,7 +15609,6 @@ dependencies = [
  "getrandom 0.2.16",
  "grep",
  "ignore",
- "instant",
  "log",
  "nix 0.26.4",
  "serde",
@@ -15737,7 +15659,6 @@ dependencies = [
  "lazy_static",
  "log",
  "pathfinder_color",
- "regex",
  "serde",
  "session-sharing-protocol",
  "smol_str",
@@ -15820,7 +15741,6 @@ dependencies = [
  "ctrlc",
  "dashmap",
  "derivative",
- "derive_more 0.99.17",
  "dirs 6.0.0",
  "dispatch",
  "dwrote",
@@ -15860,7 +15780,6 @@ dependencies = [
  "resvg",
  "rust-embed 8.7.2",
  "serde",
- "sum_tree",
  "takecell",
  "tauri-winrt-notification",
  "thiserror 2.0.17",
@@ -15891,7 +15810,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arboard",
- "async-broadcast",
  "async-channel",
  "async-executor",
  "async-fs",
@@ -15944,7 +15862,6 @@ dependencies = [
  "serde",
  "serde_json",
  "settings_value",
- "similar",
  "simplelog",
  "smallvec 1.15.1",
  "string-offset",
@@ -15968,7 +15885,6 @@ name = "warpui_extras"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "async-channel",
  "cocoa 0.26.0",
  "gloo-storage",
  "log",
@@ -16396,7 +16312,6 @@ dependencies = [
  "async-net",
  "async-tungstenite",
  "base64 0.22.1",
- "cfg-if",
  "futures",
  "futures-test-sink",
  "futures-util",
