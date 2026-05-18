@@ -1,5 +1,5 @@
 [package]
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 name = "natural_language_detection"
 version = "0.1.0"
 edition = "2021"

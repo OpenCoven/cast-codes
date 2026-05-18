@@ -1,5 +1,5 @@
 [package]
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 edition = "2021"
 name = "ipc"
 version = "0.1.0"
