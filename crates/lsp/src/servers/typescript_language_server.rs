@@ -353,11 +353,17 @@ mod smoke_tests {
     use crate::supported_servers::LSPServerType;
     use crate::LspServiceInitializationResult;
     use std::path::PathBuf;
-    use std::sync::Arc;
+    use std::sync::{Arc, Once};
     use warpui::r#async::executor::Background;
 
+    static INSTALL_CRYPTO_PROVIDER: Once = Once::new();
+
     fn install_crypto_provider() {
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        INSTALL_CRYPTO_PROVIDER.call_once(|| {
+            rustls::crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .expect("failed to install default rustls crypto provider");
+        });
     }
 
     #[test]
