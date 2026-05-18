@@ -16,9 +16,7 @@ pub mod store_schema;
 pub mod strings;
 pub mod view;
 
-pub use conversation::{AgentKind, ChatConversation, ConversationBinding};
-pub use entry::{ChatEntry, ChatEntryKind};
-pub use model::{ChatModel, ChatModelEvent};
+pub use model::ChatModel;
 pub use view::ChatPanelView;
 
 #[cfg(test)]

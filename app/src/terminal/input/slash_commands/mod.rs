@@ -385,16 +385,16 @@ impl Input {
 
         // Handle the slash command action based on its kind
         match command.name {
-            add_mcp if command.name == commands::ADD_MCP.name => {
+            _add_mcp if command.name == commands::ADD_MCP.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenAddMCPPane);
             }
-            add_prompt if command.name == commands::ADD_PROMPT.name => {
+            _add_prompt if command.name == commands::ADD_PROMPT.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenAddPromptPane);
             }
-            add_rule if command.name == commands::ADD_RULE.name => {
+            _add_rule if command.name == commands::ADD_RULE.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenAddRulePane);
             }
-            agent_or_new
+            _agent_or_new
                 if command.name == commands::NEW.name || command.name == commands::AGENT.name =>
             {
                 if !self
@@ -449,7 +449,7 @@ impl Input {
                     origin: AgentViewEntryOrigin::SlashCommand { trigger },
                 });
             }
-            cloud_agent if command.name == commands::CLOUD_AGENT.name => {
+            _cloud_agent if command.name == commands::CLOUD_AGENT.name => {
                 let prompt = argument.and_then(|argument| {
                     let trimmed = argument.trim();
                     if trimmed.is_empty() {
@@ -463,10 +463,10 @@ impl Input {
                     initial_prompt: prompt,
                 });
             }
-            create_docker_sandbox if command.name == commands::CREATE_DOCKER_SANDBOX.name => {
+            _create_docker_sandbox if command.name == commands::CREATE_DOCKER_SANDBOX.name => {
                 ctx.emit(Event::CreateDockerSandbox);
             }
-            conversations if command.name == commands::CONVERSATIONS.name => {
+            _conversations if command.name == commands::CONVERSATIONS.name => {
                 if self.is_cloud_mode_input_v2_composing(ctx) {
                     self.suggestions_mode_model.update(ctx, |model, ctx| {
                         model.set_mode(InputSuggestionsMode::Closed, ctx);
@@ -485,7 +485,7 @@ impl Input {
                     ctx.dispatch_typed_action(&TerminalAction::OpenConversationsPalette);
                 }
             }
-            rename_tab if command.name == commands::RENAME_TAB.name => {
+            _rename_tab if command.name == commands::RENAME_TAB.name => {
                 let Some(name) = argument
                     .map(|name| name.trim())
                     .filter(|name| !name.is_empty())
@@ -499,7 +499,7 @@ impl Input {
 
                 ctx.dispatch_typed_action(&WorkspaceAction::SetActiveTabName(name.to_owned()));
             }
-            set_tab_color if command.name == commands::SET_TAB_COLOR.name => {
+            _set_tab_color if command.name == commands::SET_TAB_COLOR.name => {
                 let supported_options = || {
                     color_dot::TAB_COLOR_OPTIONS
                         .iter()
@@ -547,7 +547,7 @@ impl Input {
 
                 ctx.dispatch_typed_action(&WorkspaceAction::SetActiveTabColor(color));
             }
-            create_env if command.name == commands::CREATE_ENVIRONMENT.name => {
+            _create_env if command.name == commands::CREATE_ENVIRONMENT.name => {
                 // If the user included args after the slash command, treat them as repo paths/URLs.
                 let repos = argument
                     .map(|arg| {
@@ -560,7 +560,7 @@ impl Input {
 
                 ctx.emit(Event::TriggerEnvironmentSetup { repos });
             }
-            create_project if command.name == commands::CREATE_NEW_PROJECT.name => {
+            _create_project if command.name == commands::CREATE_NEW_PROJECT.name => {
                 if argument.is_none_or(|args| args.is_empty()) {
                     show_error_toast(
                         "Please describe the project you want to create after /create-new-project"
@@ -573,7 +573,7 @@ impl Input {
                 let args = argument.expect("args are Some()");
                 self.initiate_create_new_project(args.to_owned(), ctx);
             }
-            edit if command.name == commands::EDIT.name => {
+            _edit if command.name == commands::EDIT.name => {
                 #[cfg(feature = "local_fs")]
                 match argument {
                     Some(args) if !args.is_empty() => {
@@ -657,7 +657,7 @@ impl Input {
                     return true;
                 }
             }
-            export_to_clipboard if command.name == commands::EXPORT_TO_CLIPBOARD.name => {
+            _export_to_clipboard if command.name == commands::EXPORT_TO_CLIPBOARD.name => {
                 let history = BlocklistAIHistoryModel::handle(ctx);
                 let Some(conversation) = history
                     .as_ref(ctx)
@@ -682,7 +682,7 @@ impl Input {
                     toast_stack.add_ephemeral_toast(toast, window_id, ctx);
                 });
             }
-            export_to_file if command.name == commands::EXPORT_TO_FILE.name => {
+            _export_to_file if command.name == commands::EXPORT_TO_FILE.name => {
                 #[cfg(not(target_family = "wasm"))]
                 {
                     self.export_conversation_to_file(
@@ -699,49 +699,49 @@ impl Input {
                     return true;
                 }
             }
-            index if command.name == commands::INDEX.name => {
+            _index if command.name == commands::INDEX.name => {
                 ctx.dispatch_typed_action(&TerminalAction::IndexProjectSpeedbump);
             }
-            init if command.name == commands::INIT.name => {
+            _init if command.name == commands::INIT.name => {
                 ctx.dispatch_typed_action(&TerminalAction::InitProject);
             }
-            changelog if command.name == commands::CHANGELOG.name => {
+            _changelog if command.name == commands::CHANGELOG.name => {
                 if !FeatureFlag::Changelog.is_enabled() {
                     return false;
                 }
                 ctx.dispatch_typed_action(&WorkspaceAction::ViewLatestChangelog);
             }
-            feedback if command.name == commands::FEEDBACK.name => {
+            _feedback if command.name == commands::FEEDBACK.name => {
                 ctx.dispatch_typed_action(&WorkspaceAction::SendFeedback);
             }
-            open_code_review if command.name == commands::OPEN_CODE_REVIEW.name => {
+            _open_code_review if command.name == commands::OPEN_CODE_REVIEW.name => {
                 ctx.dispatch_typed_action(&TerminalAction::ToggleCodeReviewPane {
                     entrypoint: CodeReviewPaneEntrypoint::SlashCommand,
                 });
             }
-            open_mcp_servers if command.name == commands::OPEN_MCP_SERVERS.name => {
+            _open_mcp_servers if command.name == commands::OPEN_MCP_SERVERS.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenViewMCPPane);
             }
-            open_settings_file if command.name == commands::OPEN_SETTINGS_FILE.name => {
+            _open_settings_file if command.name == commands::OPEN_SETTINGS_FILE.name => {
                 if !FeatureFlag::SettingsFile.is_enabled() || !cfg!(feature = "local_fs") {
                     return false;
                 }
                 ctx.dispatch_typed_action(&WorkspaceAction::OpenSettingsFile);
             }
-            open_project_rules if command.name == commands::OPEN_PROJECT_RULES.name => {
+            _open_project_rules if command.name == commands::OPEN_PROJECT_RULES.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenProjectRulesPane);
             }
-            open_rules if command.name == commands::OPEN_RULES.name => {
+            _open_rules if command.name == commands::OPEN_RULES.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenRulesPane);
             }
-            edit_skill if command.name == commands::EDIT_SKILL.name => {
+            _edit_skill if command.name == commands::EDIT_SKILL.name => {
                 if !FeatureFlag::ListSkills.is_enabled() {
                     return false;
                 }
                 // Open the skill selector menu - user will select a skill from the inline menu
                 self.open_skill_selector(ctx);
             }
-            invoke_skill if command.name == commands::INVOKE_SKILL.name => {
+            _invoke_skill if command.name == commands::INVOKE_SKILL.name => {
                 if !FeatureFlag::ListSkills.is_enabled() {
                     return false;
                 }
@@ -752,7 +752,7 @@ impl Input {
                 // Open the skill selector menu for invocation - skill command will be inserted into buffer
                 self.open_invoke_skill_selector(ctx);
             }
-            host if command.name == commands::HOST.name => {
+            _host if command.name == commands::HOST.name => {
                 if !self.is_cloud_mode_input_v2_composing(ctx) {
                     return false;
                 }
@@ -770,7 +770,7 @@ impl Input {
                 self.open_v2_host_selector(ctx);
                 return true;
             }
-            harness if command.name == commands::HARNESS.name => {
+            _harness if command.name == commands::HARNESS.name => {
                 if !self.is_cloud_mode_input_v2_composing(ctx) {
                     // Defensive: the command is registered only when the V2 flag is on and its
                     // availability requires CLOUD_AGENT_V2, so this branch should be unreachable.
@@ -783,7 +783,7 @@ impl Input {
                 self.open_v2_harness_selector(ctx);
                 return true;
             }
-            environment if command.name == commands::ENVIRONMENT.name => {
+            _environment if command.name == commands::ENVIRONMENT.name => {
                 if !self.is_cloud_mode_input_v2_composing(ctx) {
                     return false;
                 }
@@ -794,7 +794,7 @@ impl Input {
                 self.open_v2_environment_selector(ctx);
                 return true;
             }
-            models if command.name == commands::MODEL.name => {
+            _models if command.name == commands::MODEL.name => {
                 if self.is_cloud_mode_input_v2_composing(ctx) {
                     self.suggestions_mode_model.update(ctx, |model, ctx| {
                         model.set_mode(InputSuggestionsMode::Closed, ctx);
@@ -808,14 +808,14 @@ impl Input {
                     self.open_model_selector(ctx);
                 }
             }
-            profiles if command.name == commands::PROFILE.name => {
+            _profiles if command.name == commands::PROFILE.name => {
                 if !FeatureFlag::InlineProfileSelector.is_enabled() {
                     return false;
                 }
 
                 self.open_profile_selector(ctx);
             }
-            prompts if command.name == commands::PROMPTS.name => {
+            _prompts if command.name == commands::PROMPTS.name => {
                 if self.is_cloud_mode_input_v2_composing(ctx) {
                     self.apply_v2_slash_section_filter(CloudModeV2Section::Prompts, ctx);
                     return true;
@@ -826,10 +826,10 @@ impl Input {
                     return false;
                 }
             }
-            rewind if command.name == commands::REWIND.name => {
+            _rewind if command.name == commands::REWIND.name => {
                 self.open_rewind_menu(ctx);
             }
-            pr_comments if command.name == commands::PR_COMMENTS.name => {
+            _pr_comments if command.name == commands::PR_COMMENTS.name => {
                 if !FeatureFlag::PRCommentsSlashCommand.is_enabled() {
                     return false;
                 }
@@ -850,10 +850,10 @@ impl Input {
                     )
                 });
             }
-            usage if command.name == commands::USAGE.name => {
+            _usage if command.name == commands::USAGE.name => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenBillingAndUsagePane);
             }
-            remote_control if command.name == commands::REMOTE_CONTROL.name => {
+            _remote_control if command.name == commands::REMOTE_CONTROL.name => {
                 if !FeatureFlag::CreatingSharedSessions.is_enabled()
                     || !FeatureFlag::HOARemoteControl.is_enabled()
                 {
@@ -870,7 +870,7 @@ impl Input {
                 }
                 ctx.emit(Event::StartRemoteControl);
             }
-            cost if command.name == commands::COST.name => {
+            _cost if command.name == commands::COST.name => {
                 let history = BlocklistAIHistoryModel::handle(ctx);
                 let conversation = history
                     .as_ref(ctx)
@@ -895,7 +895,7 @@ impl Input {
                 }
             }
             #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
-            move_to_cloud if command.name == commands::MOVE_TO_CLOUD.name => {
+            _move_to_cloud if command.name == commands::MOVE_TO_CLOUD.name => {
                 if !FeatureFlag::OzHandoff.is_enabled()
                     || !FeatureFlag::HandoffLocalCloud.is_enabled()
                 {
@@ -924,7 +924,7 @@ impl Input {
                     self.activate_cloud_handoff_compose(ctx);
                 }
             }
-            fork if command.name == commands::FORK.name => {
+            _fork if command.name == commands::FORK.name => {
                 let Some(conversation_id) = self
                     .ai_context_model
                     .as_ref(ctx)
@@ -949,12 +949,12 @@ impl Input {
                     destination,
                 });
             }
-            fork_from if command.name == commands::FORK_FROM.name => {
+            _fork_from if command.name == commands::FORK_FROM.name => {
                 self.open_user_query_menu(UserQueryMenuAction::ForkFrom, ctx);
                 return true;
             }
             #[cfg(not(target_family = "wasm"))]
-            continue_locally if command.name == commands::CONTINUE_LOCALLY.name => {
+            _continue_locally if command.name == commands::CONTINUE_LOCALLY.name => {
                 let Some(conversation_id) = self
                     .ai_context_model
                     .as_ref(ctx)
@@ -995,7 +995,7 @@ impl Input {
                     destination,
                 });
             }
-            fork_and_compact if command.name == commands::FORK_AND_COMPACT.name => {
+            _fork_and_compact if command.name == commands::FORK_AND_COMPACT.name => {
                 let Some(conversation_id) = self
                     .ai_context_model
                     .as_ref(ctx)
@@ -1023,7 +1023,7 @@ impl Input {
                     destination,
                 });
             }
-            compact_and if command.name == commands::COMPACT_AND.name => {
+            _compact_and if command.name == commands::COMPACT_AND.name => {
                 if self
                     .ai_context_model
                     .as_ref(ctx)
@@ -1042,7 +1042,7 @@ impl Input {
                     initial_prompt: argument.cloned(),
                 });
             }
-            queue if command.name == commands::QUEUE.name => {
+            _queue if command.name == commands::QUEUE.name => {
                 let Some(conversation_id) = self
                     .ai_context_model
                     .as_ref(ctx)
@@ -1071,13 +1071,13 @@ impl Input {
                     self.submit_queued_prompt(prompt, ctx);
                 }
             }
-            open_repo if command.name == commands::OPEN_REPO.name => {
+            _open_repo if command.name == commands::OPEN_REPO.name => {
                 if !FeatureFlag::InlineRepoMenu.is_enabled() {
                     return false;
                 }
                 self.open_repos_menu(ctx);
             }
-            command_that_just_sends_ai_request_with_prefix
+            _command_that_just_sends_ai_request_with_prefix
                 if command.name == commands::COMPACT.name
                     || command.name == commands::PLAN.name
                     || command.name == commands::ORCHESTRATE.name =>
