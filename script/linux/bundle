@@ -190,6 +190,7 @@ fi
 
 EXECUTABLE_PATH="$CARGO_TARGET_OUTPUT_DIR/$WARP_BIN"
 DEBUG_EXECUTABLE_PATH="$EXECUTABLE_PATH.debug"
+BUNDLE_ID="dev.castcodes.$APP_NAME"
 
 # Note that this variable must be set (and exported!) before we compile the
 # binary, as it is read at compile time by Linux autoupdate logic (to know the
