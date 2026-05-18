@@ -265,11 +265,10 @@ fn parse_code_block(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Blo
         cur.advance();
     }
 
-    if let Some(t) = cur.peek() {
-        if t.token_type == TokenType::CodeFenceEnd {
+    if let Some(t) = cur.peek()
+        && t.token_type == TokenType::CodeFenceEnd {
             cur.advance();
         }
-    }
 
     block_with_id(
         options,

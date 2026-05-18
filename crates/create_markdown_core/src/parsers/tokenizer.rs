@@ -68,7 +68,7 @@ fn leading_whitespace_count(s: &str) -> usize {
 }
 
 fn trim_trailing_whitespace(s: &str) -> &str {
-    s.trim_end_matches(|c: char| c == ' ' || c == '\t')
+    s.trim_end_matches([' ', '\t'])
 }
 
 fn is_blank(s: &str) -> bool {
@@ -381,8 +381,8 @@ fn tokenize_line(
     // Inside a fenced code block — only check for a closing fence of the
     // same kind, otherwise treat as code content.
     if state.in_code_block {
-        if let Some((_, ch, len, _)) = match_code_fence(line) {
-            if ch == state.code_block_fence_char && len >= state.code_block_fence_len {
+        if let Some((_, ch, len, _)) = match_code_fence(line)
+            && ch == state.code_block_fence_char && len >= state.code_block_fence_len {
                 state.in_code_block = false;
                 state.code_block_fence_len = 0;
                 return Some(Token {
@@ -394,7 +394,6 @@ fn tokenize_line(
                     meta: TokenMeta::default(),
                 });
             }
-        }
         return Some(Token {
             token_type: TokenType::CodeContent,
             raw: line.to_string(),

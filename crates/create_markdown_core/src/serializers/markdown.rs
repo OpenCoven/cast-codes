@@ -77,7 +77,7 @@ fn serialize_heading(block: &Block, options: &MarkdownSerializeOptions) -> Strin
 
     if options.heading_style == HeadingStyle::Setext && (level == 1 || level == 2) {
         let underline = if level == 1 { '=' } else { '-' };
-        let bar: String = std::iter::repeat(underline).take(content.chars().count()).collect();
+        let bar: String = std::iter::repeat_n(underline, content.chars().count()).collect();
         return format!("{content}{}{bar}", options.line_ending.as_str());
     }
 

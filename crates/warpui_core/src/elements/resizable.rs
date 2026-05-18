@@ -425,31 +425,29 @@ impl Element for Resizable {
         let child_handled = self.child.dispatch_event(event, ctx, app);
 
         match event.raw_event() {
-            crate::Event::LeftMouseDown { position, .. } => {
+            crate::Event::LeftMouseDown { position, .. }
                 // If a mouse-down on the dragbar element occurred, put the view into resizing mode
                 if self
                     .dragbar
                     .bounds
                     .is_some_and(|bounds| bounds.contains_point(*position))
-                {
+                => {
                     self.state().begin_resizing(*position);
                     dispatch_callback(self.resize_handler.as_mut(), ctx, app);
                     return true;
                 }
-            }
 
-            crate::Event::LeftMouseUp { .. } => {
+            crate::Event::LeftMouseUp { .. }
                 // If a mouse-up occurs, take the view out of resizing mode
-                if self.state().is_resizing() {
+                if self.state().is_resizing() => {
                     ctx.reset_cursor();
                     self.state().end_resizing();
                     dispatch_callback(self.end_resize_handler.as_mut(), ctx, app);
                     return true;
                 }
-            }
 
-            crate::Event::LeftMouseDragged { position, .. } => {
-                if self.state().is_resizing() {
+            crate::Event::LeftMouseDragged { position, .. }
+                if self.state().is_resizing() => {
                     let dragbar_side = self.dragbar.side;
                     let origin = self.origin.map(|origin| origin + self.origin_delta);
                     let resized = self
@@ -461,7 +459,6 @@ impl Element for Resizable {
                     }
                     return true;
                 }
-            }
             crate::Event::MouseMoved { position, .. } => {
                 // A mouse event over the dragbar should set the cursor
                 let Some(z_index) = self.z_index() else {

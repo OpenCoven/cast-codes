@@ -293,36 +293,30 @@ impl Element for EventHandler {
                     return true;
                 }
             }
-            Some(Event::LeftMouseDown { position, .. }) => {
-                if self.dispatch_callback(self.left_mouse_down.as_ref(), ctx, *position, app) {
+            Some(Event::LeftMouseDown { position, .. })
+                if self.dispatch_callback(self.left_mouse_down.as_ref(), ctx, *position, app) => {
                     return true;
                 }
-            }
-            Some(Event::LeftMouseUp { position, .. }) => {
-                if self.dispatch_callback(self.left_mouse_up.as_ref(), ctx, *position, app) {
+            Some(Event::LeftMouseUp { position, .. })
+                if self.dispatch_callback(self.left_mouse_up.as_ref(), ctx, *position, app) => {
                     return true;
                 }
-            }
-            Some(Event::MiddleMouseDown { position, .. }) => {
-                if self.dispatch_callback(self.middle_mouse_down.as_ref(), ctx, *position, app) {
+            Some(Event::MiddleMouseDown { position, .. })
+                if self.dispatch_callback(self.middle_mouse_down.as_ref(), ctx, *position, app) => {
                     return true;
                 }
-            }
-            Some(Event::RightMouseDown { position, .. }) => {
-                if self.dispatch_callback(self.right_mouse_down.as_ref(), ctx, *position, app) {
+            Some(Event::RightMouseDown { position, .. })
+                if self.dispatch_callback(self.right_mouse_down.as_ref(), ctx, *position, app) => {
                     return true;
                 }
-            }
-            Some(Event::BackMouseDown { position, .. }) => {
-                if self.dispatch_callback(self.back_mouse_down.as_ref(), ctx, *position, app) {
+            Some(Event::BackMouseDown { position, .. })
+                if self.dispatch_callback(self.back_mouse_down.as_ref(), ctx, *position, app) => {
                     return true;
                 }
-            }
-            Some(Event::ForwardMouseDown { position, .. }) => {
-                if self.dispatch_callback(self.forward_mouse_down.as_ref(), ctx, *position, app) {
+            Some(Event::ForwardMouseDown { position, .. })
+                if self.dispatch_callback(self.forward_mouse_down.as_ref(), ctx, *position, app) => {
                     return true;
                 }
-            }
             Some(Event::KeyDown { keystroke, .. }) => {
                 if let Some(callback) = self.keydown.as_ref() {
                     return match callback.borrow_mut()(ctx, app, keystroke) {

@@ -676,16 +676,14 @@ impl Element for Hoverable {
                 position,
                 is_synthetic,
                 ..
-            } => {
-                if self.handle_mouse_moved(*position, *is_synthetic, ctx, app) {
+            }
+                if self.handle_mouse_moved(*position, *is_synthetic, ctx, app) => {
                     return true;
                 }
-            }
-            Event::LeftMouseDragged { .. } => {
-                if self.suppress_drag && self.state().is_clicked() {
+            Event::LeftMouseDragged { .. }
+                if self.suppress_drag && self.state().is_clicked() => {
                     return true;
                 }
-            }
             _ => {}
         }
 

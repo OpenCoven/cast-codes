@@ -154,15 +154,13 @@ pub fn unescape_markdown(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
-        if c == '\\' {
-            if let Some(&next) = chars.peek() {
-                if MARKDOWN_ESCAPE_CHARS.contains(&next) {
+        if c == '\\'
+            && let Some(&next) = chars.peek()
+                && MARKDOWN_ESCAPE_CHARS.contains(&next) {
                     out.push(next);
                     chars.next();
                     continue;
                 }
-            }
-        }
         out.push(c);
     }
     out

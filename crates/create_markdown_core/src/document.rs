@@ -236,12 +236,11 @@ pub fn swap_blocks(doc: &Document, id_a: &str, id_b: &str) -> Document {
     let mut new_doc = doc.clone();
     let ia = new_doc.blocks.iter().position(|b| b.id == id_a);
     let ib = new_doc.blocks.iter().position(|b| b.id == id_b);
-    if let (Some(a), Some(b)) = (ia, ib) {
-        if a != b {
+    if let (Some(a), Some(b)) = (ia, ib)
+        && a != b {
             new_doc.blocks.swap(a, b);
             touch(&mut new_doc.meta);
         }
-    }
     new_doc
 }
 
@@ -356,7 +355,7 @@ pub fn set_meta_field(doc: &Document, key: &str, value: serde_json::Value) -> Do
 }
 
 /// Returns a metadata field by key. Returns `None` if the key isn't set.
-pub fn get_meta_field<'a>(doc: &'a Document, key: &str) -> Option<serde_json::Value> {
+pub fn get_meta_field(doc: &Document, key: &str) -> Option<serde_json::Value> {
     match key {
         "title" => doc.meta.title.as_deref().map(serde_json::Value::from),
         "description" => doc.meta.description.as_deref().map(serde_json::Value::from),
