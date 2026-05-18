@@ -26,6 +26,12 @@ impl TypeScriptLanguageServerCandidate {
     #[cfg(feature = "local_fs")]
     const OLD_SERVER_PATH: &str = "node_modules/typescript-language-server/lib/cli.js";
 
+    #[cfg(all(feature = "local_fs", windows))]
+    const LOCAL_BIN_PATH: &str = "node_modules/.bin/typescript-language-server.cmd";
+
+    #[cfg(all(feature = "local_fs", not(windows)))]
+    const LOCAL_BIN_PATH: &str = "node_modules/.bin/typescript-language-server";
+
     pub fn new(client: Arc<http_client::Client>) -> Self {
         Self { client }
     }
@@ -91,6 +97,99 @@ impl TypeScriptLanguageServerCandidate {
             Err(e) => {
                 log::warn!(
                     "Failed to run typescript-language-server version check: {}",
+                    e
+                );
+                return None;
+            }
+        }
+
+        Some(CustomBinaryConfig {
+            binary_path: node_binary,
+            prepend_args: vec![server_js.to_string_lossy().to_string()],
+        })
+    }
+
+    #[cfg(feature = "local_fs")]
+    pub async fn find_workspace_binary_config(
+        workspace_root: &Path,
+        path_env_var: Option<&str>,
+        executor: &CommandBuilder,
+    ) -> Option<CustomBinaryConfig> {
+        let local_bin = workspace_root.join(Self::LOCAL_BIN_PATH);
+        if local_bin.is_file() {
+            let mut cmd = executor.command(&local_bin);
+            cmd.arg("--version");
+            match cmd.output().await {
+                Ok(output) if output.status.success() => {
+                    let version = String::from_utf8_lossy(&output.stdout);
+                    log::info!(
+                        "Verified workspace-local typescript-language-server wrapper at {}: {}",
+                        local_bin.display(),
+                        version.trim()
+                    );
+                    return Some(CustomBinaryConfig {
+                        binary_path: local_bin,
+                        prepend_args: vec![],
+                    });
+                }
+                Ok(output) => {
+                    log::warn!(
+                        "Workspace-local typescript-language-server wrapper failed version check at {}: {}",
+                        local_bin.display(),
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to run workspace-local typescript-language-server wrapper at {}: {}",
+                        local_bin.display(),
+                        e
+                    );
+                }
+            }
+        }
+
+        let server_js = {
+            let new_path = workspace_root.join(Self::NEW_SERVER_PATH);
+            if new_path.is_file() {
+                new_path
+            } else {
+                let old_path = workspace_root.join(Self::OLD_SERVER_PATH);
+                if old_path.is_file() {
+                    old_path
+                } else {
+                    return None;
+                }
+            }
+        };
+
+        let node_binary = node_runtime::find_working_node_binary(path_env_var).await?;
+        let mut cmd = Command::new(&node_binary);
+        if let Some(path) = path_env_var {
+            cmd.env("PATH", path);
+        }
+        cmd.arg(&server_js).arg("--version");
+        match cmd.output().await {
+            Ok(output) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout);
+                log::info!(
+                    "Verified workspace-local typescript-language-server package at {}: {}",
+                    server_js.display(),
+                    version.trim()
+                );
+            }
+            Ok(output) => {
+                log::warn!(
+                    "Workspace-local typescript-language-server package failed version check at {}: {}",
+                    server_js.display(),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                return None;
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to run workspace-local typescript-language-server package at {}: {}",
+                    server_js.display(),
                     e
                 );
                 return None;

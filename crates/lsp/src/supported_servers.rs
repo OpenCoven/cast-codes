@@ -23,12 +23,84 @@ use strum_macros::EnumIter;
 /// servers like Pyright, we need to run `node langserver.index.js --stdio` instead
 /// of relying on the wrapper script (which has a shebang that requires node in PATH).
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomBinaryConfig {
     /// The path to the executable (e.g., node binary or rust-analyzer binary)
     pub binary_path: PathBuf,
     /// Additional arguments to pass before any server-specific args (e.g., the JS file path)
     pub prepend_args: Vec<String>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LspBinarySource {
+    Custom,
+    WorkspaceLocal,
+    Managed,
+    Path,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedLspBinaryConfig {
+    pub source: LspBinarySource,
+    pub custom_config: Option<CustomBinaryConfig>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
+    match server_type {
+        LSPServerType::TypeScriptLanguageServer => concat!(
+            "typescript-language-server is not available. ",
+            "Install/repair TypeScript language server from Codebase Indexing settings, ",
+            "or add typescript and typescript-language-server to this workspace so ",
+            "node_modules/.bin/typescript-language-server exists. A global install is not required."
+        )
+        .to_string(),
+        _ => format!(
+            "{} is not available. Install or repair the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
+            server_type.binary_name()
+        ),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn resolve_lsp_binary_config(
+    server_type: LSPServerType,
+    custom_config: Option<CustomBinaryConfig>,
+    workspace_local_config: Option<CustomBinaryConfig>,
+    managed_config: Option<CustomBinaryConfig>,
+    is_working_on_path: bool,
+) -> anyhow::Result<ResolvedLspBinaryConfig> {
+    if let Some(custom_config) = custom_config {
+        return Ok(ResolvedLspBinaryConfig {
+            source: LspBinarySource::Custom,
+            custom_config: Some(custom_config),
+        });
+    }
+
+    if let Some(workspace_local_config) = workspace_local_config {
+        return Ok(ResolvedLspBinaryConfig {
+            source: LspBinarySource::WorkspaceLocal,
+            custom_config: Some(workspace_local_config),
+        });
+    }
+
+    if let Some(managed_config) = managed_config {
+        return Ok(ResolvedLspBinaryConfig {
+            source: LspBinarySource::Managed,
+            custom_config: Some(managed_config),
+        });
+    }
+
+    if is_working_on_path {
+        return Ok(ResolvedLspBinaryConfig {
+            source: LspBinarySource::Path,
+            custom_config: None,
+        });
+    }
+
+    anyhow::bail!(actionable_missing_binary_message(server_type));
 }
 
 /// Represents the different types of LSP servers supported by Warp.
@@ -109,6 +181,26 @@ impl LSPServerType {
                     binary_path: path,
                     prepend_args: vec![],
                 }),
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn find_workspace_binary_config(
+        &self,
+        workspace_root: &std::path::Path,
+        path_env_var: Option<&str>,
+        executor: &CommandBuilder,
+    ) -> Option<CustomBinaryConfig> {
+        match self {
+            LSPServerType::TypeScriptLanguageServer => {
+                TypeScriptLanguageServerCandidate::find_workspace_binary_config(
+                    workspace_root,
+                    path_env_var,
+                    executor,
+                )
+                .await
+            }
+            _ => None,
         }
     }
 
@@ -210,5 +302,93 @@ impl LSPServerType {
 
     pub fn all() -> impl Iterator<Item = LSPServerType> {
         LSPServerType::iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn config(path: &str) -> CustomBinaryConfig {
+        CustomBinaryConfig {
+            binary_path: PathBuf::from(path),
+            prepend_args: vec![],
+        }
+    }
+
+    #[test]
+    fn custom_configured_binary_wins() {
+        let resolved = resolve_lsp_binary_config(
+            LSPServerType::TypeScriptLanguageServer,
+            Some(config("/custom/typescript-language-server")),
+            Some(config(
+                "/workspace/node_modules/.bin/typescript-language-server",
+            )),
+            Some(config("/managed/typescript-language-server")),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.source, LspBinarySource::Custom);
+        assert_eq!(
+            resolved.custom_config.unwrap().binary_path,
+            PathBuf::from("/custom/typescript-language-server")
+        );
+    }
+
+    #[test]
+    fn workspace_local_binary_is_found_before_managed_or_path() {
+        let resolved = resolve_lsp_binary_config(
+            LSPServerType::TypeScriptLanguageServer,
+            None,
+            Some(config(
+                "/workspace/node_modules/.bin/typescript-language-server",
+            )),
+            Some(config("/managed/typescript-language-server")),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.source, LspBinarySource::WorkspaceLocal);
+        assert_eq!(
+            resolved.custom_config.unwrap().binary_path,
+            PathBuf::from("/workspace/node_modules/.bin/typescript-language-server")
+        );
+    }
+
+    #[test]
+    fn managed_castcodes_binary_is_found_before_path() {
+        let resolved = resolve_lsp_binary_config(
+            LSPServerType::TypeScriptLanguageServer,
+            None,
+            None,
+            Some(config("/managed/typescript-language-server")),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.source, LspBinarySource::Managed);
+        assert_eq!(
+            resolved.custom_config.unwrap().binary_path,
+            PathBuf::from("/managed/typescript-language-server")
+        );
+    }
+
+    #[test]
+    fn missing_binary_produces_actionable_error() {
+        let error = resolve_lsp_binary_config(
+            LSPServerType::TypeScriptLanguageServer,
+            None,
+            None,
+            None,
+            false,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("Install/repair TypeScript language server"));
+        assert!(error.contains("node_modules/.bin/typescript-language-server"));
+        assert!(error.contains("global install is not required"));
     }
 }

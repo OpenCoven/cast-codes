@@ -13,6 +13,8 @@ use lsp_types::{
 };
 
 use crate::supported_servers::LSPServerType;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::supported_servers::{resolve_lsp_binary_config, CustomBinaryConfig};
 
 /// Result of resolving an LSP server command, including the command and init params.
 #[cfg(not(target_arch = "wasm32"))]
@@ -102,6 +104,10 @@ pub struct LspServerConfig {
     client: Arc<http_client::Client>,
     /// Optional path relative to the LSP log namespace for server stderr output.
     log_relative_path: Option<PathBuf>,
+    /// Optional user-configured binary. When present, this wins over workspace,
+    /// managed, and PATH resolution.
+    #[cfg(not(target_arch = "wasm32"))]
+    custom_binary_config: Option<CustomBinaryConfig>,
 }
 
 impl fmt::Debug for LspServerConfig {
@@ -112,7 +118,7 @@ impl fmt::Debug for LspServerConfig {
             .field("path_env_var", &self.path_env_var)
             .field("client_name", &self.client_name)
             .field("log_relative_path", &self.log_relative_path)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -131,7 +137,14 @@ impl LspServerConfig {
             client_name,
             client,
             log_relative_path: None,
+            custom_binary_config: None,
         }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_custom_binary_config(mut self, custom_binary_config: CustomBinaryConfig) -> Self {
+        self.custom_binary_config = Some(custom_binary_config);
+        self
     }
 
     /// Sets the relative log path for this server's stderr output.
@@ -159,48 +172,64 @@ impl LspServerConfig {
 
     /// Creates the command and init params for the LSP server.
     ///
-    /// PATH takes precedence over custom installations. If the binary is available
-    /// and working on PATH, we use that. Otherwise, we fall back to our custom installation.
+    /// Resolution order is user-configured, workspace-local, CastCodes-managed,
+    /// then PATH. PATH remains a compatibility fallback, but users should not
+    /// need a globally installed language server for startup to work.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) async fn command_and_params(self) -> Result<ResolvedLspCommand> {
-        // PATH takes precedence - only use custom installation if not working on PATH
         let executor = crate::CommandBuilder::new(self.path_env_var.clone());
-        let is_working_on_path = self
-            .server_type
-            .is_working_on_path(&executor, self.client.clone())
-            .await;
-        let custom_binary_config = if is_working_on_path {
-            // Binary works on PATH, don't use custom installation
-            None
+
+        let custom_binary_config = self.custom_binary_config.clone();
+        let workspace_local_config = if custom_binary_config.is_none() {
+            self.server_type
+                .find_workspace_binary_config(
+                    &self.initial_workspace,
+                    executor.path_env_var(),
+                    &executor,
+                )
+                .await
         } else {
-            // Not working on PATH, check for custom installation
+            None
+        };
+        let managed_config = if custom_binary_config.is_none() && workspace_local_config.is_none() {
             self.server_type
                 .find_installed_binary_config(executor.path_env_var())
                 .await
+        } else {
+            None
+        };
+        let is_working_on_path = if custom_binary_config.is_none()
+            && workspace_local_config.is_none()
+            && managed_config.is_none()
+        {
+            self.server_type
+                .is_working_on_path(&executor, self.client.clone())
+                .await
+        } else {
+            false
         };
 
-        // Bail early with a clear error instead of attempting to spawn a
-        // binary that doesn't exist (which would fail with a confusing
-        // "No such file or directory" OS error).
-        if !is_working_on_path && custom_binary_config.is_none() {
-            anyhow::bail!(
-                "{} is not installed. Binary was not found on PATH and no custom installation exists",
-                self.server_type.binary_name()
-            );
-        }
+        let resolved_binary_config = resolve_lsp_binary_config(
+            self.server_type,
+            custom_binary_config,
+            workspace_local_config,
+            managed_config,
+            is_working_on_path,
+        )?;
 
         let mut command = self
             .server_type
-            .create_command(custom_binary_config.clone(), &executor);
+            .create_command(resolved_binary_config.custom_config.clone(), &executor);
 
         // Set the working directory to the workspace root. This is required for
         // LSP servers like rust-analyzer to properly discover the project structure.
         command.current_dir(&self.initial_workspace);
 
         log::info!(
-            "LSP {} starting with custom_binary_config: {:?}",
+            "LSP {} starting with binary source {:?} and custom_binary_config: {:?}",
             self.server_type.binary_name(),
-            custom_binary_config
+            resolved_binary_config.source,
+            resolved_binary_config.custom_config
         );
 
         let params = default_init_params(&self.initial_workspace, self.client_name)?;
