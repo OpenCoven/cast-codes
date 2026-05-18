@@ -57,8 +57,14 @@ pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
             "node_modules/.bin/typescript-language-server exists. A global install is not required."
         )
         .to_string(),
+        LSPServerType::Gopls => concat!(
+            "gopls is not available. ",
+            "Install or repair the Go language server from Codebase Indexing settings, ",
+            "or make sure gopls is installed and available on PATH."
+        )
+        .to_string(),
         _ => format!(
-            "{} is not available. Install or repair the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
+            "{} is not available. Install or repair the language server from Codebase Indexing settings, or make sure it is installed and available on PATH.",
             server_type.binary_name()
         ),
     }
