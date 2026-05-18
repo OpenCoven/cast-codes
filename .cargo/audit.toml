@@ -1,0 +1,61 @@
+# cargo-audit configuration
+#
+# Allows `cargo audit` to run in CI without alerting on advisories that are
+# either (a) false positives against our crate names, or (b) transitive
+# advisories we cannot resolve without a major upstream version bump.
+#
+# Re-evaluate this list whenever wry, reqwest, or the gtk-rs ecosystem
+# release versions that drop the deprecated GTK3 bindings, or when we
+# migrate direct deps off the unmaintained crates flagged below.
+#
+# Format: see https://docs.rs/cargo-audit/latest/cargo_audit/config/
+
+[yanked]
+# core2 0.4.0 is yanked but reached through transitive deps we can't avoid
+# without an upstream bump. The RUSTSEC-2026-0105 unmaintained advisory is
+# already ignored below; this disables the separate "yanked" check too.
+enabled = false
+
+[advisories]
+ignore = [
+    # False positive: name collision with our local `crates/websocket` at
+    # version 0.1.0. The published `websocket` crate on crates.io is what
+    # this advisory targets; we don't depend on it.
+    "RUSTSEC-2022-0035",
+
+    # Transitive via wry → kuchikiki → phf → phf_generator. Resolves when
+    # wry drops kuchikiki or upstream bumps phf.
+    "RUSTSEC-2026-0097",  # rand 0.7.3 unsound
+
+    # Transitive via wry → gtk-rs GTK3 bindings. Resolves when wry switches
+    # to gtk4 (its own deprecation in progress) or we drop wry.
+    "RUSTSEC-2024-0429",  # glib 0.18 unsoundness
+    "RUSTSEC-2024-0413",  # atk unmaintained
+    "RUSTSEC-2024-0416",  # atk-sys unmaintained
+    "RUSTSEC-2024-0412",  # gdk unmaintained
+    "RUSTSEC-2024-0418",  # gdk-sys unmaintained
+    "RUSTSEC-2024-0417",  # gdkx11 unmaintained
+    "RUSTSEC-2024-0414",  # gdkx11-sys unmaintained
+    "RUSTSEC-2024-0415",  # gtk unmaintained
+    "RUSTSEC-2024-0420",  # gtk-sys unmaintained
+    "RUSTSEC-2024-0419",  # gtk3-macros unmaintained
+
+    # Direct workspace deps flagged as unmaintained. Each is functional on
+    # the current pinned version; migration to alternatives is tracked
+    # separately and is not an "easy win".
+    "RUSTSEC-2025-0141",  # bincode 1.3 unmaintained (migrate to 2.x)
+    "RUSTSEC-2024-0388",  # derivative unmaintained (migrate to derive_more)
+    "RUSTSEC-2024-0425",  # get-size unmaintained
+    "RUSTSEC-2024-0427",  # get-size-derive unmaintained
+    "RUSTSEC-2024-0384",  # instant unmaintained (migrate to web-time)
+    "RUSTSEC-2024-0436",  # paste unmaintained (still functional)
+    "RUSTSEC-2025-0057",  # fxhash unmaintained (migrate to rustc-hash)
+
+    # Transitive unmaintained, no direct dependency we can change.
+    "RUSTSEC-2025-0134",  # rustls-pemfile, via reqwest
+    "RUSTSEC-2025-0119",  # number_prefix
+    "RUSTSEC-2024-0370",  # proc-macro-error, macro support
+    "RUSTSEC-2026-0105",  # core2 yanked, transitive
+    "RUSTSEC-2023-0081",  # safemem, transitive
+    "RUSTSEC-2020-0077",  # memmap, transitive
+]
