@@ -42,7 +42,7 @@ use ai::index::full_source_code_embedding::manager::{
 use ai::index::full_source_code_embedding::SyncProgress;
 use ai::project_context::model::{ProjectContextModel, ProjectContextModelEvent};
 use ai::workspace::WorkspaceMetadata;
-use lsp::supported_servers::{is_repairable_missing_binary_error, LSPServerType};
+use lsp::supported_servers::{LSPServerType, LspStartupFailureReason};
 use lsp::{LspManagerModel, LspManagerModelEvent, LspServerModel, LspState};
 use pathfinder_color::ColorU;
 use std::borrow::Cow;
@@ -2065,13 +2065,13 @@ impl CodePageWidget {
                             .into(),
                         Cow::Borrowed("Busy"),
                     ),
-                    LspState::Failed { error } => {
-                        let status_text = if is_repairable_missing_binary_error(server_type, error)
-                        {
-                            Cow::Borrowed(TYPESCRIPT_LSP_MISSING_STATUS)
-                        } else {
-                            Cow::Borrowed("Failed")
-                        };
+                    LspState::Failed { failure_reason, .. } => {
+                        let status_text =
+                            if is_repairable_missing_binary_failure(server_type, *failure_reason) {
+                                Cow::Borrowed(TYPESCRIPT_LSP_MISSING_STATUS)
+                            } else {
+                                Cow::Borrowed("Failed")
+                            };
                         (
                             AnsiColorIdentifier::Red
                                 .to_ansi_color(&theme.terminal_colors().normal)
@@ -2101,10 +2101,24 @@ impl CodePageWidget {
         server_model.is_some_and(|model| {
             matches!(
                 model.as_ref(app).state(),
-                LspState::Failed { error } if is_repairable_missing_binary_error(server_type, error)
+                LspState::Failed {
+                    failure_reason, ..
+                } if is_repairable_missing_binary_failure(server_type, *failure_reason)
             )
         })
     }
+}
+
+fn is_repairable_missing_binary_failure(
+    server_type: LSPServerType,
+    failure_reason: Option<LspStartupFailureReason>,
+) -> bool {
+    matches!(
+        failure_reason,
+        Some(LspStartupFailureReason::MissingBinary {
+            server_type: failed_server_type,
+        }) if failed_server_type == server_type
+    )
 }
 
 /// A simple widget that renders a subheader title for a Code subpage.

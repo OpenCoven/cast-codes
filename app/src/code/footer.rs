@@ -854,7 +854,7 @@ impl CodeFooterView {
     fn render_server_row(server: &LspServerModel, appearance: &Appearance) -> Box<dyn Element> {
         let render_status = LSPServerRenderStatus::render_status(Some(server));
         let failed_error = match server.state() {
-            LspModelState::Failed { error } => Some(error.clone()),
+            LspModelState::Failed { error, .. } => Some(error.clone()),
             _ => None,
         };
 
@@ -1539,7 +1539,7 @@ impl CodeFooterView {
             // Check for any failed server first
             for server in &live {
                 let server_ref = server.as_ref(app);
-                if let LspModelState::Failed { error } = server_ref.state() {
+                if let LspModelState::Failed { error, .. } = server_ref.state() {
                     return (
                         Some(format!("{}: {error}", server_ref.server_name())),
                         false,

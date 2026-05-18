@@ -51,6 +51,38 @@ pub const TYPESCRIPT_LSP_REPAIR_ACTION: &str = "Install/repair TypeScript langua
 
 const TYPESCRIPT_LSP_MISSING_BINARY_PREFIX: &str = "typescript-language-server is not available.";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LspStartupFailureReason {
+    MissingBinary { server_type: LSPServerType },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LspStartupError {
+    reason: LspStartupFailureReason,
+    message: String,
+}
+
+impl LspStartupError {
+    fn missing_binary(server_type: LSPServerType) -> Self {
+        Self {
+            reason: LspStartupFailureReason::MissingBinary { server_type },
+            message: actionable_missing_binary_message(server_type),
+        }
+    }
+
+    pub fn reason(&self) -> LspStartupFailureReason {
+        self.reason
+    }
+}
+
+impl std::fmt::Display for LspStartupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for LspStartupError {}
+
 pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
     match server_type {
         LSPServerType::TypeScriptLanguageServer => format!(
@@ -60,16 +92,6 @@ pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
             "{} is not available. Install the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
             server_type.binary_name()
         ),
-    }
-}
-
-pub fn is_repairable_missing_binary_error(server_type: LSPServerType, error: &str) -> bool {
-    match server_type {
-        LSPServerType::TypeScriptLanguageServer => {
-            error.contains(TYPESCRIPT_LSP_MISSING_BINARY_PREFIX)
-                && error.contains(TYPESCRIPT_LSP_REPAIR_ACTION)
-        }
-        _ => false,
     }
 }
 
@@ -116,7 +138,7 @@ pub(crate) fn resolve_lsp_binary_config(
         });
     }
 
-    anyhow::bail!(actionable_missing_binary_message(server_type));
+    Err(LspStartupError::missing_binary(server_type).into())
 }
 
 /// Represents the different types of LSP servers supported by Warp.
@@ -406,10 +428,28 @@ mod tests {
         assert!(error.contains("Install/repair TypeScript language server"));
         assert!(error.contains("node_modules/.bin/typescript-language-server"));
         assert!(error.contains("global install is not required"));
-        assert!(is_repairable_missing_binary_error(
+    }
+
+    #[test]
+    fn missing_binary_error_carries_typed_reason() {
+        let error = resolve_lsp_binary_config(
             LSPServerType::TypeScriptLanguageServer,
-            &error
-        ));
+            None,
+            None,
+            None,
+            false,
+        )
+        .unwrap_err();
+
+        let startup_error = error
+            .downcast_ref::<LspStartupError>()
+            .expect("missing binary should use typed LSP startup error");
+        assert_eq!(
+            startup_error.reason(),
+            LspStartupFailureReason::MissingBinary {
+                server_type: LSPServerType::TypeScriptLanguageServer,
+            }
+        );
     }
 
     #[test]
