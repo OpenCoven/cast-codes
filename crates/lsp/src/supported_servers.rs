@@ -58,7 +58,7 @@ pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
         )
         .to_string(),
         _ => format!(
-            "{} is not available. Install or repair the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
+            "{} is not available. Install the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
             server_type.binary_name()
         ),
     }
