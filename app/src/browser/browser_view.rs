@@ -861,7 +861,12 @@ impl BackingView for BrowserView {
             title_style: None,
             title_clip_config: warpui::text_layout::ClipConfig::start(),
             title_max_width: None,
-            left_of_title: Some(Icon::Globe.to_warpui_icon(theme.foreground()).finish()),
+            left_of_title: Some(
+                ConstrainedBox::new(Icon::Globe.to_warpui_icon(theme.foreground()).finish())
+                    .with_width(16.)
+                    .with_height(16.)
+                    .finish(),
+            ),
             right_of_title: None,
             left_of_overflow: None,
             options: StandardHeaderOptions {
