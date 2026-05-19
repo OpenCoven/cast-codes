@@ -2123,6 +2123,10 @@ impl View for CodeView {
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let tab = self.tab_at(self.active_tab_index);
+        let is_markdown_tab = tab
+            .and_then(|t| t.path.as_deref())
+            .map(is_markdown_file)
+            .unwrap_or(false);
         let body = if let Some(tab) = tab {
             let mut column = Flex::column().with_main_axis_size(MainAxisSize::Max);
             if let CodeSource::AIAction { .. } = self.source {
@@ -2138,6 +2142,11 @@ impl View for CodeView {
 
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
+        let padding = if is_markdown_tab {
+            Padding::uniform(PADDING).with_left(0.)
+        } else {
+            Padding::uniform(PADDING)
+        };
         Container::new(
             Container::new(body)
                 .with_border(Border::all(1.).with_border_fill(theme.outline()))
@@ -2147,7 +2156,7 @@ impl View for CodeView {
                 .with_background_color(theme.background().into())
                 .finish(),
         )
-        .with_padding(Padding::uniform(PADDING))
+        .with_padding(padding)
         .with_background_color(theme.surface_1().with_opacity(28).into())
         .finish()
     }
