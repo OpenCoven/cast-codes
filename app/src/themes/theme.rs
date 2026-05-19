@@ -393,7 +393,7 @@ impl Default for SelectedSystemThemes {
     fn default() -> Self {
         Self {
             light: ThemeKind::Light,
-            dark: ThemeKind::Dark,
+            dark: ThemeKind::CastCodesDark,
         }
     }
 }

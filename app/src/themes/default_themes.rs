@@ -1,10 +1,10 @@
 use asset_macro::bundled_or_fetched_asset;
 use pathfinder_color::ColorU;
 use warp_core::ui::{
-    color::{blend::Blend, coloru_with_opacity, OPAQUE},
+    color::{OPAQUE, blend::Blend, coloru_with_opacity},
     theme::{
-        color::CustomDetails, AnsiColor, AnsiColors, Details, Fill, HorizontalGradient, Image,
-        TerminalColors, VerticalGradient, WarpTheme,
+        AnsiColor, AnsiColors, Details, Fill, HorizontalGradient, Image, TerminalColors,
+        VerticalGradient, WarpTheme, color::CustomDetails,
     },
 };
 
@@ -27,6 +27,27 @@ const DARK_MODE_BRIGHT_COLORS: AnsiColors = AnsiColors::new(
     AnsiColor::from_u32(0xFFB1FEFF),
     AnsiColor::from_u32(0xE5E6FEFF),
     AnsiColor::from_u32(0xFEFFFFFF),
+);
+
+const CASTCODES_NORMAL_COLORS: AnsiColors = AnsiColors::new(
+    AnsiColor::from_u32(0x5A5A65FF),
+    AnsiColor::from_u32(0xEF4444FF),
+    AnsiColor::from_u32(0x22C55EFF),
+    AnsiColor::from_u32(0xD4A84BFF),
+    AnsiColor::from_u32(0x8E8E9AFF),
+    AnsiColor::from_u32(0x7C3AEDFF),
+    AnsiColor::from_u32(0xA78BFAFF),
+    AnsiColor::from_u32(0xE8E8EDFF),
+);
+const CASTCODES_BRIGHT_COLORS: AnsiColors = AnsiColors::new(
+    AnsiColor::from_u32(0x8E8E9AFF),
+    AnsiColor::from_u32(0xF87171FF),
+    AnsiColor::from_u32(0x4ADE80FF),
+    AnsiColor::from_u32(0xEBCB7AFF),
+    AnsiColor::from_u32(0xB8B8C4FF),
+    AnsiColor::from_u32(0xA78BFAFF),
+    AnsiColor::from_u32(0xC4B5FDFF),
+    AnsiColor::from_u32(0xFFFFFFFF),
 );
 
 const LIGHT_MODE_NORMAL_COLORS: AnsiColors = AnsiColors::new(
@@ -226,6 +247,10 @@ pub(super) fn dark_mode_colors() -> TerminalColors {
     TerminalColors::new(DARK_MODE_NORMAL_COLORS, DARK_MODE_BRIGHT_COLORS)
 }
 
+pub(super) fn castcodes_terminal_colors() -> TerminalColors {
+    TerminalColors::new(CASTCODES_NORMAL_COLORS, CASTCODES_BRIGHT_COLORS)
+}
+
 pub(super) fn solarized_light_colors() -> TerminalColors {
     TerminalColors::new(SOLARIZED_LIGHT_NORMAL_COLORS, SOLARIZED_LIGHT_BRIGHT_COLORS)
 }
@@ -264,6 +289,8 @@ pub(super) fn adeberry_colors() -> TerminalColors {
 /// - background: `#0f0f12`
 /// - foreground (text primary): `#e8e8ed`
 /// - accent (purple): `#7c3aed`
+/// - terminal ANSI: CastCodes-specific dark palette derived from the Phase 1
+///   semantic tokens instead of the generic dark theme.
 ///
 /// Brand slots that have no dedicated `WarpTheme` slot (surface `#161619`,
 /// elevated surface `#1e1e22`, border `rgba(255,255,255,0.08)`, text secondary
@@ -276,7 +303,7 @@ pub fn castcodes_dark() -> WarpTheme {
         Fill::Solid(ColorU::from_u32(0x7C3AEDFF)),
         None,
         Some(Details::Darker),
-        dark_mode_colors(),
+        castcodes_terminal_colors(),
         None,
         Some("CastCodes Dark".to_string()),
     )

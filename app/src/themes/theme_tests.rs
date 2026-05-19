@@ -2,6 +2,31 @@ use super::*;
 use crate::util::color::OPAQUE;
 
 #[test]
+fn castcodes_dark_theme_uses_phase_1_palette() {
+    assert_eq!(
+        castcodes_dark(),
+        WarpTheme::new(
+            ColorU::from_u32(0x0F0F12FF).into(),
+            ColorU::from_u32(0xE8E8EDFF),
+            ColorU::from_u32(0x7C3AEDFF).into(),
+            None,
+            Some(Details::Darker),
+            castcodes_terminal_colors(),
+            None,
+            Some("CastCodes Dark".to_string()),
+        )
+    );
+}
+
+#[test]
+fn system_dark_theme_defaults_to_castcodes_dark() {
+    assert_eq!(
+        SelectedSystemThemes::default().dark,
+        ThemeKind::CastCodesDark
+    );
+}
+
+#[test]
 #[cfg(not(target_family = "wasm"))]
 fn in_memory_theme_generation_test() {
     let mountains_bg_path: PathBuf = [

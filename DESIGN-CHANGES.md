@@ -94,7 +94,8 @@ crates.
   - foreground (text primary): `#E8E8ED`
   - accent (purple): `#7C3AED`
   - details: `Darker` (so derived surfaces darken correctly)
-  - terminal ANSI: reuses the existing `dark_mode_colors()` palette.
+  - terminal ANSI: uses a CastCodes-specific dark palette derived from the
+    Phase 1 brand tokens rather than the generic dark theme palette.
 - New `ThemeKind::CastCodesDark` variant in
   [`app/src/themes/theme.rs`](app/src/themes/theme.rs); marked
   `#[default]` so it is the first-launch theme. The previous default
@@ -104,6 +105,11 @@ crates.
 - Added to the onboarding theme picker
   ([`app/src/themes/mod.rs`](app/src/themes/mod.rs)) in slot 0,
   replacing the prior plain "Dark" entry.
+- `SelectedSystemThemes::default()` now also uses `CastCodesDark` for the
+  dark-mode branch, so enabling system-theme matching does not silently revert
+  CastCodes back to the generic upstream dark theme.
+- `app/src/settings/initializer.rs` now treats `CastCodesDark` as the new-user
+  default when the legacy Adeberry feature-flag override is enabled.
 
 ## Deferred (follow-up PRs)
 
