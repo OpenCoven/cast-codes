@@ -1,5 +1,5 @@
 [package]
-authors = ["CastCodes Maintainers"]
+authors.workspace = true
 default-run = "cast-codes"
 description = "The open-source agentic terminal and code workspace"
 edition = "2021"
