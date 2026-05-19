@@ -653,12 +653,18 @@ impl CodeView {
     }
 
     fn is_active_markdown_tab(&self, ctx: &AppContext) -> bool {
-        is_markdown_code_view_path(
-            self.local_path(ctx),
-            self.tab_at(self.active_tab_index)
-                .and_then(|t| t.path.clone()),
-            self.source.path(),
-        )
+        if let Some(local_path) = self.local_path(ctx) {
+            return is_markdown_code_view_path(Some(local_path), None, None);
+        }
+
+        if let Some(tab_path) = self
+            .tab_at(self.active_tab_index)
+            .and_then(|t| t.path.clone())
+        {
+            return is_markdown_code_view_path(None, Some(tab_path), None);
+        }
+
+        is_markdown_code_view_path(None, None, self.source.path())
     }
 
     pub fn pane_configuration(&self) -> ModelHandle<PaneConfiguration> {
