@@ -146,11 +146,7 @@ fn match_numbered_list(line: &str) -> Option<(usize, u32, &str)> {
         return None;
     }
     let number: u32 = after[..digit_count].parse().ok()?;
-    Some((
-        indent,
-        number,
-        after_dot[next.len_utf8()..].trim_start(),
-    ))
+    Some((indent, number, after_dot[next.len_utf8()..].trim_start()))
 }
 
 /// `^(\s*)[-*+]\s+\[([ xX])\]\s+(.*)$` — check list item.
@@ -199,7 +195,10 @@ fn match_code_fence(line: &str) -> Option<(usize, char, usize, String)> {
     let trimmed = after_fence.trim_end();
     // Language is the leading run of \w chars; the rest of the line must be
     // whitespace (or empty) to match the JS regex.
-    let lang: String = trimmed.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    let lang: String = trimmed
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
     let after_lang = &trimmed[lang.len()..];
     if !after_lang.chars().all(|c| c.is_whitespace()) {
         return None;
@@ -382,18 +381,20 @@ fn tokenize_line(
     // same kind, otherwise treat as code content.
     if state.in_code_block {
         if let Some((_, ch, len, _)) = match_code_fence(line)
-            && ch == state.code_block_fence_char && len >= state.code_block_fence_len {
-                state.in_code_block = false;
-                state.code_block_fence_len = 0;
-                return Some(Token {
-                    token_type: TokenType::CodeFenceEnd,
-                    raw: line.to_string(),
-                    content: String::new(),
-                    indent: 0,
-                    line: line_number,
-                    meta: TokenMeta::default(),
-                });
-            }
+            && ch == state.code_block_fence_char
+            && len >= state.code_block_fence_len
+        {
+            state.in_code_block = false;
+            state.code_block_fence_len = 0;
+            return Some(Token {
+                token_type: TokenType::CodeFenceEnd,
+                raw: line.to_string(),
+                content: String::new(),
+                indent: 0,
+                line: line_number,
+                meta: TokenMeta::default(),
+            });
+        }
         return Some(Token {
             token_type: TokenType::CodeContent,
             raw: line.to_string(),
@@ -436,7 +437,11 @@ fn tokenize_line(
 
     // Divider (before setext / paragraph)
     if let Some(indent) = match_divider(line) {
-        let prev_line = if line_index > 0 { all_lines[line_index - 1] } else { "" };
+        let prev_line = if line_index > 0 {
+            all_lines[line_index - 1]
+        } else {
+            ""
+        };
         let prev_nonblank = !prev_line.trim().is_empty();
         // If the previous non-blank line is paragraph text, this `---` is
         // a setext H2 underline — defer to the setext branch below.
@@ -583,7 +588,11 @@ fn tokenize_line(
     // the block parser; the tokenizer just records the underline as a
     // Heading token whose content holds the *previous* line's text).
     if is_setext_h1(line) || is_setext_h2(line) {
-        let prev_line = if line_index > 0 { all_lines[line_index - 1] } else { "" };
+        let prev_line = if line_index > 0 {
+            all_lines[line_index - 1]
+        } else {
+            ""
+        };
         if !prev_line.trim().is_empty() {
             return Some(Token {
                 token_type: TokenType::Heading,

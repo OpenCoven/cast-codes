@@ -12,8 +12,7 @@ use std::cell::Cell;
 use crate::types::BlockType;
 
 /// Characters used for ID generation (URL-safe, matches the JS upstream).
-const ID_CHARS: &[u8] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const ID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 const DEFAULT_ID_LENGTH: usize = 8;
 
@@ -156,11 +155,12 @@ pub fn unescape_markdown(s: &str) -> String {
     while let Some(c) = chars.next() {
         if c == '\\'
             && let Some(&next) = chars.peek()
-                && MARKDOWN_ESCAPE_CHARS.contains(&next) {
-                    out.push(next);
-                    chars.next();
-                    continue;
-                }
+            && MARKDOWN_ESCAPE_CHARS.contains(&next)
+        {
+            out.push(next);
+            chars.next();
+            continue;
+        }
         out.push(c);
     }
     out

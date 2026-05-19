@@ -100,9 +100,7 @@ fn insert_entry_is_idempotent() {
     let entry = ChatEntry {
         sequence: 0,
         created_at: now,
-        kind: ChatEntryKind::AssistantResponse {
-            text: "hi".into(),
-        },
+        kind: ChatEntryKind::AssistantResponse { text: "hi".into() },
     };
 
     store.insert_entry("sess-idem", &entry).unwrap();

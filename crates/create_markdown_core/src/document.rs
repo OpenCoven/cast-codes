@@ -5,7 +5,9 @@
 //! refreshes `meta.updated_at` to the current wall-clock time as an
 //! ISO-8601 string.
 
-use crate::types::{Block, BlockProps, BlockType, Document, DocumentMeta, DocumentOptions, TextSpan};
+use crate::types::{
+    Block, BlockProps, BlockType, Document, DocumentMeta, DocumentOptions, TextSpan,
+};
 use crate::utils::deep_clone_block_with;
 
 /// Current document schema version. Mirrors `DOCUMENT_VERSION` in the JS
@@ -30,9 +32,7 @@ fn now_iso8601() -> String {
     let hour = secs_of_day / 3600;
     let minute = (secs_of_day / 60) % 60;
     let second = secs_of_day % 60;
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 /// Convert days-since-1970-01-01 to a (year, month, day) tuple. Vendored
@@ -115,7 +115,9 @@ fn touch(meta: &mut DocumentMeta) {
 /// Index is clamped to `[0, doc.blocks.len()]`.
 pub fn insert_block(doc: &Document, block: &Block, index: Option<usize>) -> Document {
     let mut new_doc = doc.clone();
-    let insert_at = index.unwrap_or(new_doc.blocks.len()).min(new_doc.blocks.len());
+    let insert_at = index
+        .unwrap_or(new_doc.blocks.len())
+        .min(new_doc.blocks.len());
     new_doc
         .blocks
         .insert(insert_at, deep_clone_block_with(block, false));
@@ -136,7 +138,9 @@ pub fn prepend_block(doc: &Document, block: &Block) -> Document {
 /// Inserts `blocks` at `index`. If `index` is `None`, appends.
 pub fn insert_blocks(doc: &Document, blocks: &[Block], index: Option<usize>) -> Document {
     let mut new_doc = doc.clone();
-    let insert_at = index.unwrap_or(new_doc.blocks.len()).min(new_doc.blocks.len());
+    let insert_at = index
+        .unwrap_or(new_doc.blocks.len())
+        .min(new_doc.blocks.len());
     for (offset, b) in blocks.iter().enumerate() {
         new_doc
             .blocks
@@ -237,10 +241,11 @@ pub fn swap_blocks(doc: &Document, id_a: &str, id_b: &str) -> Document {
     let ia = new_doc.blocks.iter().position(|b| b.id == id_a);
     let ib = new_doc.blocks.iter().position(|b| b.id == id_b);
     if let (Some(a), Some(b)) = (ia, ib)
-        && a != b {
-            new_doc.blocks.swap(a, b);
-            touch(&mut new_doc.meta);
-        }
+        && a != b
+    {
+        new_doc.blocks.swap(a, b);
+        touch(&mut new_doc.meta);
+    }
     new_doc
 }
 
@@ -271,7 +276,10 @@ pub fn get_last_block(doc: &Document) -> Option<&Block> {
 
 /// Returns all top-level blocks with the given `block_type`.
 pub fn find_blocks_by_type(doc: &Document, block_type: BlockType) -> Vec<&Block> {
-    doc.blocks.iter().filter(|b| b.block_type == block_type).collect()
+    doc.blocks
+        .iter()
+        .filter(|b| b.block_type == block_type)
+        .collect()
 }
 
 /// Returns `true` if a top-level block with `block_id` exists.
@@ -628,31 +636,31 @@ mod tests {
     }
 }
 
-    // ── new tests for fixed behaviours ─────────────────────────────────────
+// ── new tests for fixed behaviours ─────────────────────────────────────
 
-    #[test]
-    fn create_document_with_generate_id_uses_custom_ids() {
-        use std::sync::{Arc, Mutex};
-        use crate::blocks::paragraph;
+#[test]
+fn create_document_with_generate_id_uses_custom_ids() {
+    use crate::blocks::paragraph;
+    use std::sync::{Arc, Mutex};
 
-        let counter = Arc::new(Mutex::new(0u32));
-        let counter_clone = counter.clone();
-        let options = DocumentOptions {
-            generate_id: Some(Arc::new(move || {
-                let mut c = counter_clone.lock().unwrap();
-                *c += 1;
-                format!("custom-{}", *c)
-            })),
-            meta: None,
-        };
-        let blocks = vec![paragraph("hello"), paragraph("world")];
-        let doc = create_document(&blocks, options);
-        assert_eq!(doc.blocks[0].id, "custom-1");
-        assert_eq!(doc.blocks[1].id, "custom-2");
-    }
+    let counter = Arc::new(Mutex::new(0u32));
+    let counter_clone = counter.clone();
+    let options = DocumentOptions {
+        generate_id: Some(Arc::new(move || {
+            let mut c = counter_clone.lock().unwrap();
+            *c += 1;
+            format!("custom-{}", *c)
+        })),
+        meta: None,
+    };
+    let blocks = vec![paragraph("hello"), paragraph("world")];
+    let doc = create_document(&blocks, options);
+    assert_eq!(doc.blocks[0].id, "custom-1");
+    assert_eq!(doc.blocks[1].id, "custom-2");
+}
 
-    #[test]
-    fn document_version_constant_is_same_at_root_and_module() {
-        // Ensures the crate-root re-export and the module constant never drift.
-        assert_eq!(DOCUMENT_VERSION, crate::DOCUMENT_VERSION);
-    }
+#[test]
+fn document_version_constant_is_same_at_root_and_module() {
+    // Ensures the crate-root re-export and the module constant never drift.
+    assert_eq!(DOCUMENT_VERSION, crate::DOCUMENT_VERSION);
+}

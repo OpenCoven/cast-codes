@@ -79,52 +79,64 @@ fn parse_inline_tokens(text: &str) -> Vec<InlineToken> {
         }
 
         if b == b'`'
-            && let Some((tok, end)) = match_code(bytes, text, i) {
-                flush(&mut buffer, &mut tokens);
-                tokens.push(tok);
-                i = end;
-                continue;
-            }
+            && let Some((tok, end)) = match_code(bytes, text, i)
+        {
+            flush(&mut buffer, &mut tokens);
+            tokens.push(tok);
+            i = end;
+            continue;
+        }
 
-        if b == b'!' && i + 1 < bytes.len() && bytes[i + 1] == b'['
-            && let Some((tok, end)) = match_link_or_image(bytes, text, i + 1, true) {
-                flush(&mut buffer, &mut tokens);
-                tokens.push(tok);
-                i = end;
-                continue;
-            }
+        if b == b'!'
+            && i + 1 < bytes.len()
+            && bytes[i + 1] == b'['
+            && let Some((tok, end)) = match_link_or_image(bytes, text, i + 1, true)
+        {
+            flush(&mut buffer, &mut tokens);
+            tokens.push(tok);
+            i = end;
+            continue;
+        }
 
         if b == b'['
-            && let Some((tok, end)) = match_link_or_image(bytes, text, i, false) {
-                flush(&mut buffer, &mut tokens);
-                tokens.push(tok);
-                i = end;
-                continue;
-            }
+            && let Some((tok, end)) = match_link_or_image(bytes, text, i, false)
+        {
+            flush(&mut buffer, &mut tokens);
+            tokens.push(tok);
+            i = end;
+            continue;
+        }
 
         if (b == b'*' || b == b'_')
-            && let Some((tok, end)) = match_emphasis(bytes, text, i) {
-                flush(&mut buffer, &mut tokens);
-                tokens.push(tok);
-                i = end;
-                continue;
-            }
+            && let Some((tok, end)) = match_emphasis(bytes, text, i)
+        {
+            flush(&mut buffer, &mut tokens);
+            tokens.push(tok);
+            i = end;
+            continue;
+        }
 
-        if b == b'~' && i + 1 < bytes.len() && bytes[i + 1] == b'~'
-            && let Some((tok, end)) = match_strikethrough(bytes, text, i) {
-                flush(&mut buffer, &mut tokens);
-                tokens.push(tok);
-                i = end;
-                continue;
-            }
+        if b == b'~'
+            && i + 1 < bytes.len()
+            && bytes[i + 1] == b'~'
+            && let Some((tok, end)) = match_strikethrough(bytes, text, i)
+        {
+            flush(&mut buffer, &mut tokens);
+            tokens.push(tok);
+            i = end;
+            continue;
+        }
 
-        if b == b'=' && i + 1 < bytes.len() && bytes[i + 1] == b'='
-            && let Some((tok, end)) = match_highlight(bytes, text, i) {
-                flush(&mut buffer, &mut tokens);
-                tokens.push(tok);
-                i = end;
-                continue;
-            }
+        if b == b'='
+            && i + 1 < bytes.len()
+            && bytes[i + 1] == b'='
+            && let Some((tok, end)) = match_highlight(bytes, text, i)
+        {
+            flush(&mut buffer, &mut tokens);
+            tokens.push(tok);
+            i = end;
+            continue;
+        }
 
         let len = char_len_at(bytes, i);
         buffer.push_str(&text[i..i + len]);
@@ -367,10 +379,7 @@ fn match_highlight(bytes: &[u8], text: &str, start: usize) -> Option<(InlineToke
                 i += 1;
                 continue;
             }
-            return Some((
-                InlineToken::Highlight(parse_inline_tokens(content)),
-                i + 2,
-            ));
+            return Some((InlineToken::Highlight(parse_inline_tokens(content)), i + 2));
         }
         i += 1;
     }
@@ -458,10 +467,11 @@ fn merge_adjacent_spans(spans: Vec<TextSpan>) -> Vec<TextSpan> {
     let mut merged: Vec<TextSpan> = Vec::with_capacity(spans.len());
     for span in spans {
         if let Some(prev) = merged.last_mut()
-            && styles_equal(&prev.styles, &span.styles) {
-                prev.text.push_str(&span.text);
-                continue;
-            }
+            && styles_equal(&prev.styles, &span.styles)
+        {
+            prev.text.push_str(&span.text);
+            continue;
+        }
         merged.push(span);
     }
     merged

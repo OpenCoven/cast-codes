@@ -20,9 +20,7 @@ pub mod settings_section; // stub for now; Phase 8
 pub mod tool_call_card; // stub for now
 pub mod transcript;
 
-use warpui::elements::{
-    CrossAxisAlignment, Element, Expanded, Flex, MainAxisSize, ParentElement,
-};
+use warpui::elements::{CrossAxisAlignment, Element, Expanded, Flex, MainAxisSize, ParentElement};
 use warpui::{AppContext, Entity, ModelHandle, SingletonEntity, View, ViewContext, ViewHandle};
 
 use crate::cli_chat::model::{ChatModel, ChatModelEvent};
@@ -43,9 +41,12 @@ impl ChatPanelView {
     /// Build a `ChatPanelView` bound to the app's singleton `ChatModel`.
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         let chat_model = ChatModel::handle(ctx);
-        ctx.subscribe_to_model(&chat_model, |_view, _model, _event: &ChatModelEvent, ctx| {
-            ctx.notify();
-        });
+        ctx.subscribe_to_model(
+            &chat_model,
+            |_view, _model, _event: &ChatModelEvent, ctx| {
+                ctx.notify();
+            },
+        );
 
         let composer_input = Self::create_composer(ctx);
 
@@ -61,9 +62,12 @@ impl ChatPanelView {
     /// `ChatModel` instance. The singleton path goes through [`Self::new`].
     #[allow(dead_code)]
     pub fn with_model(chat_model: ModelHandle<ChatModel>, ctx: &mut ViewContext<Self>) -> Self {
-        ctx.subscribe_to_model(&chat_model, |_view, _model, _event: &ChatModelEvent, ctx| {
-            ctx.notify();
-        });
+        ctx.subscribe_to_model(
+            &chat_model,
+            |_view, _model, _event: &ChatModelEvent, ctx| {
+                ctx.notify();
+            },
+        );
 
         let composer_input = Self::create_composer(ctx);
 
@@ -77,10 +81,7 @@ impl ChatPanelView {
     fn create_composer(ctx: &mut ViewContext<Self>) -> ViewHandle<SubmittableTextInput> {
         let input = ctx.add_typed_action_view(|ctx| {
             let mut input = SubmittableTextInput::new(ctx);
-            input.set_placeholder_text(
-                crate::cli_chat::strings::COMPOSER_PLACEHOLDER_ACTIVE,
-                ctx,
-            );
+            input.set_placeholder_text(crate::cli_chat::strings::COMPOSER_PLACEHOLDER_ACTIVE, ctx);
             input.set_outer_margins(0., 0., ctx);
             input
         });

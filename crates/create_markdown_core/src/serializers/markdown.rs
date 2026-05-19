@@ -24,7 +24,11 @@ pub fn blocks_to_markdown(blocks: &[Block], options: &MarkdownSerializeOptions) 
         .enumerate()
         .map(|(idx, block)| serialize_block(block, 0, options, idx, blocks))
         .collect();
-    let separator = format!("{}{}", options.line_ending.as_str(), options.line_ending.as_str());
+    let separator = format!(
+        "{}{}",
+        options.line_ending.as_str(),
+        options.line_ending.as_str()
+    );
     parts.join(&separator)
 }
 
@@ -85,7 +89,11 @@ fn serialize_heading(block: &Block, options: &MarkdownSerializeOptions) -> Strin
     format!("{hashes} {content}")
 }
 
-fn serialize_bullet_list(block: &Block, depth: usize, options: &MarkdownSerializeOptions) -> String {
+fn serialize_bullet_list(
+    block: &Block,
+    depth: usize,
+    options: &MarkdownSerializeOptions,
+) -> String {
     let pad = " ".repeat(depth * options.list_indent);
     let bullet = options.bullet_char.as_char();
     block
@@ -199,11 +207,7 @@ fn serialize_image(block: &Block) -> String {
 
 fn serialize_table(block: &Block, options: &MarkdownSerializeOptions) -> String {
     let (headers, rows, alignments) = match &block.props {
-        BlockProps::Table(p) => (
-            p.headers.clone(),
-            p.rows.clone(),
-            p.alignments.clone(),
-        ),
+        BlockProps::Table(p) => (p.headers.clone(), p.rows.clone(), p.alignments.clone()),
         _ => (Vec::new(), Vec::new(), None),
     };
     let le = options.line_ending.as_str();
@@ -233,14 +237,15 @@ fn serialize_table(block: &Block, options: &MarkdownSerializeOptions) -> String 
     let separator_row = (0..headers.len())
         .map(|i| {
             let width = column_widths[i];
-            let alignment = alignments.as_ref().and_then(|a| a.get(i).copied().flatten());
+            let alignment = alignments
+                .as_ref()
+                .and_then(|a| a.get(i).copied().flatten());
             match alignment {
                 Some(TableAlignment::Left) => format!(":{}", "-".repeat(width.saturating_sub(1))),
                 Some(TableAlignment::Right) => format!("{}:", "-".repeat(width.saturating_sub(1))),
-                Some(TableAlignment::Center) => format!(
-                    ":{}:",
-                    "-".repeat(width.saturating_sub(2))
-                ),
+                Some(TableAlignment::Center) => {
+                    format!(":{}:", "-".repeat(width.saturating_sub(2)))
+                }
                 None => "-".repeat(width),
             }
         })
@@ -413,9 +418,9 @@ fn _ec_in_scope(_e: EmphasisChar) {}
 mod tests {
     use super::*;
     use crate::blocks::{
-        block_quote, bold, bullet_list, callout, check_list, code, code_block, divider, h1, h2,
-        heading, image, info_callout, italic, link, numbered_list, paragraph, table, text,
-        ImageOptions,
+        ImageOptions, block_quote, bold, bullet_list, callout, check_list, code, code_block,
+        divider, h1, h2, heading, image, info_callout, italic, link, numbered_list, paragraph,
+        table, text,
     };
     use crate::types::{CalloutType, MarkdownSerializeOptions};
 
@@ -501,12 +506,11 @@ mod tests {
 
     #[test]
     fn image_with_and_without_title() {
-        let no_title = image(
-            "https://x",
-            Some("alt".into()),
-            ImageOptions::default(),
+        let no_title = image("https://x", Some("alt".into()), ImageOptions::default());
+        assert_eq!(
+            blocks_to_markdown(&[no_title], &opts()),
+            "![alt](https://x)"
         );
-        assert_eq!(blocks_to_markdown(&[no_title], &opts()), "![alt](https://x)");
         let with_title = image(
             "https://x",
             Some("alt".into()),
@@ -537,7 +541,10 @@ mod tests {
         let t = table(
             vec!["A".into(), "B".into()],
             vec![vec!["1".into(), "2".into()], vec!["3".into(), "4".into()]],
-            Some(vec![Some(TableAlignment::Left), Some(TableAlignment::Right)]),
+            Some(vec![
+                Some(TableAlignment::Left),
+                Some(TableAlignment::Right),
+            ]),
         );
         let md = blocks_to_markdown(&[t], &opts());
         assert!(md.starts_with("| A   | B   |"));
@@ -580,11 +587,12 @@ mod tests {
 
     #[test]
     fn span_code_link_strike_highlight() {
-        let p = paragraph(vec![code("x"), text(" + "), link("Anth", "https://a", None)]);
-        assert_eq!(
-            blocks_to_markdown(&[p], &opts()),
-            "`x` + [Anth](https://a)"
-        );
+        let p = paragraph(vec![
+            code("x"),
+            text(" + "),
+            link("Anth", "https://a", None),
+        ]);
+        assert_eq!(blocks_to_markdown(&[p], &opts()), "`x` + [Anth](https://a)");
     }
 
     #[test]
@@ -606,29 +614,50 @@ mod tests {
     }
 }
 
-    #[test]
-    fn code_block_with_backtick_fence_is_escaped() {
-        use crate::blocks::code_block as mkcode;
-        let block = mkcode("```js\nconsole.log(1)\n```", Some("md".to_string()));
-        let siblings = [block.clone()];
-        let md = serialize_block(&block, 0, &MarkdownSerializeOptions::default(), 0, &siblings);
-        assert!(!md.contains("```js\nconsole.log(1)\n```"), "raw fence not escaped: {md}");
-    }
+#[test]
+fn code_block_with_backtick_fence_is_escaped() {
+    use crate::blocks::code_block as mkcode;
+    let block = mkcode("```js\nconsole.log(1)\n```", Some("md".to_string()));
+    let siblings = [block.clone()];
+    let md = serialize_block(
+        &block,
+        0,
+        &MarkdownSerializeOptions::default(),
+        0,
+        &siblings,
+    );
+    assert!(
+        !md.contains("```js\nconsole.log(1)\n```"),
+        "raw fence not escaped: {md}"
+    );
+}
 
-    #[test]
-    fn inline_code_with_backtick_uses_double_delimiter() {
-        use crate::blocks::paragraph as para;
-        use crate::types::{InlineStyle, TextSpan};
-        let span = TextSpan {
-            text: "foo`bar".to_string(),
-            styles: InlineStyle { code: true, ..Default::default() },
-        };
-        let block = {
-            let mut b = para("");
-            b.content = vec![span];
-            b
-        };
-        let siblings = [block.clone()];
-        let md = serialize_block(&block, 0, &MarkdownSerializeOptions::default(), 0, &siblings);
-        assert!(md.contains("``foo`bar``"), "expected double-backtick delimiter; got: {md}");
-    }
+#[test]
+fn inline_code_with_backtick_uses_double_delimiter() {
+    use crate::blocks::paragraph as para;
+    use crate::types::{InlineStyle, TextSpan};
+    let span = TextSpan {
+        text: "foo`bar".to_string(),
+        styles: InlineStyle {
+            code: true,
+            ..Default::default()
+        },
+    };
+    let block = {
+        let mut b = para("");
+        b.content = vec![span];
+        b
+    };
+    let siblings = [block.clone()];
+    let md = serialize_block(
+        &block,
+        0,
+        &MarkdownSerializeOptions::default(),
+        0,
+        &siblings,
+    );
+    assert!(
+        md.contains("``foo`bar``"),
+        "expected double-backtick delimiter; got: {md}"
+    );
+}

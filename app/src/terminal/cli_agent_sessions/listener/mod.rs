@@ -1,9 +1,7 @@
 use warpui::{EntityId, ModelContext, ModelHandle, SingletonEntity};
 
 use super::{CLIAgentEvent, CLIAgentSessionsModel};
-use crate::terminal::cli_agent_sessions::event::{
-    parse_event, CLI_AGENT_NOTIFICATION_SENTINEL,
-};
+use crate::terminal::cli_agent_sessions::event::{parse_event, CLI_AGENT_NOTIFICATION_SENTINEL};
 use crate::terminal::cli_agent_sessions::event::{CLIAgentEventPayload, CLIAgentEventType};
 use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
 use crate::terminal::CLIAgent;
@@ -182,8 +180,7 @@ impl CLIAgentSessionListener {
                 let Some(parsed) = me.inner.try_parse(title.as_deref(), body) else {
                     if title.as_deref() == Some(CLI_AGENT_NOTIFICATION_SENTINEL) {
                         CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions_model, ctx| {
-                            sessions_model
-                                .notify_event_parse_failed(me.terminal_view_id, ctx);
+                            sessions_model.notify_event_parse_failed(me.terminal_view_id, ctx);
                         });
                     }
                     return;

@@ -31,8 +31,9 @@ pub fn render_panel(view: &ChatPanelView, app: &AppContext) -> Box<dyn Element> 
     let chat = view.chat_model.as_ref(app);
 
     let conversation = match chat.binding() {
-        ConversationBinding::Live { session_id, .. }
-        | ConversationBinding::Past { session_id } => chat.conversation(session_id),
+        ConversationBinding::Live { session_id, .. } | ConversationBinding::Past { session_id } => {
+            chat.conversation(session_id)
+        }
         ConversationBinding::None => None,
     };
 

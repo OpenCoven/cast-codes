@@ -912,10 +912,7 @@ impl AIAssistantPanelView {
         // newest-first ring above the live section, not as interleaved
         // garbage in the active text.
         {
-            let mut state = self
-                .coven_stream
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let mut state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(previous) = state.active_task.take() {
                 previous.abort();
                 log::info!(
@@ -1001,10 +998,7 @@ impl AIAssistantPanelView {
 
         // Stash the join handle so a subsequent invocation can abort it.
         {
-            let mut state = self
-                .coven_stream
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            let mut state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
             state.active_task = Some(join);
         }
 
@@ -1023,10 +1017,7 @@ impl AIAssistantPanelView {
             async move { Timer::after(Duration::from_millis(100)).await },
             |view, _, ctx| {
                 let still_in_flight = {
-                    let mut state = view
-                        .coven_stream
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner());
+                    let mut state = view.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
                     let drained: Vec<_> = state.pending_chunks.drain(..).collect();
                     for chunk in drained {
                         if let ::ai::cast_agent::MessageChunk::Delta { content, .. } = chunk {
@@ -1054,15 +1045,8 @@ impl AIAssistantPanelView {
         const BODY_FONT_SIZE: f32 = 13.;
 
         let (text, in_flight, history) = {
-            let state = self
-                .coven_stream
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-            (
-                state.text.clone(),
-                state.in_flight,
-                state.history.clone(),
-            )
+            let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+            (state.text.clone(), state.in_flight, state.history.clone())
         };
         if text.is_empty() && !in_flight && history.is_empty() {
             return Empty::new().finish();
@@ -1073,47 +1057,46 @@ impl AIAssistantPanelView {
         let ui_builder = appearance.ui_builder();
         let ui_font = appearance.ui_font_family();
 
-        let make_entry =
-            |label: String, body_text: String, dim: bool| -> Box<dyn Element> {
-                let body_color = if dim { OPENCOVEN_MUTED } else { primary };
-                let header = Container::new(
-                    ui_builder
-                        .wrappable_text(label, false)
-                        .with_style(UiComponentStyles {
-                            font_family_id: Some(ui_font),
-                            font_size: Some(SECTION_HEADER_FONT_SIZE),
-                            font_weight: Some(warpui::fonts::Weight::Semibold),
-                            font_color: Some(OPENCOVEN_MUTED),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                )
-                .with_padding_bottom(4.)
-                .finish();
-                let body = Container::new(
-                    ui_builder
-                        .wrappable_text(body_text, true)
-                        .with_style(UiComponentStyles {
-                            font_family_id: Some(ui_font),
-                            font_size: Some(BODY_FONT_SIZE),
-                            font_color: Some(body_color),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                )
-                .finish();
-                Container::new(
-                    Flex::column()
-                        .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                        .with_child(header)
-                        .with_child(body)
-                        .finish(),
-                )
-                .with_padding_bottom(8.)
-                .finish()
-            };
+        let make_entry = |label: String, body_text: String, dim: bool| -> Box<dyn Element> {
+            let body_color = if dim { OPENCOVEN_MUTED } else { primary };
+            let header = Container::new(
+                ui_builder
+                    .wrappable_text(label, false)
+                    .with_style(UiComponentStyles {
+                        font_family_id: Some(ui_font),
+                        font_size: Some(SECTION_HEADER_FONT_SIZE),
+                        font_weight: Some(warpui::fonts::Weight::Semibold),
+                        font_color: Some(OPENCOVEN_MUTED),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .with_padding_bottom(4.)
+            .finish();
+            let body = Container::new(
+                ui_builder
+                    .wrappable_text(body_text, true)
+                    .with_style(UiComponentStyles {
+                        font_family_id: Some(ui_font),
+                        font_size: Some(BODY_FONT_SIZE),
+                        font_color: Some(body_color),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .finish();
+            Container::new(
+                Flex::column()
+                    .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                    .with_child(header)
+                    .with_child(body)
+                    .finish(),
+            )
+            .with_padding_bottom(8.)
+            .finish()
+        };
 
         let mut column = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Start);
 

@@ -26,9 +26,7 @@
 
 use std::collections::HashSet;
 
-use lsp::{
-    LanguageServerId, LspEvent, LspManagerModel, LspManagerModelEvent, LspServerModel,
-};
+use lsp::{LanguageServerId, LspEvent, LspManagerModel, LspManagerModelEvent, LspServerModel};
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
 /// Eagerly instantiate the collector at app startup. Idempotent —
@@ -124,40 +122,35 @@ fn push_diagnostics(
     const RECENT_ERRORS_MAX: usize = 50;
 
     let path_buf = path.to_path_buf();
-    let entries: Vec<::ai::cast_agent::DiagnosticEntry> = match server
-        .as_ref(ctx)
-        .diagnostics_for_path(path)
-        .ok()
-        .flatten()
-    {
-        Some(doc) => doc
-            .diagnostics
-            .iter()
-            .filter_map(|d| {
-                let severity = match d.severity {
-                    Some(lsp_types::DiagnosticSeverity::ERROR) => {
-                        ::ai::cast_agent::DiagnosticSeverity::Error
-                    }
-                    Some(lsp_types::DiagnosticSeverity::WARNING) => {
-                        ::ai::cast_agent::DiagnosticSeverity::Warning
-                    }
-                    _ => return None,
-                };
-                Some(::ai::cast_agent::DiagnosticEntry {
-                    file: path_buf.clone(),
-                    line: d.range.start.line,
-                    severity,
-                    message: d.message.clone(),
+    let entries: Vec<::ai::cast_agent::DiagnosticEntry> =
+        match server.as_ref(ctx).diagnostics_for_path(path).ok().flatten() {
+            Some(doc) => doc
+                .diagnostics
+                .iter()
+                .filter_map(|d| {
+                    let severity = match d.severity {
+                        Some(lsp_types::DiagnosticSeverity::ERROR) => {
+                            ::ai::cast_agent::DiagnosticSeverity::Error
+                        }
+                        Some(lsp_types::DiagnosticSeverity::WARNING) => {
+                            ::ai::cast_agent::DiagnosticSeverity::Warning
+                        }
+                        _ => return None,
+                    };
+                    Some(::ai::cast_agent::DiagnosticEntry {
+                        file: path_buf.clone(),
+                        line: d.range.start.line,
+                        severity,
+                        message: d.message.clone(),
+                    })
                 })
-            })
-            .collect(),
-        None => Vec::new(),
-    };
+                .collect(),
+            None => Vec::new(),
+        };
 
     let path_for_closure = path_buf;
     ::ai::cast_agent::update_host_substrate(move |host| {
-        host.recent_errors
-            .retain(|e| e.file != path_for_closure);
+        host.recent_errors.retain(|e| e.file != path_for_closure);
         host.recent_errors.extend(entries);
         let len = host.recent_errors.len();
         if len > RECENT_ERRORS_MAX {

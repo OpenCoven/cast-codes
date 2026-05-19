@@ -14,9 +14,7 @@ pub const SKIPPED_THRESHOLD: u64 = 3;
 
 /// Render the incompatible-plugin warning banner.
 pub fn render(font_family: FamilyId, font_size: f32) -> Box<dyn Element> {
-    Container::new(
-        Text::new(strings::ERROR_INCOMPATIBLE_PLUGIN, font_family, font_size).finish(),
-    )
-    .with_uniform_padding(8.0)
-    .finish()
+    Container::new(Text::new(strings::ERROR_INCOMPATIBLE_PLUGIN, font_family, font_size).finish())
+        .with_uniform_padding(8.0)
+        .finish()
 }
