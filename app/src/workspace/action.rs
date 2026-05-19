@@ -718,6 +718,15 @@ pub enum WorkspaceAction {
     /// Toggles the browser pane: opens it if absent from the active pane
     /// group, closes it if present. Bound to ⌘⌥B by default.
     ToggleBrowserPane,
+    /// Open-or-navigate: if a browser pane is open in the active pane group,
+    /// navigate its active tab to `url`; otherwise open a new browser pane
+    /// pointed at `url`. Used by terminal/agent-editor link clicks so they
+    /// populate the embedded browser instead of escaping to the system
+    /// browser. On platforms without an embedded browser (wasm), the
+    /// workspace handler falls back to opening `url` externally.
+    NavigateBrowserPane {
+        url: String,
+    },
 }
 
 impl From<&WorkspaceAction> for LoginGatedFeature {
@@ -997,7 +1006,8 @@ impl WorkspaceAction {
             | OpenLocalToCloudHandoffPane { .. }
             | OpenNetworkLogPane
             | OpenBrowserPane { .. }
-            | ToggleBrowserPane => false,
+            | ToggleBrowserPane
+            | NavigateBrowserPane { .. } => false,
             #[cfg(debug_assertions)]
             ShowHoaOnboardingFlow => false,
             #[cfg(target_family = "wasm")]

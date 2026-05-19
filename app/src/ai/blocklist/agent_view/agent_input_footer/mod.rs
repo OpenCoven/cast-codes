@@ -87,6 +87,7 @@ use tokio::fs;
 use voice_input::{StartListeningError, VoiceSessionResult};
 
 use warp_core::{
+    channel::ChannelState,
     context_flag::ContextFlag,
     report_if_error,
     ui::{
@@ -1924,12 +1925,18 @@ impl AgentInputFooter {
     }
 
     /// Disable the start-remote-control chip and swap its tooltip when the
-    /// user is anonymous or logged out, since session sharing requires a
-    /// real account.
+    /// user is anonymous or logged out, since cloud-routed session sharing
+    /// requires a real Warp account.
+    ///
+    /// OSS builds (public CastCodes) skip this gate entirely: there are no
+    /// hosted services to authenticate to, so the chip is always usable for
+    /// locally-routed control. Gating on `cloud_services_available()`
+    /// preserves the existing behavior on cloud builds.
     fn sync_remote_control_button(&self, ctx: &mut ViewContext<Self>) {
-        let login_required = AuthStateProvider::as_ref(ctx)
-            .get()
-            .is_anonymous_or_logged_out();
+        let login_required = ChannelState::cloud_services_available()
+            && AuthStateProvider::as_ref(ctx)
+                .get()
+                .is_anonymous_or_logged_out();
         let tooltip = if login_required {
             START_REMOTE_CONTROL_LOGIN_REQUIRED_TOOLTIP
         } else {

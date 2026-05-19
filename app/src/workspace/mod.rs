@@ -702,7 +702,9 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::ToggleLeftPanel,
         )
         .with_context_predicate(id!("Workspace"))
-        .with_custom_action(CustomAction::ToggleWarpDrive),
+        .with_custom_action(CustomAction::ToggleWarpDrive)
+        .with_mac_key_binding("cmd-b")
+        .with_linux_or_windows_key_binding("ctrl-b"),
         EditableBinding::new(
             TOGGLE_RIGHT_PANEL_BINDING_NAME,
             BindingDescription::new("Toggle code review")

@@ -13239,6 +13239,41 @@ impl Workspace {
         }
     }
 
+    /// If the active pane group already has a browser pane, navigate its
+    /// active tab to `url`. Otherwise open a new browser pane pre-loaded with
+    /// `url`. Used by terminal/agent-editor link clicks so they land in the
+    /// embedded browser instead of escaping to the system browser.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn navigate_or_open_browser_pane(
+        &mut self,
+        url: String,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let group = self.active_tab_pane_group();
+        let existing = group
+            .as_ref(ctx)
+            .pane_ids()
+            .find(|id| id.is_browser_pane());
+        match existing {
+            Some(pane_id) => {
+                let Some(pane) = group
+                    .as_ref(ctx)
+                    .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
+                else {
+                    self.open_browser_pane(Some(url), ctx);
+                    return;
+                };
+                let browser_view = pane.browser_view(ctx);
+                browser_view.update(ctx, |view, ctx| {
+                    view.navigate(url, ctx);
+                });
+            }
+            None => {
+                self.open_browser_pane(Some(url), ctx);
+            }
+        }
+    }
+
     /// Writes the supplied browser state to disk. Errors are logged, not
     /// propagated — persistence is a convenience, not a correctness boundary.
     #[cfg(not(target_family = "wasm"))]
@@ -18262,6 +18297,17 @@ impl Workspace {
                 );
             }
 
+            // Browser-pane toggle replaces the standalone settings cog so the
+            // toggle is always reachable next to the left/right panel toggles,
+            // mirroring those affordances. Settings remain accessible via
+            // Cmd+, , the app menu, and the command palette.
+            #[cfg(not(target_family = "wasm"))]
+            target.add_child(
+                Container::new(self.render_browser_toggle_button(appearance, ctx))
+                    .with_margin_left(TAB_BAR_PADDING_LEFT)
+                    .finish(),
+            );
+            #[cfg(target_family = "wasm")]
             target.add_child(
                 Container::new(self.render_settings_button(appearance))
                     .with_margin_left(TAB_BAR_PADDING_LEFT)
@@ -18703,6 +18749,7 @@ impl Workspace {
         Align::new(button).finish()
     }
 
+    #[cfg(target_family = "wasm")]
     fn render_settings_button(&self, appearance: &Appearance) -> Box<dyn Element> {
         let theme = appearance.theme();
         let sub_text = theme.sub_text_color(theme.background());
@@ -18754,6 +18801,81 @@ impl Workspace {
         )
         .with_cursor(Cursor::PointingHand)
         .on_click(|ctx, _, _| ctx.dispatch_typed_action(WorkspaceAction::ShowSettings))
+        .finish();
+
+        Align::new(button).finish()
+    }
+
+    /// Tab-bar button that toggles the embedded browser pane. Replaces the
+    /// standalone settings cog so the toggle is always reachable next to the
+    /// left-panel and right-panel toggles, mirroring those affordances.
+    /// Settings remain accessible via `Cmd+,`, the app menu, and the command
+    /// palette.
+    #[cfg(not(target_family = "wasm"))]
+    fn render_browser_toggle_button(
+        &self,
+        appearance: &Appearance,
+        ctx: &AppContext,
+    ) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let sub_text = theme.sub_text_color(theme.background());
+        let main_text = theme.main_text_color(theme.background());
+        let ui_builder = appearance.ui_builder().clone();
+        let is_active = self
+            .active_tab_pane_group()
+            .as_ref(ctx)
+            .pane_ids()
+            .any(|id| id.is_browser_pane());
+        let tooltip_sublabel =
+            keybinding_name_to_display_string(TOGGLE_BROWSER_PANE_BINDING_NAME, ctx);
+        let active_color = main_text;
+        let inactive_color = sub_text;
+
+        let button = Hoverable::new(
+            self.mouse_states.browser_toggle_icon.clone(),
+            move |hover_state| {
+                let icon_color = if is_active || hover_state.is_hovered() {
+                    active_color
+                } else {
+                    inactive_color
+                };
+                let icon = ConstrainedBox::new(
+                    Container::new(icons::Icon::Globe.to_warpui_icon(icon_color).finish())
+                        .with_uniform_padding(3.)
+                        .finish(),
+                )
+                .with_width(icons::ICON_DIMENSIONS)
+                .with_height(icons::ICON_DIMENSIONS)
+                .finish();
+
+                if hover_state.is_hovered() {
+                    let label = "Toggle browser pane".to_string();
+                    let tooltip = if let Some(sublabel) = tooltip_sublabel.clone() {
+                        ui_builder
+                            .tool_tip_with_sublabel(label, sublabel)
+                            .build()
+                            .finish()
+                    } else {
+                        ui_builder.tool_tip(label).build().finish()
+                    };
+                    let mut stack = Stack::new().with_child(icon);
+                    stack.add_positioned_overlay_child(
+                        tooltip,
+                        OffsetPositioning::offset_from_parent(
+                            vec2f(0., 4.),
+                            ParentOffsetBounds::WindowByPosition,
+                            ParentAnchor::BottomMiddle,
+                            ChildAnchor::TopMiddle,
+                        ),
+                    );
+                    stack.finish()
+                } else {
+                    icon
+                }
+            },
+        )
+        .with_cursor(Cursor::PointingHand)
+        .on_click(|ctx, _, _| ctx.dispatch_typed_action(WorkspaceAction::ToggleBrowserPane))
         .finish();
 
         Align::new(button).finish()
@@ -20905,6 +21027,16 @@ impl TypedActionView for Workspace {
             }
             #[cfg(target_family = "wasm")]
             ToggleBrowserPane => {}
+            #[cfg(not(target_family = "wasm"))]
+            NavigateBrowserPane { url } => {
+                self.navigate_or_open_browser_pane(url.clone(), ctx);
+            }
+            #[cfg(target_family = "wasm")]
+            NavigateBrowserPane { url } => {
+                // No embedded browser on this platform — fall back to the
+                // platform's external URL handler.
+                ctx.open_url(url);
+            }
             FixSettingsWithOz { error_description } => {
                 use crate::ai::skills::SkillManager;
                 let modify_settings_skill = SkillManager::as_ref(ctx)

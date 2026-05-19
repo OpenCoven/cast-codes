@@ -17473,9 +17473,15 @@ impl TerminalView {
                 }
             }
             GridHighlightedLink::Url(url) if url.contains(position) => {
-                let model = self.model.lock();
+                let resolved = {
+                    let model = self.model.lock();
+                    model.link_at_range(url, RespectObfuscatedSecrets::No)
+                };
                 ctx.notify();
-                ctx.open_url(&model.link_at_range(url, RespectObfuscatedSecrets::No));
+                // Route to the embedded browser pane: if one is open in the
+                // active pane group, navigate it; otherwise open a new pane.
+                // On wasm the workspace handler falls back to `open_url`.
+                ctx.dispatch_typed_action(&WorkspaceAction::NavigateBrowserPane { url: resolved });
             }
             _ => (),
         }

@@ -35,8 +35,9 @@ use crate::{
 use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
 use super::persistence;
-use super::url_input::{resolve, Resolved};
+use super::url_input::{resolve_with_engine, Resolved};
 use super::webview_host::NativeBrowserWebView;
+use crate::terminal::general_settings::GeneralSettings;
 
 /// Map a model-side URL to the URL the webview should actually load.
 /// `about:home` is rendered from a bundled HTML page served as a `data:` URL;
@@ -50,6 +51,7 @@ fn webview_url_for(model_url: &str) -> String {
 }
 
 const URL_BAR_HEIGHT: f32 = 32.0;
+const URL_BAR_MIN_WIDTH: f32 = 160.0;
 const TOOLBAR_HEIGHT: f32 = 48.0;
 const TAB_STRIP_HEIGHT: f32 = 32.0;
 const TAB_MAX_WIDTH: f32 = 200.0;
@@ -269,13 +271,17 @@ impl BrowserView {
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
         let raw_text = self.url_editor.as_ref(ctx).buffer_text(ctx);
-        let target = match resolve(&raw_text) {
+        let engine = *GeneralSettings::as_ref(ctx).default_search_engine;
+        let target = match resolve_with_engine(&raw_text, engine) {
             Resolved::Url(u) | Resolved::Search(u) => u,
         };
         self.navigate(target, ctx);
     }
 
-    fn navigate(&mut self, url: impl Into<String>, ctx: &mut ViewContext<Self>) {
+    /// Navigate the active tab to `url`. Exposed to the workspace so external
+    /// callers (e.g. terminal-link clicks) can populate the open browser pane
+    /// instead of spawning a system-browser tab.
+    pub(crate) fn navigate(&mut self, url: impl Into<String>, ctx: &mut ViewContext<Self>) {
         if let Some(url) = self.model.navigate(url) {
             self.url_editor.update(ctx, |editor, ctx| {
                 editor.set_buffer_text_with_base_buffer(&url, ctx);
@@ -556,6 +562,7 @@ impl BrowserView {
         let editor = Container::new(
             ConstrainedBox::new(Clipped::new(ChildView::new(&self.url_editor).finish()).finish())
                 .with_height(URL_BAR_HEIGHT)
+                .with_min_width(URL_BAR_MIN_WIDTH)
                 .finish(),
         )
         .with_horizontal_padding(10.0)
@@ -765,6 +772,13 @@ impl View for BrowserView {
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let theme = Appearance::as_ref(app).theme();
 
+        // Layout invariant: the tab strip (TAB_STRIP_HEIGHT) + toolbar
+        // (TOOLBAR_HEIGHT) occupy the top of the pane, and the wry webview
+        // sits strictly below them via Flex::column. Because the native
+        // overlay never intersects toolbar bounds, GPUI mouse hit-testing
+        // routes clicks on toolbar icons to the GPUI buttons rather than the
+        // webview. If you change this layout, preserve that invariant or the
+        // native overlay will swallow toolbar clicks and tooltips.
         // Only the active tab's webview is rendered into the layout tree.
         // Inactive tabs keep their native views hidden via set_visibility(false).
         let webview_element: Box<dyn Element> = match self.active_webview() {

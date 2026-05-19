@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use crate::{banner::BannerState, resource_center::Tip};
+use crate::{
+    banner::BannerState, pane_group::pane::browser::url_input::SearchEngine, resource_center::Tip,
+};
 use warp_core::settings::{
     macros::define_settings_group, RespectUserSyncSetting, SupportedPlatforms, SyncToCloud,
 };
@@ -68,6 +70,15 @@ define_settings_group!(GeneralSettings, settings: [
         private: false,
         toml_path: "general.link_tooltip",
         description: "Whether to show a tooltip when hovering over links.",
+    },
+    default_search_engine: DefaultSearchEngine {
+        type: SearchEngine,
+        default: SearchEngine::Google,
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+        private: false,
+        toml_path: "general.default_search_engine",
+        description: "Default search engine for the embedded browser URL bar when input is not a URL.",
     },
     welcome_tips_features_used: WelcomeTipsFeaturesUsed {
         type: HashSet<Tip>,

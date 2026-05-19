@@ -1,12 +1,86 @@
 //! URL / search query resolver for the browser pane's address bar.
 
+use serde::{Deserialize, Serialize};
+
+/// Search engine choices exposed in `general.default_search_engine`.
+///
+/// Each variant maps to a URL prefix that is concatenated with the
+/// percent-encoded query. Adding a new variant requires:
+/// 1. Adding the case to `Self::query_url_prefix`,
+/// 2. Adding the case to `Self::display_name`,
+/// 3. Adding the variant to `Self::all()`.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    settings_value::SettingsValue,
+)]
+#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
+pub enum SearchEngine {
+    #[default]
+    Google,
+    DuckDuckGo,
+    Bing,
+    Kagi,
+    Brave,
+}
+
+impl SearchEngine {
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Google => "Google",
+            Self::DuckDuckGo => "DuckDuckGo",
+            Self::Bing => "Bing",
+            Self::Kagi => "Kagi",
+            Self::Brave => "Brave Search",
+        }
+    }
+
+    /// Prefix for a search query. The percent-encoded query is appended to
+    /// the returned string verbatim, so each prefix must end in the query
+    /// parameter delimiter (`=`).
+    fn query_url_prefix(self) -> &'static str {
+        match self {
+            Self::Google => "https://www.google.com/search?q=",
+            Self::DuckDuckGo => "https://duckduckgo.com/?q=",
+            Self::Bing => "https://www.bing.com/search?q=",
+            Self::Kagi => "https://kagi.com/search?q=",
+            Self::Brave => "https://search.brave.com/search?q=",
+        }
+    }
+
+    pub fn search_url(self, query: &str) -> String {
+        let encoded = percent_encode_query(query);
+        format!("{}{}", self.query_url_prefix(), encoded)
+    }
+
+    /// All variants, in stable display order. Used by settings UI.
+    pub fn all() -> &'static [Self] {
+        &[
+            Self::Google,
+            Self::DuckDuckGo,
+            Self::Bing,
+            Self::Kagi,
+            Self::Brave,
+        ]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolved {
     Url(String),
     Search(String),
 }
 
-pub fn resolve(raw: &str) -> Resolved {
+pub fn resolve_with_engine(raw: &str, engine: SearchEngine) -> Resolved {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Resolved::Url("about:home".to_string());
@@ -37,8 +111,7 @@ pub fn resolve(raw: &str) -> Resolved {
         return Resolved::Url(format!("{scheme}{trimmed}"));
     }
 
-    let encoded = percent_encode_query(trimmed);
-    Resolved::Search(format!("https://duckduckgo.com/?q={encoded}"))
+    Resolved::Search(engine.search_url(trimmed))
 }
 
 fn is_loopback_host(input: &str) -> bool {
@@ -75,6 +148,10 @@ fn percent_encode_query(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn resolve(raw: &str) -> Resolved {
+        resolve_with_engine(raw, SearchEngine::default())
+    }
 
     #[test]
     fn empty_input_goes_to_about_home() {
@@ -130,14 +207,39 @@ mod tests {
     }
 
     #[test]
-    fn freetext_becomes_duckduckgo_search() {
+    fn default_search_engine_is_google() {
+        assert_eq!(SearchEngine::default(), SearchEngine::Google);
+    }
+
+    #[test]
+    fn freetext_defaults_to_google_search() {
         assert_eq!(
             resolve("rust async traits"),
-            Resolved::Search("https://duckduckgo.com/?q=rust%20async%20traits".to_string())
+            Resolved::Search("https://www.google.com/search?q=rust%20async%20traits".to_string())
         );
         assert_eq!(
             resolve("what is the time"),
-            Resolved::Search("https://duckduckgo.com/?q=what%20is%20the%20time".to_string())
+            Resolved::Search("https://www.google.com/search?q=what%20is%20the%20time".to_string())
+        );
+    }
+
+    #[test]
+    fn freetext_uses_selected_engine() {
+        assert_eq!(
+            resolve_with_engine("rust async traits", SearchEngine::DuckDuckGo),
+            Resolved::Search("https://duckduckgo.com/?q=rust%20async%20traits".to_string())
+        );
+        assert_eq!(
+            resolve_with_engine("rust async traits", SearchEngine::Bing),
+            Resolved::Search("https://www.bing.com/search?q=rust%20async%20traits".to_string())
+        );
+        assert_eq!(
+            resolve_with_engine("rust", SearchEngine::Kagi),
+            Resolved::Search("https://kagi.com/search?q=rust".to_string())
+        );
+        assert_eq!(
+            resolve_with_engine("rust", SearchEngine::Brave),
+            Resolved::Search("https://search.brave.com/search?q=rust".to_string())
         );
     }
 
@@ -145,7 +247,19 @@ mod tests {
     fn input_with_spaces_but_dotty_is_still_search() {
         assert_eq!(
             resolve("foo.bar baz"),
-            Resolved::Search("https://duckduckgo.com/?q=foo.bar%20baz".to_string())
+            Resolved::Search("https://www.google.com/search?q=foo.bar%20baz".to_string())
         );
+    }
+
+    #[test]
+    fn all_variants_have_distinct_prefixes() {
+        let mut seen = std::collections::HashSet::new();
+        for engine in SearchEngine::all() {
+            assert!(
+                seen.insert(engine.query_url_prefix()),
+                "duplicate prefix for {:?}",
+                engine
+            );
+        }
     }
 }
