@@ -13187,62 +13187,104 @@ impl Workspace {
         });
     }
 
-    /// Toggles the browser pane: closes it if an open browser pane exists in
-    /// the active pane group, opens one if not. Persists the resulting state.
+    /// Toggles the browser pane: closes the visible browser pane if one
+    /// exists in the active pane group, otherwise opens a fresh one.
+    /// Persists the resulting state.
+    ///
+    /// `PaneGroup::close_pane` with the `UndoClosedPanes` flag enabled does
+    /// *not* actually destroy the pane — it detaches into a hidden-for-close
+    /// shadow so Cmd+Z can restore it. Two consequences for toggle:
+    ///
+    /// 1. **Close path:** after `close_pane`, the wry webview is still
+    ///    alive and `pane_ids()` still reports the browser pane. We follow
+    ///    with `cleanup_closed_pane` so toggle-close is symmetric with
+    ///    toggle-open and the native webview is released. (Cmd+W keeps the
+    ///    undo-friendly path.)
+    /// 2. **Open path:** if the user closed via Cmd+W earlier, the hidden
+    ///    shadow can shadow a real "open" toggle. We filter the lookup to
+    ///    visible browser panes only and proactively cleanup any leftover
+    ///    hidden shadow before opening fresh.
     #[cfg(not(target_family = "wasm"))]
     pub(crate) fn toggle_browser_pane(&mut self, ctx: &mut ViewContext<Self>) {
         let group = self.active_tab_pane_group();
-        let existing = group.as_ref(ctx).pane_ids().find(|id| id.is_browser_pane());
-        match existing {
-            Some(pane_id) => {
-                // Snapshot model BEFORE close so the persisted tab list
-                // reflects the state the user closed at.
-                let snapshot = group
+
+        // Visible-only lookup: a hidden-for-close pane should not block
+        // toggle-open. Collect ids in a small Vec so we don't hold the
+        // borrow on `group.as_ref(ctx)` across the mutation closure.
+        let (visible_browser, hidden_browsers): (Vec<_>, Vec<_>) = {
+            let g = group.as_ref(ctx);
+            g.pane_ids()
+                .filter(|id| id.is_browser_pane())
+                .partition(|id| !g.is_pane_hidden_for_close(*id))
+        };
+
+        if let Some(&pane_id) = visible_browser.first() {
+            // Snapshot model BEFORE close so the persisted tab list
+            // reflects the state the user closed at.
+            let snapshot = group
+                .as_ref(ctx)
+                .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
+                .map(|pane| {
+                    pane.browser_view(ctx)
+                        .as_ref(ctx)
+                        .model()
+                        .snapshot(/* open */ false)
+                });
+            group.update(ctx, |pane_group, ctx| {
+                pane_group.close_pane(pane_id, ctx);
+                // Promote a hidden-for-close shadow into a real close so the
+                // wry::WebView is dropped. No-op if `close_pane` already
+                // fully removed the pane.
+                pane_group.cleanup_closed_pane(pane_id, ctx);
+            });
+            if let Some(state) = snapshot {
+                Self::write_browser_state(&state);
+            }
+            return;
+        }
+
+        // No visible browser pane → open one. First clean up any stale
+        // hidden-for-close browser panes so we don't accumulate shadows.
+        if !hidden_browsers.is_empty() {
+            group.update(ctx, |pane_group, ctx| {
+                for pane_id in &hidden_browsers {
+                    pane_group.cleanup_closed_pane(*pane_id, ctx);
+                }
+            });
+        }
+
+        self.open_browser_pane(None, ctx);
+        // Capture the freshly opened pane's snapshot for persistence.
+        let group = self.active_tab_pane_group();
+        let snapshot = group
+            .as_ref(ctx)
+            .pane_ids()
+            .find(|id| id.is_browser_pane())
+            .and_then(|pane_id| {
+                group
                     .as_ref(ctx)
                     .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
-                    .map(|pane| {
-                        pane.browser_view(ctx)
-                            .as_ref(ctx)
-                            .model()
-                            .snapshot(/* open */ false)
-                    });
-                group.update(ctx, |pane_group, ctx| {
-                    pane_group.close_pane(pane_id, ctx);
-                });
-                if let Some(state) = snapshot {
-                    Self::write_browser_state(&state);
-                }
-            }
-            None => {
-                self.open_browser_pane(None, ctx);
-                // Capture the freshly opened pane's snapshot for persistence.
-                let group = self.active_tab_pane_group();
-                let snapshot = group
+            })
+            .map(|pane| {
+                pane.browser_view(ctx)
                     .as_ref(ctx)
-                    .pane_ids()
-                    .find(|id| id.is_browser_pane())
-                    .and_then(|pane_id| {
-                        group
-                            .as_ref(ctx)
-                            .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
-                    })
-                    .map(|pane| {
-                        pane.browser_view(ctx)
-                            .as_ref(ctx)
-                            .model()
-                            .snapshot(/* open */ true)
-                    });
-                if let Some(state) = snapshot {
-                    Self::write_browser_state(&state);
-                }
-            }
+                    .model()
+                    .snapshot(/* open */ true)
+            });
+        if let Some(state) = snapshot {
+            Self::write_browser_state(&state);
         }
     }
 
-    /// If the active pane group already has a browser pane, navigate its
+    /// If the active pane group has a *visible* browser pane, navigate its
     /// active tab to `url`. Otherwise open a new browser pane pre-loaded with
     /// `url`. Used by terminal/agent-editor link clicks so they land in the
     /// embedded browser instead of escaping to the system browser.
+    ///
+    /// We exclude hidden-for-close panes from the lookup — driving navigation
+    /// into a pane the user can't see would be invisible and would also keep
+    /// the dead shadow alive. Stale hidden panes are cleaned up before
+    /// opening a fresh one.
     #[cfg(not(target_family = "wasm"))]
     pub(crate) fn navigate_or_open_browser_pane(
         &mut self,
@@ -13250,28 +13292,36 @@ impl Workspace {
         ctx: &mut ViewContext<Self>,
     ) {
         let group = self.active_tab_pane_group();
-        let existing = group
-            .as_ref(ctx)
-            .pane_ids()
-            .find(|id| id.is_browser_pane());
-        match existing {
-            Some(pane_id) => {
-                let Some(pane) = group
-                    .as_ref(ctx)
-                    .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
-                else {
-                    self.open_browser_pane(Some(url), ctx);
-                    return;
-                };
-                let browser_view = pane.browser_view(ctx);
-                browser_view.update(ctx, |view, ctx| {
-                    view.navigate(url, ctx);
-                });
-            }
-            None => {
+        let (visible_browser, hidden_browsers): (Vec<_>, Vec<_>) = {
+            let g = group.as_ref(ctx);
+            g.pane_ids()
+                .filter(|id| id.is_browser_pane())
+                .partition(|id| !g.is_pane_hidden_for_close(*id))
+        };
+
+        if let Some(&pane_id) = visible_browser.first() {
+            let Some(pane) = group
+                .as_ref(ctx)
+                .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
+            else {
                 self.open_browser_pane(Some(url), ctx);
-            }
+                return;
+            };
+            let browser_view = pane.browser_view(ctx);
+            browser_view.update(ctx, |view, ctx| {
+                view.navigate(url, ctx);
+            });
+            return;
         }
+
+        if !hidden_browsers.is_empty() {
+            group.update(ctx, |pane_group, ctx| {
+                for pane_id in &hidden_browsers {
+                    pane_group.cleanup_closed_pane(*pane_id, ctx);
+                }
+            });
+        }
+        self.open_browser_pane(Some(url), ctx);
     }
 
     /// Writes the supplied browser state to disk. Errors are logged, not
@@ -18821,11 +18871,15 @@ impl Workspace {
         let sub_text = theme.sub_text_color(theme.background());
         let main_text = theme.main_text_color(theme.background());
         let ui_builder = appearance.ui_builder().clone();
-        let is_active = self
-            .active_tab_pane_group()
-            .as_ref(ctx)
-            .pane_ids()
-            .any(|id| id.is_browser_pane());
+        // Match `toggle_browser_pane`'s visibility filter: a hidden-for-close
+        // browser pane should not light up the toggle, otherwise the icon
+        // would lie about whether a pane is actually on screen.
+        let is_active = {
+            let group = self.active_tab_pane_group();
+            let g = group.as_ref(ctx);
+            g.pane_ids()
+                .any(|id| id.is_browser_pane() && !g.is_pane_hidden_for_close(id))
+        };
         let tooltip_sublabel =
             keybinding_name_to_display_string(TOGGLE_BROWSER_PANE_BINDING_NAME, ctx);
         let active_color = main_text;
