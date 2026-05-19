@@ -89,7 +89,7 @@ pub fn actionable_missing_binary_message(server_type: LSPServerType) -> String {
             "{TYPESCRIPT_LSP_MISSING_BINARY_PREFIX} {TYPESCRIPT_LSP_REPAIR_ACTION} from Codebase Indexing settings, or add typescript and typescript-language-server to this workspace so node_modules/.bin/typescript-language-server exists. A global install is not required."
         ),
         _ => format!(
-            "{} is not available. Install the language server from Codebase Indexing settings, or add it to this workspace. A global install is not required.",
+            "{} is not available. Install it and make sure it is available on PATH.",
             server_type.binary_name()
         ),
     }
@@ -450,6 +450,19 @@ mod tests {
                 server_type: LSPServerType::TypeScriptLanguageServer,
             }
         );
+    }
+
+    #[test]
+    fn non_typescript_missing_binary_message_only_recommends_path() {
+        let error = resolve_lsp_binary_config(LSPServerType::GoPls, None, None, None, false)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("gopls is not available"));
+        assert!(error.contains("available on PATH"));
+        assert!(!error.contains("Codebase Indexing settings"));
+        assert!(!error.contains("workspace"));
+        assert!(!error.contains("global install is not required"));
     }
 
     #[test]

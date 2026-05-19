@@ -24,9 +24,11 @@ cd "${REPO_ROOT}"
 if [ "$WARP_CHANNEL" = "local" ]; then
     WARP_APP_PATH="target/debug/bundle/osx/CastCodesLocal.app"
     WARP_SCHEME_NAME="castcodeslocal"
+    WARP_LOG_PATH="$HOME/Library/Logs/warp_local.log"
 else
     WARP_APP_PATH="target/debug/bundle/osx/CastCodes.app"
     WARP_SCHEME_NAME="castcodes"
+    WARP_LOG_PATH="$HOME/Library/Logs/cast-codes.log"
 fi
 DONT_OPEN=false
 # Launches the binary with "open", meaning the CastCodes process is
@@ -134,7 +136,16 @@ if [ "$DONT_OPEN" = false ] ; then
     if  [ "$OPEN_WITH_LAUNCHD" = true ]; then
         echo "Launching with MacOS application launcher"
         PATH="" /usr/bin/open "./$WARP_APP_PATH"
-        tail -f ~/Library/Logs/warp_local.log
+        for _ in {1..50}; do
+            [ -e "$WARP_LOG_PATH" ] && break
+            sleep 0.1
+        done
+        if [ -e "$WARP_LOG_PATH" ]; then
+            echo "Tailing log at $WARP_LOG_PATH"
+            tail -F "$WARP_LOG_PATH"
+        else
+            echo "Log file not found at $WARP_LOG_PATH; app may not have initialized logging yet." >&2
+        fi
     else
         echo "Opening app at ./$WARP_APP_PATH/Contents/MacOS/$WARP_BIN_NAME"
         "./$WARP_APP_PATH/Contents/MacOS/$WARP_BIN_NAME" "${WARP_ARGS[@]}"

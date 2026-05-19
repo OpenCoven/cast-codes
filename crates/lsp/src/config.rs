@@ -137,6 +137,7 @@ impl LspServerConfig {
             client_name,
             client,
             log_relative_path: None,
+            #[cfg(not(target_arch = "wasm32"))]
             custom_binary_config: None,
         }
     }

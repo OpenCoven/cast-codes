@@ -206,25 +206,472 @@ gateway_url = "https://gateway.opencoven.dev"
 token = "ck_live_..."
 ```
 
-## Endpoints used
+## Concept model
 
-| Method | Path                     | Purpose                          |
-|--------|--------------------------|----------------------------------|
-| GET    | `/health`                | Startup probe → `is_available()` |
-| POST   | `/v1/messages`           | Send a chat message              |
-| GET    | `/v1/sessions`           | List active Coven sessions       |
-| POST   | `/v1/sessions`           | Open a session by name           |
-| DELETE | `/v1/sessions/:id`       | Close a session (idempotent)     |
+CastCodes talks to the Coven Gateway through five concepts. They are
+separable on purpose — adding a discrete-job abstraction (Run) later does
+not require collapsing the chat-thread abstraction (Conversation), and
+neither touches the pane-lane abstraction (Session).
 
-Auth header: `Authorization: Bearer <token>` when configured.
+| Concept       | What it is                                                                                       | Identity                                  | Status today                                                |
+|---------------|--------------------------------------------------------------------------------------------------|-------------------------------------------|-------------------------------------------------------------|
+| Session       | A long-lived named agent **lane** the user sees in the agent panel. Pane-scoped CWD + status.    | `CovenSession.id` (gateway-assigned)      | ✅ Implemented (list/open/close + cached snapshot).         |
+| Conversation  | A persistent **chat thread** — the unit of memory carried across turns.                          | `AgentMessage.conversation_id` (opaque)   | 🟡 Threaded through wire types; no list/get endpoint yet.   |
+| Run           | A single discrete agent **job** — one user prompt → one streamed agent response, with lifecycle. | `run_id` (proposed; gateway-assigned)     | ⏳ Proposed. No endpoints today; see [API gaps](#api-gaps). |
+| Message       | The **transport** carrying a turn within a run (sync POST or streamed WS frames).                | `(conversation_id, sequence)`             | ✅ Implemented (sync + streaming).                          |
+| Substrate     | The **editor/workspace context** attached to messages (file, panes, branch, diagnostics, etc.).  | n/a — flows host → cast_agent → gateway   | 🟡 Collected & host-pushed; wire contract to gateway TBD.   |
 
-## Degradation
+### Why "Run" and not "Task"
 
-- If `/health` returns non-200 or times out, the agent stays usable but
-  `is_available()` returns `false`. The UI should render an amber pill.
-- `list_sessions()` falls back to its in-memory cache on transport error.
-- `get_substrate()` returns the local CWD + git branch even with no gateway,
-  and Comux pane data is folded in only when the daemon is reachable.
+`crates/ai` and the surrounding specs already use "task" (Oz conversation
+state, `task.AgentConversationID`) and "run" (`oz run list`, multi-agent
+orchestration). The Coven Gateway's discrete-job abstraction is at a
+different layer — agent-panel-side, single-conversation, single-prompt —
+and would collide with both if it also called itself "task". We use **Run**
+inside cast_agent docs and pair it explicitly with `cast-agent-run-` /
+`run_id` to disambiguate from `oz run` if the two ever surface side by side
+in a UI.
+
+### Session vs Conversation vs Run
+
+The three are orthogonal and can coexist freely:
+
+- A **Session** can host any number of **Conversations** (the lane is a
+  shell-style pane; the chat thread is the agent's memory).
+- A **Conversation** can be made up of multiple **Runs** (each turn is one
+  Run; resume = a new Run with the same `conversation_id`).
+- A **Run** carries one **Message** in, and one stream of **MessageChunks**
+  out, with one **Substrate** snapshot attached.
+
+For today's UI (chat-only, panel-scoped) Sessions + Conversations + Messages
+are enough. Runs become necessary the moment the UI needs cancel, resume
+after restart, artifacts, or "show me the agent's last 5 jobs".
+
+## API contract
+
+All endpoints are rooted at `CastAgentConfig::gateway_url` (see
+[Configuration](#configuration)).
+
+- **Auth.** `Authorization: Bearer <token>` when `CastAgentConfig::token`
+  is set; omitted otherwise. The gateway is expected to accept
+  unauthenticated requests in local-dev mode and reject them in hosted mode.
+- **Content type.** `application/json` for HTTP bodies; UTF-8 JSON text
+  frames for WebSocket.
+- **Error envelope.** HTTP errors surface via `reqwest`'s
+  `error_for_status` (4xx/5xx → `Err`). WebSocket errors arrive as
+  `MessageChunk::Error { conversation_id, message }` followed by a clean
+  server close.
+
+Each subsection below tags status:
+
+- ✅ **Implemented** — wired in `crates/cast_agent/src/gateway.rs` and
+  exercised by tests / live UI.
+- 🟡 **Partial** — types exist, wire format is documented, but consumer or
+  producer is incomplete.
+- ⏳ **Proposed** — not implemented; documented here as the contract the
+  next implementation agent should target.
+
+### Health
+
+#### `GET /health` — ✅ Implemented
+
+- **Request:** none.
+- **Response:** any 2xx body is treated as healthy; body content is ignored.
+- **Used by:** `GatewayClient::health_probe`, called at startup and on a
+  30 s background loop. Drives `CastAgent::is_available()` and the panel's
+  gateway status pill.
+
+### Messages (chat transport)
+
+These are the **transport** primitives. They carry one turn at a time and
+are scoped by `conversation_id`. There is no session_id or run_id on the
+wire today.
+
+#### `POST /v1/messages` — ✅ Implemented (no UI consumer)
+
+Single-shot chat round-trip.
+
+```jsonc
+// Request: AgentMessage
+{
+  "conversation_id": "string",
+  "body": { /* provider-shaped, opaque to cast_agent */ }
+}
+
+// Response: AgentResponse
+{
+  "conversation_id": "string",
+  "body": { /* provider-shaped, opaque to cast_agent */ }
+}
+```
+
+- **Errors:** 4xx/5xx → `Err`. No structured error envelope today.
+- **Substrate:** not attached on the wire yet (host pushes substrate
+  into cast_agent locally, but cast_agent does not forward it). See
+  [API gaps](#api-gaps).
+- **Why no UI consumer:** the panel uses the WebSocket path
+  (`stream_messages`) so deltas can render live. `POST /v1/messages` is
+  retained for headless callers and tests.
+
+#### `WS /v1/messages/stream` — ✅ Implemented (live in panel)
+
+Streaming chat. Client opens a WebSocket, sends one `AgentMessage` JSON
+text frame, then receives one `MessageChunk` per text frame until the
+server cleanly closes.
+
+```jsonc
+// Server → Client frames (one per WS text message):
+{ "type": "delta", "conversation_id": "...", "content": "partial text" }
+{ "type": "done",  "conversation_id": "..." }
+{ "type": "error", "conversation_id": "...", "message": "..." }
+```
+
+- **Tagging:** Serde-tagged enum on `type`, lowercased; see
+  [`MessageChunk`](crates/cast_agent/src/gateway.rs).
+- **End-of-stream:** a `done` frame OR an `error` frame OR a clean server
+  close OR a transport failure. Callers must not assume `done` is always
+  the last frame.
+- **Ping/pong:** handled by `tokio-tungstenite`; binary frames are
+  ignored.
+- **Cancellation (today):** the client aborts the local
+  `tokio::task::JoinHandle` that drives the read loop, then drops the
+  socket. There is **no server-side cancel**: the server may keep working
+  on the prompt and bill for it. See [API gaps](#api-gaps).
+- **Resume:** posting another `AgentMessage` with the same
+  `conversation_id` continues the thread. The gateway is responsible for
+  reconstructing memory.
+
+### Sessions (lane management)
+
+A Session is a named lane the user sees in the panel. Pane-scoped, not
+conversation-scoped — opening a session does **not** create a
+conversation.
+
+#### `GET /v1/sessions` — ✅ Implemented
+
+Returns the array of active sessions. Used by the panel's "Coven
+Sessions" list and the 60 s background refresh loop.
+
+```jsonc
+// Response: CovenSession[]
+[
+  {
+    "id":          "string",
+    "name":        "string",
+    "status":      "active" | "idle" | "closed",
+    "last_active": "RFC3339 timestamp" | null,
+    "cwd":         "/abs/path" | null
+  }
+]
+```
+
+- `cwd: null` means the gateway did not provide a working directory (old
+  gateway version, or session opened without one). The panel renders such
+  rows but treats them as inert (no click-through).
+- The client caches the last successful list and falls back to the cache
+  on transport error.
+
+#### `POST /v1/sessions` — ✅ Implemented (no UI consumer yet)
+
+Open a session by name. The gateway creates one if missing and returns
+the canonical record.
+
+```jsonc
+// Request:
+{ "name": "string" }
+
+// Response: CovenSession (same shape as the GET array element)
+```
+
+#### `DELETE /v1/sessions/:id` — ✅ Implemented (no UI consumer yet)
+
+Close a session. Idempotent — repeated calls return success even if the
+session no longer exists. Cached locally on success: the entry is dropped
+from the in-memory list.
+
+### Substrate (workspace context)
+
+Substrate is the editor/workspace slice CastCodes attaches to agent calls
+so the agent can reason about the user's current state. It is not a
+remote resource: cast_agent **collects** it locally and would **send** it
+to the gateway alongside messages — once the wire contract for that
+attachment exists (see [API gaps](#api-gaps)).
+
+`Substrate` shape (`crates/cast_agent/src/substrate.rs`):
+
+```jsonc
+{
+  "active_file":   "/abs/path" | null,
+  "open_panes": [
+    { "id": "...", "title": "...", "cwd": "/abs/path", "active": true }
+  ],
+  "shell_cwd":     "/abs/path",
+  "git_branch":    "main" | null,
+  "recent_errors": [
+    { "file": "/abs/path", "line": 12, "severity": "error" | "warning" | "info" | "hint", "message": "..." }
+  ],
+  "comux_panes": [
+    { "id": "...", "cwd": "/abs/path", "title": "...", "active": true }
+  ]
+}
+```
+
+Producer split:
+
+| Field           | Who fills it                                                          | Mechanism                                                       |
+|-----------------|-----------------------------------------------------------------------|-----------------------------------------------------------------|
+| `active_file`   | Host (`app/src/code/active_file.rs::active_file_changed`)             | `update_host_substrate` patches `active_file`.                  |
+| `open_panes`    | Host (`Workspace::publish_open_panes_to_cast_agent`)                  | Three converging triggers: tab lifecycle, active-tab CWD, 10 s. |
+| `recent_errors` | Host LSP (`LocalCodeEditorView` + `CastAgentDiagnosticsCollector`)    | Path-scoped replace; 50-entry global cap.                       |
+| `shell_cwd`     | cast_agent (`SubstrateCollector::collect`)                            | `std::env::current_dir`.                                        |
+| `git_branch`    | cast_agent (`detect_git_branch`)                                      | Walks `.git` upward; no shell-out.                              |
+| `comux_panes`   | cast_agent (`ComuxBridge`)                                            | Unix-socket request to `/tmp/comux.sock`; empty when absent.    |
+
+Today substrate does not cross the wire to the gateway. The gateway has
+**no** `GET /v1/substrate` or substrate-attached-to-message endpoint.
+The next implementation step is to define the wire surface — see
+[API gaps](#api-gaps).
+
+### Runs (discrete agent jobs) — ⏳ Proposed, not implemented
+
+A Run models one agent **job**: one user prompt → one streamed response,
+with explicit lifecycle, cancellation, status, and (eventually)
+artifacts. It is the unit CastCodes needs once the UI grows past "live
+stream + history of plain text" — i.e. when the user wants to leave the
+panel and come back, see what the agent did, cancel a stalled run, or
+recover the artifacts of a completed run after a restart.
+
+This section documents the contract the next implementation agent should
+target. **No code exists for any of it yet.** The shapes here are not a
+commitment; they are a starting point informed by what the panel and the
+existing `MessageChunk` stream already need.
+
+#### Identity
+
+```jsonc
+{
+  "run_id":          "cast-agent-run-<uuidv7>",
+  "conversation_id": "...",         // parent conversation
+  "session_id":      "..." | null,  // parent lane, if any
+  "status":          "queued" | "running" | "succeeded" | "failed" | "cancelled",
+  "created_at":      "RFC3339",
+  "completed_at":    "RFC3339" | null
+}
+```
+
+`run_id` is gateway-assigned. Clients must not invent it.
+
+#### `POST /v1/runs` — start a run
+
+Replaces (or wraps) `POST /v1/messages` once Runs land.
+
+```jsonc
+// Request
+{
+  "conversation_id": "...",          // required; client-supplied for resume, server-assigned for new conversations if omitted
+  "session_id":      "..." | null,   // optional pane scoping
+  "message":         { /* same body shape as AgentMessage.body */ },
+  "substrate":       { /* Substrate snapshot, optional but recommended */ },
+  "stream":          true | false    // default true; false returns the full response inline
+}
+
+// Response (stream: false)
+{ "run_id": "...", "status": "succeeded", "result": { ... }, "artifacts": [ ... ] }
+
+// Response (stream: true)
+{ "run_id": "...", "events_url": "/v1/runs/<id>/events" }
+```
+
+#### `GET /v1/runs` — list runs
+
+Filterable list. CastCodes needs at least:
+`?conversation_id=`, `?session_id=`, `?status=running`,
+`?limit=`, `?cursor=` (opaque pagination cursor).
+
+#### `GET /v1/runs/:id` — get run detail
+
+Status snapshot. Returns the full Run record plus a current `progress`
+field if the run is still active. Should be cheap (no log replay).
+
+#### `WS /v1/runs/:id/events` — stream events / logs
+
+Same wire shape as `WS /v1/messages/stream` but scoped to a run, so
+reconnecting after a panel close re-attaches to the existing run instead
+of starting a new one. The server must support **mid-stream replay**:
+when a client connects, the server replays buffered events since the run
+started so the panel can rebuild state.
+
+```jsonc
+// Frames (extends MessageChunk; new variants are additive)
+{ "type": "delta",    "run_id": "...", "content": "..." }
+{ "type": "tool",     "run_id": "...", "tool": "...", "args": { ... } }      // tool calls
+{ "type": "artifact", "run_id": "...", "artifact_id": "...", "kind": "..." } // links to artifact endpoint
+{ "type": "log",      "run_id": "...", "level": "info", "message": "..." }
+{ "type": "status",   "run_id": "...", "status": "running" | "succeeded" | "failed" | "cancelled" }
+{ "type": "done",     "run_id": "..." }
+{ "type": "error",    "run_id": "...", "message": "..." }
+```
+
+#### `POST /v1/runs/:id/cancel` — cancel a run
+
+Server-side cancel. Idempotent. The gateway acknowledges via
+`{ "status": "cancelling" | "cancelled" }`; the events stream emits a
+`status: cancelled` frame and a `done` frame before closing.
+
+This is the bit that today's `JoinHandle::abort` in the panel cannot
+provide: closing the WS does not stop the gateway from continuing the
+work.
+
+#### `GET /v1/runs/:id/artifacts` — list artifacts
+
+```jsonc
+[
+  {
+    "artifact_id":   "...",
+    "kind":          "file_diff" | "file_content" | "shell_command" | "...",
+    "summary":       "...",
+    "content_url":   "/v1/runs/<id>/artifacts/<artifact_id>",
+    "created_at":    "RFC3339"
+  }
+]
+```
+
+`GET /v1/runs/:id/artifacts/:artifact_id` returns the body (likely
+`application/json` for structured artifacts, `text/plain` or
+`application/octet-stream` for raw content).
+
+#### Resume / reopen
+
+A panel that died mid-stream reopens by calling
+`WS /v1/runs/:id/events` against the last `run_id` it knew about. If the
+run completed in the meantime, the server replays the buffered events
+and closes; if it is still running, the client picks up live.
+
+Resuming a **conversation** (continuing a thread) is a different
+operation: post a new run with the existing `conversation_id`.
+
+### Conversations — 🟡 Partial / ⏳ Proposed
+
+Today, `conversation_id` is the wire-level threading key on
+`AgentMessage` / `AgentResponse` / `MessageChunk`. There is no list/get
+endpoint, no history retrieval, and no documented persistence contract.
+
+Once Runs land, the minimum useful conversation surface is:
+
+- `GET /v1/conversations?session_id=&limit=&cursor=` — list of
+  conversations the user can resume.
+- `GET /v1/conversations/:id` — metadata (id, last_active, run count,
+  parent session) + most recent N runs.
+
+Conversation deletion / archival is intentionally out of scope until the
+panel has a "history" view that needs it.
+
+## Error and degraded-mode behaviour
+
+| Symptom                                  | What the client does                                                            | What the UI shows                          |
+|------------------------------------------|---------------------------------------------------------------------------------|--------------------------------------------|
+| `GET /health` non-2xx or timeout         | `is_available()` flips to `false`; retried on 30 s loop.                        | Amber gateway pill; sessions list hidden.  |
+| `GET /v1/sessions` transport error       | Returns the in-memory cache; logs at `warn`.                                    | Stale list rendered as-is; no flicker.     |
+| `POST /v1/messages` 4xx/5xx              | `Err` propagates; no retry.                                                     | (no UI consumer today)                     |
+| `WS /v1/messages/stream` connect failure | `stream_messages` returns `Err`.                                                | Stream section shows the error in-band.    |
+| `WS /v1/messages/stream` mid-stream drop | The stream yields a final `Err`; the read loop ends.                            | Live section freezes on last received delta; user must re-send. |
+| Comux socket absent / unresponsive       | `list_panes` returns `[]`; logs at `debug`.                                     | `comux_panes` is empty; everything else still works. |
+| Runtime fails to boot                    | `cast_agent::global()` returns `None`; all sync helpers return defaults.        | Treated as offline; pill stays amber.      |
+
+The runtime never panics on a gateway failure. **Degraded mode** = the
+panel and substrate publishers keep working, the gateway pill is amber,
+streamed messages stay in local history but cannot reach the gateway.
+
+## Implemented vs proposed (at a glance)
+
+| Surface                            | Status      | Notes                                                                                  |
+|------------------------------------|-------------|----------------------------------------------------------------------------------------|
+| `GET /health`                      | ✅          |                                                                                        |
+| `POST /v1/messages`                | ✅          | No UI consumer; tests + headless callers only.                                         |
+| `WS /v1/messages/stream`           | ✅          | Live in the agent panel; client-side abort only.                                       |
+| `GET /v1/sessions`                 | ✅          | 60 s background refresh + sync snapshot for UI.                                        |
+| `POST /v1/sessions`                | ✅          | Wired in `GatewayClient`, no UI consumer yet.                                          |
+| `DELETE /v1/sessions/:id`          | ✅          | Wired in `GatewayClient`, no UI consumer yet.                                          |
+| Substrate collection (client-side) | ✅          | `active_file`, `open_panes`, `recent_errors`, `shell_cwd`, `git_branch`, `comux_panes`.|
+| Substrate → gateway wire contract  | ⏳          | No endpoint, no attached-to-message envelope.                                          |
+| `POST /v1/runs`                    | ⏳          | See [Runs](#runs-discrete-agent-jobs---proposed-not-implemented).                      |
+| `GET /v1/runs` / `GET /v1/runs/:id`| ⏳          |                                                                                        |
+| `WS /v1/runs/:id/events`           | ⏳          |                                                                                        |
+| `POST /v1/runs/:id/cancel`         | ⏳          | Today: client-side `JoinHandle::abort` only.                                           |
+| `GET /v1/runs/:id/artifacts`       | ⏳          |                                                                                        |
+| `GET /v1/conversations`            | ⏳          |                                                                                        |
+| `GET /v1/conversations/:id`        | ⏳          |                                                                                        |
+
+## API gaps
+
+The brief asks four direct questions; answering them in order:
+
+**1. What APIs are missing from the docs today?**
+
+- A wire contract for **Substrate** crossing the gateway boundary.
+  Substrate is collected and merged into a single struct in cast_agent,
+  but neither `POST /v1/messages` nor `WS /v1/messages/stream` documents
+  how to attach it. The likely shape is a top-level `substrate` field
+  next to `body` on the request envelope, but neither side implements it.
+- A wire contract for **Runs** (start / list / get / events / cancel /
+  artifacts). Discussed above as proposed; nothing is implemented.
+- A wire contract for **Conversations** (list / get / history).
+- **Server-side cancellation** for in-flight work. Closing the WebSocket
+  is not cancellation — the gateway can keep running the prompt.
+- A **structured error envelope** for HTTP responses. Today errors come
+  through as bare 4xx/5xx with no body shape, so the client cannot
+  distinguish (e.g.) "rate limited" from "auth expired" without parsing
+  free-text.
+- **Pagination** on `GET /v1/sessions` (and on the proposed list
+  endpoints). Trivially missing today because the list is small, but
+  the contract should declare its shape (likely opaque `cursor` +
+  `limit`) before clients grow to depend on the unpaginated form.
+
+**2. Are tasks missing because they are not implemented yet, because
+CastCodes calls them by another name, or because docs have not caught
+up?**
+
+Not implemented yet, and intentionally **not called "tasks"**. The
+existing `crates/ai`-side `LifecycleEventType` (`Started`, `Idle`,
+`InProgress`, `Succeeded`, `Failed`, `Cancelled`, …) is the
+`warp_multi_agent_api` wire enum the upstream agent backend uses; the
+specs use `task.AgentConversationID` and `oz run list` at the Oz
+orchestration layer. Both are sibling concerns, not the cast_agent's
+in-panel job lifecycle. Cast_agent currently has no equivalent
+abstraction at all — only `conversation_id` threaded through messages,
+and the WebSocket lifetime that wraps a single turn. The right move is
+to introduce **Runs** (see above) rather than overload "task".
+
+**3. What is the minimum API set needed for a good CastCodes agent UX?**
+
+For the panel as it exists today plus the next two obvious UX upgrades
+(resume after restart, cancel in-flight work), the minimum is:
+
+1. ✅ `GET /health`
+2. ✅ `WS /v1/messages/stream`
+3. ✅ `GET /v1/sessions`
+4. ⏳ A way to attach `Substrate` to outgoing messages (wire envelope
+    on the existing message endpoints; no new endpoint required).
+5. ⏳ `POST /v1/runs/:id/cancel` (or equivalent), so cancel is real.
+6. ⏳ `WS /v1/runs/:id/events` with mid-stream replay, so a panel
+    close-and-reopen reattaches instead of losing context.
+
+Items 4–6 are the smallest credible "Runs" rollout: substrate on the
+wire + cancel + reattach. Everything else (artifacts, lists,
+conversation history) can defer.
+
+**4. What should be deferred?**
+
+- `GET /v1/conversations` and `GET /v1/conversations/:id` — only needed
+  once the panel grows a history view.
+- `GET /v1/runs/:id/artifacts` and artifact retrieval — only needed
+  once the agent produces non-text output the panel can render.
+- `POST /v1/sessions` and `DELETE /v1/sessions/:id` UI consumers — the
+  client code exists; deferring means leaving them callable from tests
+  and headless tools but not surfacing them in the panel.
+- A structured HTTP error envelope — nice-to-have; today's bare 4xx/5xx
+  is workable while the gateway is single-tenant.
+- Pagination — defer until any list endpoint produces > ~50 entries.
 
 ## Comux bridge
 
@@ -261,6 +708,8 @@ be done in a follow-up PR without partially-wiring the host crate:
    `crates/ai/Cargo.toml` and adding `#[cfg(feature = "...")]` at each
    construction site. Several of those crates are also used outside agent
    paths, so the gating has to be done call-by-call rather than wholesale.
+   See [Feature-gating audit](#feature-gating-audit-warp-agent-vs-cast-agent)
+   for the per-dep verdict and roadmap.
 
 2. **TUI rebranding.** Replacing "Warp Agent" / "Warp AI" / "Warp Drive"
    strings and the agent panel header with Cast Agent branding and a live
@@ -268,14 +717,13 @@ be done in a follow-up PR without partially-wiring the host crate:
    several `app/src/ai_assistant/` and `crates/ai/` view modules and is
    safest done as a separate pass alongside the integration above.
 
-3. **Session click-through.** Clicking a Coven session in the agent panel
-   should open a new terminal pane with the right CWD — this needs the
-   workspace pane API (`app/src/workspace`) and is part of the TUI work.
+3. **Runs / Substrate wire surface.** The proposed Runs and on-the-wire
+   Substrate contracts in [API contract](#api-contract) are the next
+   integration step once panel parity is closer. See [API gaps](#api-gaps)
+   for the minimum subset.
 
-4. **Streaming responses.** `GatewayClient::send_message` currently does a
-   single round-trip. A `stream_messages` method using `tokio-tungstenite`
-   against `/v1/messages/stream` should be added when the host wires its
-   streaming UI through.
+Session click-through (✅) and streaming responses (✅) — originally listed
+here — landed and have moved up to the [Status](#status) section.
 
 ## Feature-gating audit (`warp-agent` vs `cast-agent`)
 
