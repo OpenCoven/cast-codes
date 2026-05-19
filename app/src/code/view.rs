@@ -141,6 +141,25 @@ pub fn tab_position_id(index: usize) -> String {
     format!("file_tab_position_{index}")
 }
 
+fn preferred_code_view_path(
+    local_path: Option<PathBuf>,
+    tab_path: Option<PathBuf>,
+    source_path: Option<PathBuf>,
+) -> Option<PathBuf> {
+    local_path.or(tab_path).or(source_path)
+}
+
+fn is_markdown_code_view_path(
+    local_path: Option<PathBuf>,
+    tab_path: Option<PathBuf>,
+    source_path: Option<PathBuf>,
+) -> bool {
+    preferred_code_view_path(local_path, tab_path, source_path)
+        .as_ref()
+        .map(is_markdown_file)
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone)]
 enum TabBarDragPosition {
     BeforeTab { index: usize },
@@ -278,15 +297,7 @@ impl CodeView {
 
     #[cfg(feature = "local_fs")]
     fn update_markdown_mode_segmented_control(&mut self, ctx: &mut ViewContext<Self>) {
-        let path = self
-            .local_path(ctx)
-            .or_else(|| {
-                self.tab_at(self.active_tab_index)
-                    .and_then(|t| t.path.clone())
-            })
-            .or_else(|| self.source.path());
-
-        let is_markdown = path.as_ref().map(is_markdown_file).unwrap_or(false);
+        let is_markdown = self.is_active_markdown_tab(ctx);
 
         if !is_markdown {
             self.markdown_mode_segmented_control = None;
@@ -639,6 +650,15 @@ impl CodeView {
                     .map(|p| p.to_path_buf())
             })
         })
+    }
+
+    fn is_active_markdown_tab(&self, ctx: &AppContext) -> bool {
+        is_markdown_code_view_path(
+            self.local_path(ctx),
+            self.tab_at(self.active_tab_index)
+                .and_then(|t| t.path.clone()),
+            self.source.path(),
+        )
     }
 
     pub fn pane_configuration(&self) -> ModelHandle<PaneConfiguration> {
@@ -2123,10 +2143,7 @@ impl View for CodeView {
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let tab = self.tab_at(self.active_tab_index);
-        let is_markdown_tab = tab
-            .and_then(|t| t.path.as_deref())
-            .map(is_markdown_file)
-            .unwrap_or(false);
+        let is_markdown_tab = self.is_active_markdown_tab(app);
         let body = if let Some(tab) = tab {
             let mut column = Flex::column().with_main_axis_size(MainAxisSize::Max);
             if let CodeSource::AIAction { .. } = self.source {
@@ -2407,4 +2424,36 @@ fn render_unsaved_changes_icon(color: ColorU) -> Box<dyn Element> {
     .with_width(8.)
     .with_height(8.)
     .finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn markdown_path_detection_prefers_live_local_path() {
+        assert!(!is_markdown_code_view_path(
+            Some(PathBuf::from("src/main.rs")),
+            Some(PathBuf::from("README.md")),
+            None,
+        ));
+    }
+
+    #[test]
+    fn markdown_path_detection_falls_back_to_tab_path() {
+        assert!(is_markdown_code_view_path(
+            None,
+            Some(PathBuf::from("README.md")),
+            Some(PathBuf::from("src/main.rs")),
+        ));
+    }
+
+    #[test]
+    fn markdown_path_detection_falls_back_to_source_path() {
+        assert!(is_markdown_code_view_path(
+            None,
+            None,
+            Some(PathBuf::from("CHANGELOG")),
+        ));
+    }
 }
