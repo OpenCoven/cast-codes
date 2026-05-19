@@ -5,8 +5,7 @@ pub const PANEL_TITLE: &str = "Chat";
 pub const TOGGLE_MENU_ITEM: &str = "Toggle Chat Panel";
 
 pub const EMPTY_NO_CLI_TITLE: &str = "No supported CLI detected";
-pub const EMPTY_NO_CLI_BODY: &str =
-    "Install one of the supported CLIs to start chatting. \
+pub const EMPTY_NO_CLI_BODY: &str = "Install one of the supported CLIs to start chatting. \
      The chat panel renders the conversation from a CLI session running in any CastCodes terminal.";
 
 pub const EMPTY_NO_PLUGIN_TITLE: &str = "Plugin required";

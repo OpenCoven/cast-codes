@@ -1088,10 +1088,9 @@ impl Element for Text {
                 modifiers,
                 click_count,
                 ..
-            })
-                if *click_count == 1 => {
-                    self.handle_mouse_down(position, modifiers, ctx, app);
-                }
+            }) if *click_count == 1 => {
+                self.handle_mouse_down(position, modifiers, ctx, app);
+            }
             Some(Event::MouseMoved { position, .. }) => {
                 self.handle_mouse_moved(position, ctx, app);
             }

@@ -6,7 +6,7 @@
 
 use crate::blocks::create_block;
 use crate::parsers::inline::parse_inline;
-use crate::parsers::tokenizer::{tokenize, Token, TokenType};
+use crate::parsers::tokenizer::{Token, TokenType, tokenize};
 use crate::types::{
     Block, BlockProps, BlockType, CalloutProps, CalloutType, CheckListProps, CodeBlockProps,
     Document, DocumentOptions, HeadingProps, ImageProps, MarkdownParseOptions, TableAlignment,
@@ -266,9 +266,10 @@ fn parse_code_block(cur: &mut Cursor<'_>, options: &MarkdownParseOptions) -> Blo
     }
 
     if let Some(t) = cur.peek()
-        && t.token_type == TokenType::CodeFenceEnd {
-            cur.advance();
-        }
+        && t.token_type == TokenType::CodeFenceEnd
+    {
+        cur.advance();
+    }
 
     block_with_id(
         options,
@@ -597,64 +598,82 @@ mod tests {
     }
 }
 
-    // ── new tests for fixed behaviours ─────────────────────────────────────
+// ── new tests for fixed behaviours ─────────────────────────────────────
 
-    #[test]
-    fn image_with_title_round_trips() {
-        let blocks = parse(r#"![logo](https://example.com/logo.png "Brand Logo")"#);
-        assert_eq!(blocks.len(), 1);
-        match &blocks[0].props {
-            BlockProps::Image(p) => {
-                assert_eq!(p.url, "https://example.com/logo.png");
-                assert_eq!(p.alt.as_deref(), Some("logo"));
-                assert_eq!(p.title.as_deref(), Some("Brand Logo"));
-            }
-            _ => panic!("expected Image block"),
+#[test]
+fn image_with_title_round_trips() {
+    let blocks = parse(r#"![logo](https://example.com/logo.png "Brand Logo")"#);
+    assert_eq!(blocks.len(), 1);
+    match &blocks[0].props {
+        BlockProps::Image(p) => {
+            assert_eq!(p.url, "https://example.com/logo.png");
+            assert_eq!(p.alt.as_deref(), Some("logo"));
+            assert_eq!(p.title.as_deref(), Some("Brand Logo"));
         }
-        // Serializer should emit the title back out.
-        let back = crate::serializers::markdown::blocks_to_markdown(
-            &blocks,
-            &crate::types::MarkdownSerializeOptions::default(),
-        );
-        assert!(back.contains("\"Brand Logo\""), "serialized: {back}");
+        _ => panic!("expected Image block"),
     }
+    // Serializer should emit the title back out.
+    let back = crate::serializers::markdown::blocks_to_markdown(
+        &blocks,
+        &crate::types::MarkdownSerializeOptions::default(),
+    );
+    assert!(back.contains("\"Brand Logo\""), "serialized: {back}");
+}
 
-    #[test]
-    fn table_preserves_empty_cells() {
-        let md = "| a |  | c |\n|---|---|---|\n| 1 |  | 3 |";
-        let blocks = parse(md);
-        assert_eq!(blocks.len(), 1);
-        match &blocks[0].props {
-            BlockProps::Table(t) => {
-                assert_eq!(t.headers.len(), 3, "headers: {:?}", t.headers);
-                assert_eq!(t.rows[0].len(), 3, "row: {:?}", t.rows[0]);
-                assert_eq!(t.headers[1], "", "middle header should be empty");
-                assert_eq!(t.rows[0][1], "", "middle cell should be empty");
-            }
-            _ => panic!("expected Table block"),
+#[test]
+fn table_preserves_empty_cells() {
+    let md = "| a |  | c |\n|---|---|---|\n| 1 |  | 3 |";
+    let blocks = parse(md);
+    assert_eq!(blocks.len(), 1);
+    match &blocks[0].props {
+        BlockProps::Table(t) => {
+            assert_eq!(t.headers.len(), 3, "headers: {:?}", t.headers);
+            assert_eq!(t.rows[0].len(), 3, "row: {:?}", t.rows[0]);
+            assert_eq!(t.headers[1], "", "middle header should be empty");
+            assert_eq!(t.rows[0][1], "", "middle cell should be empty");
         }
+        _ => panic!("expected Table block"),
     }
+}
 
-    #[test]
-    fn nested_bullet_list_items_are_children_not_dropped() {
-        let md = "- a\n  - b\n  - c\n- d";
-        let blocks = parse(md);
-        assert_eq!(blocks.len(), 1);
-        let list = &blocks[0];
-        // top-level: items for "a" and "d"
-        assert_eq!(list.children.len(), 2, "top-level items: {}", list.children.len());
-        // "a" item should have a nested list child
-        let item_a = &list.children[0];
-        assert_eq!(item_a.children.len(), 1, "item_a should have 1 nested list child");
-    }
+#[test]
+fn nested_bullet_list_items_are_children_not_dropped() {
+    let md = "- a\n  - b\n  - c\n- d";
+    let blocks = parse(md);
+    assert_eq!(blocks.len(), 1);
+    let list = &blocks[0];
+    // top-level: items for "a" and "d"
+    assert_eq!(
+        list.children.len(),
+        2,
+        "top-level items: {}",
+        list.children.len()
+    );
+    // "a" item should have a nested list child
+    let item_a = &list.children[0];
+    assert_eq!(
+        item_a.children.len(),
+        1,
+        "item_a should have 1 nested list child"
+    );
+}
 
-    #[test]
-    fn nested_numbered_list_items_are_children_not_dropped() {
-        let md = "1. a\n   1. b\n1. c";
-        let blocks = parse(md);
-        assert_eq!(blocks.len(), 1);
-        let list = &blocks[0];
-        assert_eq!(list.children.len(), 2, "top-level items: {}", list.children.len());
-        let item_a = &list.children[0];
-        assert_eq!(item_a.children.len(), 1, "item_a should have 1 nested list child");
-    }
+#[test]
+fn nested_numbered_list_items_are_children_not_dropped() {
+    let md = "1. a\n   1. b\n1. c";
+    let blocks = parse(md);
+    assert_eq!(blocks.len(), 1);
+    let list = &blocks[0];
+    assert_eq!(
+        list.children.len(),
+        2,
+        "top-level items: {}",
+        list.children.len()
+    );
+    let item_a = &list.children[0];
+    assert_eq!(
+        item_a.children.len(),
+        1,
+        "item_a should have 1 nested list child"
+    );
+}

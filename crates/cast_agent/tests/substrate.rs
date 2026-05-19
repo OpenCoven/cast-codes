@@ -35,8 +35,8 @@ fn host_substrate_starts_empty_and_overlays_on_build() {
 
     // Boot a real runtime (its inner tokio runtime + health probe spawn,
     // but the unreachable gateway just leaves `is_available` false).
-    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
-        .expect("runtime boots");
+    let runtime =
+        CastAgentRuntime::new_isolated(Some(CastAgentConfig::default())).expect("runtime boots");
 
     // Fresh runtime: host substrate is `Default::default()`.
     let empty = runtime.host_substrate();
@@ -97,8 +97,8 @@ fn host_substrate_starts_empty_and_overlays_on_build() {
 fn update_host_substrate_patches_one_field_without_clobbering_others() {
     install_crypto_provider_once();
 
-    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
-        .expect("runtime boots");
+    let runtime =
+        CastAgentRuntime::new_isolated(Some(CastAgentConfig::default())).expect("runtime boots");
 
     // Seed open_panes and recent_errors first so we have something to lose.
     runtime.set_host_substrate(HostSubstrate {
@@ -136,8 +136,8 @@ fn update_host_substrate_patches_one_field_without_clobbering_others() {
 fn pane_info_carries_terminal_cwd_through_build_substrate() {
     install_crypto_provider_once();
 
-    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
-        .expect("runtime boots");
+    let runtime =
+        CastAgentRuntime::new_isolated(Some(CastAgentConfig::default())).expect("runtime boots");
 
     // Simulate the post-#38-enrichment shape: each pane carries its
     // terminal session's CWD. The gateway should see the same CWDs back
@@ -174,8 +174,8 @@ fn pane_info_carries_terminal_cwd_through_build_substrate() {
 fn update_host_substrate_path_replaces_recent_errors() {
     install_crypto_provider_once();
 
-    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
-        .expect("runtime boots");
+    let runtime =
+        CastAgentRuntime::new_isolated(Some(CastAgentConfig::default())).expect("runtime boots");
 
     let path_a = PathBuf::from("/repo/a.rs");
     let path_b = PathBuf::from("/repo/b.rs");
@@ -240,8 +240,8 @@ fn update_host_substrate_path_replaces_recent_errors() {
 fn update_host_substrate_replaces_open_panes_atomically() {
     install_crypto_provider_once();
 
-    let runtime = CastAgentRuntime::new_isolated(Some(CastAgentConfig::default()))
-        .expect("runtime boots");
+    let runtime =
+        CastAgentRuntime::new_isolated(Some(CastAgentConfig::default())).expect("runtime boots");
 
     // Seed an active_file and an initial open_panes list, then replace
     // open_panes wholesale — simulates how `Workspace::publish_open_panes_to_cast_agent`

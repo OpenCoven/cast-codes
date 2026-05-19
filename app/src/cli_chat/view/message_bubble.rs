@@ -15,7 +15,12 @@ use warpui::elements::{Container, Element, Text};
 use warpui::fonts::FamilyId;
 
 /// Convenience: build a single padded text row with the given content.
-fn text_row(text: impl Into<std::borrow::Cow<'static, str>>, family: FamilyId, size: f32, pad: f32) -> Box<dyn Element> {
+fn text_row(
+    text: impl Into<std::borrow::Cow<'static, str>>,
+    family: FamilyId,
+    size: f32,
+    pad: f32,
+) -> Box<dyn Element> {
     Container::new(Text::new(text, family, size).finish())
         .with_uniform_padding(pad)
         .finish()
@@ -43,11 +48,7 @@ pub fn tool_placeholder(
     text_row(label, family, font_size, 6.0)
 }
 
-pub fn permission_placeholder(
-    summary: &str,
-    family: FamilyId,
-    font_size: f32,
-) -> Box<dyn Element> {
+pub fn permission_placeholder(summary: &str, family: FamilyId, font_size: f32) -> Box<dyn Element> {
     text_row(format!("[permission] {}", summary), family, font_size, 6.0)
 }
 
@@ -57,5 +58,9 @@ pub fn info_line(text: Option<&str>, family: FamilyId, font_size: f32) -> Box<dy
 }
 
 pub fn stop_marker(family: FamilyId, font_size: f32) -> Box<dyn Element> {
-    info_line(Some(crate::cli_chat::strings::TRANSCRIPT_TURN_COMPLETE), family, font_size)
+    info_line(
+        Some(crate::cli_chat::strings::TRANSCRIPT_TURN_COMPLETE),
+        family,
+        font_size,
+    )
 }

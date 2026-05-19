@@ -143,11 +143,7 @@ pub fn highlight(content: impl Into<String>) -> TextSpan {
 /// Creates a link text span.
 ///
 /// `title` is optional and matches the JS upstream's third positional arg.
-pub fn link(
-    content: impl Into<String>,
-    url: impl Into<String>,
-    title: Option<String>,
-) -> TextSpan {
+pub fn link(content: impl Into<String>, url: impl Into<String>, title: Option<String>) -> TextSpan {
     TextSpan {
         text: content.into(),
         styles: InlineStyle {
@@ -281,7 +277,10 @@ where
     I: IntoIterator<Item = V>,
     V: Into<ListItem>,
 {
-    let children = items.into_iter().map(|i| list_item_to_block(i.into())).collect();
+    let children = items
+        .into_iter()
+        .map(|i| list_item_to_block(i.into()))
+        .collect();
     create_block(
         BlockType::BulletList,
         Vec::new(),
@@ -296,7 +295,10 @@ where
     I: IntoIterator<Item = V>,
     V: Into<ListItem>,
 {
-    let children = items.into_iter().map(|i| list_item_to_block(i.into())).collect();
+    let children = items
+        .into_iter()
+        .map(|i| list_item_to_block(i.into()))
+        .collect();
     create_block(
         BlockType::NumberedList,
         Vec::new(),
@@ -559,12 +561,30 @@ mod tests {
 
     #[test]
     fn h1_through_h6_match_explicit_heading() {
-        assert!(matches!(h1("a").props, BlockProps::Heading(HeadingProps { level: 1 })));
-        assert!(matches!(h2("a").props, BlockProps::Heading(HeadingProps { level: 2 })));
-        assert!(matches!(h3("a").props, BlockProps::Heading(HeadingProps { level: 3 })));
-        assert!(matches!(h4("a").props, BlockProps::Heading(HeadingProps { level: 4 })));
-        assert!(matches!(h5("a").props, BlockProps::Heading(HeadingProps { level: 5 })));
-        assert!(matches!(h6("a").props, BlockProps::Heading(HeadingProps { level: 6 })));
+        assert!(matches!(
+            h1("a").props,
+            BlockProps::Heading(HeadingProps { level: 1 })
+        ));
+        assert!(matches!(
+            h2("a").props,
+            BlockProps::Heading(HeadingProps { level: 2 })
+        ));
+        assert!(matches!(
+            h3("a").props,
+            BlockProps::Heading(HeadingProps { level: 3 })
+        ));
+        assert!(matches!(
+            h4("a").props,
+            BlockProps::Heading(HeadingProps { level: 4 })
+        ));
+        assert!(matches!(
+            h5("a").props,
+            BlockProps::Heading(HeadingProps { level: 5 })
+        ));
+        assert!(matches!(
+            h6("a").props,
+            BlockProps::Heading(HeadingProps { level: 6 })
+        ));
     }
 
     #[test]

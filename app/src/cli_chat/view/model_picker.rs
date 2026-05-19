@@ -46,11 +46,7 @@ pub fn render(view: &ChatPanelView, app: &AppContext) -> Box<dyn Element> {
     let bar = Flex::row()
         .with_main_axis_size(MainAxisSize::Max)
         .with_cross_axis_alignment(CrossAxisAlignment::Center)
-        .with_child(
-            Container::new(label_element)
-                .with_margin_left(8.0)
-                .finish(),
-        )
+        .with_child(Container::new(label_element).with_margin_left(8.0).finish())
         .with_child(
             // Push the button to the right by inserting a flexible spacer.
             // We use an empty container with flex weight.
@@ -82,8 +78,9 @@ fn current_agent_model_label(
     _app: &AppContext,
 ) -> String {
     let conv = match binding {
-        ConversationBinding::Live { session_id, .. }
-        | ConversationBinding::Past { session_id } => chat.conversation(session_id),
+        ConversationBinding::Live { session_id, .. } | ConversationBinding::Past { session_id } => {
+            chat.conversation(session_id)
+        }
         ConversationBinding::None => None,
     };
 
@@ -97,7 +94,11 @@ fn current_agent_model_label(
     } else {
         let (agent, _) = AgentKind::default_agent_and_model();
         let default_model_display = agent.curated_models()[0].display_name;
-        format!("{} \u{2014} {}", agent.display_name(), default_model_display)
+        format!(
+            "{} \u{2014} {}",
+            agent.display_name(),
+            default_model_display
+        )
     }
 }
 
@@ -114,11 +115,9 @@ fn render_new_chat_button(
     let mouse_state = Arc::new(Mutex::new(MouseState::default()));
 
     Hoverable::new(mouse_state, move |_| {
-        Container::new(
-            Text::new(strings::NEW_CHAT_BUTTON_LABEL, font_family, font_size).finish(),
-        )
-        .with_uniform_padding(4.0)
-        .finish()
+        Container::new(Text::new(strings::NEW_CHAT_BUTTON_LABEL, font_family, font_size).finish())
+            .with_uniform_padding(4.0)
+            .finish()
     })
     .with_cursor(Cursor::PointingHand)
     .on_click(move |ctx, _, _| {

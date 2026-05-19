@@ -421,11 +421,7 @@ impl ChatModel {
     }
 
     #[cfg(test)]
-    pub(crate) fn bind_live_for_testing(
-        &mut self,
-        session_id: String,
-        terminal_view_id: EntityId,
-    ) {
+    pub(crate) fn bind_live_for_testing(&mut self, session_id: String, terminal_view_id: EntityId) {
         self.binding = ConversationBinding::Live {
             session_id,
             terminal_view_id,

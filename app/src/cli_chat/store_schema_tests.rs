@@ -33,11 +33,9 @@ fn migrate_is_idempotent() {
     migrate(&conn).unwrap();
 
     let v: i32 = conn
-        .query_row(
-            "SELECT MAX(version) FROM chat_schema_version",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT MAX(version) FROM chat_schema_version", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(v, CURRENT_VERSION);
 }

@@ -3451,7 +3451,7 @@ impl Workspace {
     ) {
         if matches!(
             event,
-                CLIAgentSessionsModelEvent::Started { .. }
+            CLIAgentSessionsModelEvent::Started { .. }
                 | CLIAgentSessionsModelEvent::StatusChanged { .. }
                 | CLIAgentSessionsModelEvent::Ended { .. }
                 | CLIAgentSessionsModelEvent::SessionUpdated { .. }
@@ -13192,10 +13192,7 @@ impl Workspace {
     #[cfg(not(target_family = "wasm"))]
     pub(crate) fn toggle_browser_pane(&mut self, ctx: &mut ViewContext<Self>) {
         let group = self.active_tab_pane_group();
-        let existing = group
-            .as_ref(ctx)
-            .pane_ids()
-            .find(|id| id.is_browser_pane());
+        let existing = group.as_ref(ctx).pane_ids().find(|id| id.is_browser_pane());
         match existing {
             Some(pane_id) => {
                 // Snapshot model BEFORE close so the persisted tab list
@@ -21319,11 +21316,8 @@ impl TypedActionView for Workspace {
                         // Search across all tabs / pane groups for the matching
                         // terminal view and submit the prompt to its PTY.
                         let found = self.tabs.iter().find_map(|tab| {
-                            let views =
-                                tab.pane_group.read(ctx, |pg, ctx| pg.terminal_views(ctx));
-                            views
-                                .into_iter()
-                                .find(|tv| tv.id() == terminal_view_id)
+                            let views = tab.pane_group.read(ctx, |pg, ctx| pg.terminal_views(ctx));
+                            views.into_iter().find(|tv| tv.id() == terminal_view_id)
                         });
                         if let Some(tv) = found {
                             tv.update(ctx, |view, ctx| {

@@ -185,20 +185,24 @@ impl CastAgentRuntime {
 pub fn global() -> Option<&'static CastAgentRuntime> {
     static INSTANCE: OnceLock<Option<CastAgentRuntime>> = OnceLock::new();
     INSTANCE
-        .get_or_init(|| match CastAgentRuntime::boot(Some(CastAgentConfig::load())) {
-            Ok(rt) => Some(rt),
-            Err(err) => {
-                log::warn!("cast_agent: runtime failed to start: {err}");
-                None
-            }
-        })
+        .get_or_init(
+            || match CastAgentRuntime::boot(Some(CastAgentConfig::load())) {
+                Ok(rt) => Some(rt),
+                Err(err) => {
+                    log::warn!("cast_agent: runtime failed to start: {err}");
+                    None
+                }
+            },
+        )
         .as_ref()
 }
 
 /// Sync convenience that the agent panel can call on every render.
 /// Returns `false` if the runtime never started.
 pub fn is_available() -> bool {
-    global().map(CastAgentRuntime::is_available).unwrap_or(false)
+    global()
+        .map(CastAgentRuntime::is_available)
+        .unwrap_or(false)
 }
 
 /// Sync convenience for the agent panel's session list. Returns an empty

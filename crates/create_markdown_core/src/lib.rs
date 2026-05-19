@@ -20,7 +20,7 @@ pub use parsers::markdown::{
     markdown_to_blocks, markdown_to_document, parse, parse_inline_content,
 };
 pub use parsers::tokenizer::{
-    group_tokens, is_code_token, is_list_token, tokenize, Token, TokenMeta, TokenType,
+    Token, TokenMeta, TokenType, group_tokens, is_code_token, is_list_token, tokenize,
 };
 
 /// Convenience: parse markdown into a [`Document`]. Mirrors the JS `fromMarkdown`.
@@ -38,21 +38,20 @@ pub use serializers::markdown::{
     serialize_span, stringify,
 };
 
+pub use blocks::{
+    CheckItem, ImageOptions, IntoContent, ListItem, add_children, append_content, block_quote,
+    bold, bullet_list, callout, check_list, check_list_item, code, code_block, create_block,
+    danger_callout, divider, h1, h2, h3, h4, h5, h6, heading, highlight, image, info_callout,
+    italic, link, note_callout, numbered_list, paragraph, prepend_content, set_content, spans,
+    strikethrough, styled, table, text, tip_callout, underline, update_props, warning_callout,
+};
 pub use document::{
-    append_block, append_block_content, clear_blocks, clone_document, create_document,
+    BlockUpdate, append_block, append_block_content, clear_blocks, clone_document, create_document,
     empty_document, filter_blocks, find_block, find_blocks_by_type, get_block_at, get_block_count,
     get_block_index, get_first_block, get_last_block, get_meta_field, has_block, insert_block,
     insert_blocks, is_empty, map_blocks, move_block, prepend_block, remove_block, remove_blocks,
     replace_block, set_block_content, set_blocks, set_meta_field, swap_blocks, update_block,
-    update_meta, BlockUpdate,
-};
-pub use blocks::{
-    add_children, append_content, block_quote, bold, bullet_list, callout, check_list,
-    check_list_item, code, code_block, create_block, danger_callout, divider, h1, h2, h3, h4, h5,
-    h6, heading, highlight, image, info_callout, italic, link, note_callout, numbered_list,
-    paragraph, prepend_content, set_content, spans, strikethrough, styled, table, text,
-    tip_callout, underline, update_props, warning_callout, CheckItem, ImageOptions, IntoContent,
-    ListItem,
+    update_meta,
 };
 pub use types::{
     Block, BlockProps, BlockType, BlockquoteBlock, BulletChar, BulletListBlock, CalloutBlock,
