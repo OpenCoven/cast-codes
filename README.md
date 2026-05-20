@@ -31,10 +31,12 @@ headless installs.
 
 ### Verify the download
 
-Download both the package and its `.sha256` file, then run:
+Download both the package and its `.sha256` file, then compare the checksum:
 
 ```bash
-sha256sum -c cast-codes_<version>_amd64.deb.sha256
+expected="$(awk '{print $1}' cast-codes_<version>_amd64.deb.sha256)"
+actual="$(sha256sum cast-codes_<version>_amd64.deb | awk '{print $1}')"
+test "$actual" = "$expected"
 ```
 
 ### Debian / Ubuntu
