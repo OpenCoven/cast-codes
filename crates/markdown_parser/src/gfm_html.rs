@@ -44,18 +44,6 @@ pub(crate) struct HtmlSpan<'a> {
     pub(crate) kind: HtmlSpanKind,
 }
 
-impl HtmlSpan<'_> {
-    pub(crate) fn is_block(&self) -> bool {
-        matches!(self.kind, HtmlSpanKind::BlockSafe)
-    }
-    pub(crate) fn is_phrasing(&self) -> bool {
-        matches!(self.kind, HtmlSpanKind::PhrasingSafe)
-    }
-    pub(crate) fn is_stripped(&self) -> bool {
-        matches!(self.kind, HtmlSpanKind::Stripped)
-    }
-}
-
 pub(crate) fn classify(tag: &str) -> HtmlSpanKind {
     let lower = tag.to_ascii_lowercase();
     if PHRASING_SAFE_TAGS.iter().any(|t| *t == lower) {

@@ -31,16 +31,6 @@ pub(crate) struct FootnoteContext {
     pub(crate) used: Vec<FootnoteDef>,
 }
 
-impl FootnoteContext {
-    pub(crate) fn empty() -> Self {
-        Self {
-            definitions: HashMap::new(),
-            numbers: HashMap::new(),
-            used: Vec::new(),
-        }
-    }
-}
-
 /// Strip footnote definitions from the source. Returns the source minus the
 /// definition lines and the collected definition map.
 pub(crate) fn extract_definitions(source: &str) -> (String, HashMap<String, FootnoteDef>) {

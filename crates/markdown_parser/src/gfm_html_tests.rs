@@ -48,7 +48,7 @@ fn lex_missing_close_returns_open_only() {
 #[test]
 fn lex_comment_stripped() {
     let (span, rest) = try_lex_html_span("<!-- secret -->after").unwrap();
-    assert!(span.is_stripped());
+    assert_eq!(span.kind, HtmlSpanKind::Stripped);
     assert_eq!(rest, "after");
 }
 
