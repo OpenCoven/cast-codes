@@ -123,6 +123,62 @@ fn type_matches(attributes: &[Attribute], value: &str) -> bool {
     get_attribute(attributes, "type") == Some(value)
 }
 
+/// Parse an HTML fragment and return its block-level lines.
+///
+/// Used by the markdown parser when it encounters a block-level HTML span in a `.md` file.
+/// Unlike `parse_html`, this assumes the caller already classified the span as block-level
+/// and does not perform any top-level element skipping.
+pub(crate) fn parse_html_block_lines(html: &str) -> Vec<FormattedTextLine> {
+    parse_html(html)
+        .map(|formatted| formatted.lines.into_iter().collect())
+        .unwrap_or_default()
+}
+
+/// Parse an HTML fragment and return its inline phrasing fragments.
+///
+/// Used by the markdown parser when it encounters an inline-level HTML span in a `.md` file.
+/// Walks `html5ever`'s tree and applies `parse_phrasing_content` to every text/element node it
+/// finds, ignoring block structure.
+pub(crate) fn parse_html_inline_fragments(html: &str) -> Vec<FormattedTextFragment> {
+    let opts = ParseOpts {
+        tree_builder: TreeBuilderOpts {
+            drop_doctype: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let dom = match parse_document(RcDom::default(), opts)
+        .from_utf8()
+        .read_from(&mut html.as_bytes())
+    {
+        Ok(dom) => dom,
+        Err(_) => return Vec::new(),
+    };
+
+    // html5ever wraps fragments in <html><head></head><body>…</body></html>.
+    // Walk down to <body> and collect its children for phrasing.
+    let body = find_body(&dom.document);
+    let children: Vec<Rc<Node>> = match body {
+        Some(body) => body.children.borrow().iter().cloned().collect(),
+        None => return Vec::new(),
+    };
+    parse_phrasing_content(&children, Styling::default())
+}
+
+fn find_body(node: &Rc<Node>) -> Option<Rc<Node>> {
+    if let NodeData::Element { name, .. } = &node.data
+        && name.local.as_ref() == "body"
+    {
+        return Some(Rc::clone(node));
+    }
+    for child in node.children.borrow().iter() {
+        if let Some(found) = find_body(child) {
+            return Some(found);
+        }
+    }
+    None
+}
+
 // Top-level function to parse a HTML string into a FormattedText document.
 pub fn parse_html(html: &str) -> Result<FormattedText> {
     let opts = ParseOpts {
