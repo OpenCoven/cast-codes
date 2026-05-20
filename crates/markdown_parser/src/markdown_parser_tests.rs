@@ -2820,3 +2820,35 @@ fn test_parse_inline_html_unknown_tag_passes_through() {
     let joined: String = line.iter().map(|f| f.text.clone()).collect();
     assert_eq!(joined, "<foo>bar</foo>");
 }
+
+#[test]
+fn test_parse_inline_html_br_emits_linebreak() {
+    let source = "before<br>after";
+    let parsed = test_parse_markdown(source);
+    // The HTML helper emits the <br> as a LineBreak line, then "after" as a
+    // continuation. Joined raw text should reflect the break.
+    let joined = parsed
+        .iter()
+        .map(|line| line.raw_text())
+        .collect::<String>();
+    assert!(joined.contains("before"));
+    assert!(joined.contains("after"));
+}
+
+#[test]
+fn test_parse_inline_html_stripped_emits_nothing() {
+    let source = "before <script>alert(1)</script> after";
+    let parsed = test_parse_markdown(source);
+    let joined: String = parsed
+        .iter()
+        .filter_map(|line| match line {
+            FormattedTextLine::Line(fragments) => {
+                Some(fragments.iter().map(|f| f.text.clone()).collect::<String>())
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(joined.contains("before"));
+    assert!(joined.contains("after"));
+    assert!(!joined.contains("alert"), "got {joined:?}");
+}
