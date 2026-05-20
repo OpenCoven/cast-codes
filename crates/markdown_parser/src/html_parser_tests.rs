@@ -203,22 +203,6 @@ fn test_unsupported_html_types() {
             ])
         ]
     );
-
-    assert_eq!(
-        test_parse_html(
-            "<meta charset='utf-8'><table><thead><tr><th>Text 1</th><th>Text 2</th></tr></thead><tbody><tr><td>Test</td><td>Test</td></tr></tbody></table>"
-        ),
-        vec![
-            FormattedTextLine::Line(vec![
-                FormattedTextFragment::plain_text("Text 1"),
-                FormattedTextFragment::plain_text("Text 2")
-            ]),
-            FormattedTextLine::Line(vec![
-                FormattedTextFragment::plain_text("Test"),
-                FormattedTextFragment::plain_text("Test")
-            ])
-        ]
-    );
 }
 
 #[test]
@@ -581,4 +565,89 @@ fn test_confluence_code_block() {
             code: "This is a code block".to_string()
         }),]
     );
+}
+
+#[test]
+fn test_parse_html_details_with_summary() {
+    let html = "<details><summary>Click me</summary><p>Hidden text</p></details>";
+    let parsed = parse_html(html).expect("HTML should parse");
+    let lines: Vec<_> = parsed.lines.iter().collect();
+    // First line: "▾ Click me"
+    match lines.first() {
+        Some(FormattedTextLine::Line(fragments)) => {
+            let joined: String = fragments.iter().map(|f| f.text.clone()).collect();
+            assert!(joined.starts_with("▾ "), "expected disclosure glyph, got {joined:?}");
+            assert!(joined.contains("Click me"), "expected summary text, got {joined:?}");
+        }
+        other => panic!("expected first line to be Line(_), got {other:?}"),
+    }
+    // The body must follow.
+    assert!(lines.len() >= 2, "expected details body line, got {lines:?}");
+}
+
+#[test]
+fn test_parse_html_raw_table() {
+    let html = "<table><thead><tr><th>A</th><th>B</th></tr></thead>\
+                <tbody><tr><td>1</td><td>2</td></tr></tbody></table>";
+    let parsed = parse_html(html).expect("HTML should parse");
+    let table = parsed
+        .lines
+        .iter()
+        .find_map(|line| match line {
+            FormattedTextLine::Table(t) => Some(t),
+            _ => None,
+        })
+        .expect("expected a Table line");
+    assert_eq!(table.headers.len(), 2);
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0].len(), 2);
+}
+
+#[test]
+fn test_parse_html_img_block() {
+    let html = r#"<img src="cat.png" alt="A cat">"#;
+    let parsed = parse_html(html).expect("HTML should parse");
+    let image = parsed
+        .lines
+        .iter()
+        .find_map(|line| match line {
+            FormattedTextLine::Image(img) => Some(img),
+            _ => None,
+        })
+        .expect("expected an Image line");
+    assert_eq!(image.source, "cat.png");
+    assert_eq!(image.alt_text, "A cat");
+}
+
+#[test]
+fn test_parse_html_phrasing_tags() {
+    let html = "<p>Press <kbd>Cmd</kbd> for <sub>2</sub> + <sup>3</sup>, \
+                <del>old</del>, <mark>marked</mark>.</p>";
+    let parsed = parse_html(html).expect("HTML should parse");
+    let fragments: Vec<_> = parsed
+        .lines
+        .iter()
+        .filter_map(|line| match line {
+            FormattedTextLine::Line(frags) => Some(frags),
+            _ => None,
+        })
+        .flatten()
+        .cloned()
+        .collect();
+    let by_text = |needle: &str| {
+        fragments
+            .iter()
+            .find(|f| f.text == needle)
+            .cloned()
+            .unwrap_or_else(|| panic!("no fragment {needle:?} in {fragments:?}"))
+    };
+
+    assert!(by_text("Cmd").styles.inline_code, "kbd → inline_code");
+    assert!(by_text("2").styles.italic, "sub → italic");
+    assert!(by_text("3").styles.italic, "sup → italic");
+    assert!(by_text("old").styles.strikethrough, "del → strikethrough");
+    // <mark> has no equivalent style flag for v1 — passes through as plain text.
+    let marked = by_text("marked");
+    assert!(!marked.styles.inline_code);
+    assert_eq!(marked.styles.weight, None);
 }

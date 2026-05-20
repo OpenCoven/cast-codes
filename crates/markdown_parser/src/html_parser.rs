@@ -22,10 +22,11 @@ use crate::{
 // Note that we have "<b>" here because GDocs always include a top level <b> element to add additional
 // GDocs specific meta-data for its rich text content.
 const TOP_LEVEL_ELEMENT_TAGS_TO_SKIP: &[&str] = &[
-    "head", "body", "html", "meta", "table", "b", "div", "ul", "ol", "li", "input",
+    "head", "body", "html", "meta", "b", "div", "ul", "ol", "li", "input",
 ];
 const PHRASING_ELEMENT_TAGS: &[&str] = &[
     "span", "i", "code", "strong", "em", "br", "a", "s", "u", "ins",
+    "del", "kbd", "sub", "sup", "mark", "small", "q",
 ];
 
 pub const WARP_EMBED_ATTRIBUTE_NAME: &str = "data-warp-embedded-item";
@@ -317,6 +318,49 @@ pub fn parse_html(html: &str) -> Result<FormattedText> {
                     pending_inline_nodes.clear();
                 }
 
+                if node_name.as_str() == "details" {
+                    // Always-expanded rendering: emit a "▾ <summary>" line, then walk the children
+                    // (excluding the <summary> element itself) into block lines.
+                    let children_ref = node.children.borrow();
+                    let summary_node = children_ref.iter().find(|child| {
+                        matches!(&child.data, NodeData::Element { name, .. } if name.local.as_ref() == "summary")
+                    });
+                    let summary_fragments = match summary_node {
+                        Some(summary) => {
+                            let summary_children: Vec<Rc<Node>> =
+                                summary.children.borrow().iter().cloned().collect();
+                            parse_phrasing_content(&summary_children, Styling::default())
+                        }
+                        None => vec![FormattedTextFragment::plain_text("Details")],
+                    };
+                    let mut first_line = vec![FormattedTextFragment::plain_text("▾ ")];
+                    first_line.extend(summary_fragments);
+                    result.push_back(FormattedTextLine::Line(first_line));
+                    // Queue non-summary children for block parsing.
+                    for child in children_ref.iter().rev() {
+                        let is_summary = matches!(
+                            &child.data,
+                            NodeData::Element { name, .. } if name.local.as_ref() == "summary"
+                        );
+                        if !is_summary {
+                            nodes.push((Rc::clone(child), indent_level.clone()));
+                        }
+                    }
+                    last_active_indent_level = indent_level;
+                    continue;
+                }
+                if node_name.as_str() == "summary" {
+                    // Stray <summary> outside a <details> renders as a plain line.
+                    let summary_children: Vec<Rc<Node>> =
+                        node.children.borrow().iter().cloned().collect();
+                    let line = parse_phrasing_content(&summary_children, Styling::default());
+                    if !line.is_empty() {
+                        result.push_back(FormattedTextLine::Line(line));
+                    }
+                    last_active_indent_level = indent_level;
+                    continue;
+                }
+
                 // Update styling based on the node's attribute.
                 decorated_styling.update_with_attributes(&attrs.borrow());
 
@@ -391,6 +435,17 @@ pub fn parse_html(html: &str) -> Result<FormattedText> {
                     }),
                     "br" => FormattedTextLine::LineBreak,
                     "hr" => FormattedTextLine::HorizontalRule,
+                    "table" => build_table_from_html(&node.children.borrow()),
+                    "img" => {
+                        let attrs = attrs.borrow();
+                        let source = get_attribute(&attrs, "src").unwrap_or("").to_string();
+                        let alt_text = get_attribute(&attrs, "alt").unwrap_or("").to_string();
+                        FormattedTextLine::Image(crate::FormattedImage {
+                            alt_text,
+                            source,
+                            title: None,
+                        })
+                    }
                     _ => {
                         // Take into consideration the indent level when parsing the nodes.
                         let parsed_node = parse_pending_inline_nodes(
@@ -498,11 +553,11 @@ fn parse_phrasing_content(nodes: &[Rc<Node>], text_styling: Styling) -> Formatte
                 match node_name.as_ref() {
                     "b" | "strong" => decorated_styling.bold = true,
                     "i" | "em" => decorated_styling.italic = true,
-                    "s" => decorated_styling.strikethrough = true,
+                    "s" | "del" => decorated_styling.strikethrough = true,
                     "u" | "ins" => decorated_styling.underline = true,
-                    "code" => decorated_styling.inline_code = true,
-                    // TODO: We need to add more phrasing styling we support (e.g. links) here.
-                    // https://linear.app/warpdotdev/issue/CLD-335/add-html-parsing-for-headers-and-lists
+                    "code" | "kbd" => decorated_styling.inline_code = true,
+                    "sub" | "sup" => decorated_styling.italic = true,
+                    "mark" | "small" | "q" | "span" => {}
                     _ => (),
                 };
 
@@ -612,6 +667,87 @@ fn parse_code_block_and_language(nodes: &[Rc<Node>]) -> (String, Option<String>)
     }
 
     (text, language)
+}
+
+fn build_table_from_html(rows: &[Rc<Node>]) -> FormattedTextLine {
+    use crate::{FormattedTable, TableAlignment};
+
+    let mut headers: Vec<FormattedTextInline> = Vec::new();
+    let mut body_rows: Vec<Vec<FormattedTextInline>> = Vec::new();
+
+    fn walk(
+        nodes: &[Rc<Node>],
+        headers: &mut Vec<FormattedTextInline>,
+        body_rows: &mut Vec<Vec<FormattedTextInline>>,
+    ) {
+        for node in nodes {
+            let NodeData::Element { name, .. } = &node.data else { continue };
+            match name.local.as_ref() {
+                "thead" => {
+                    for tr in node.children.borrow().iter() {
+                        let NodeData::Element { name, .. } = &tr.data else { continue };
+                        if name.local.as_ref() != "tr" { continue }
+                        for cell in tr.children.borrow().iter() {
+                            let NodeData::Element { name, .. } = &cell.data else { continue };
+                            if name.local.as_ref() != "th" && name.local.as_ref() != "td" {
+                                continue;
+                            }
+                            let cell_children: Vec<Rc<Node>> =
+                                cell.children.borrow().iter().cloned().collect();
+                            headers.push(parse_phrasing_content(&cell_children, Styling::default()));
+                        }
+                    }
+                }
+                "tbody" | "tfoot" => {
+                    for tr in node.children.borrow().iter() {
+                        let NodeData::Element { name, .. } = &tr.data else { continue };
+                        if name.local.as_ref() != "tr" { continue }
+                        let mut row: Vec<FormattedTextInline> = Vec::new();
+                        for cell in tr.children.borrow().iter() {
+                            let NodeData::Element { name, .. } = &cell.data else { continue };
+                            if name.local.as_ref() != "th" && name.local.as_ref() != "td" {
+                                continue;
+                            }
+                            let cell_children: Vec<Rc<Node>> =
+                                cell.children.borrow().iter().cloned().collect();
+                            row.push(parse_phrasing_content(&cell_children, Styling::default()));
+                        }
+                        body_rows.push(row);
+                    }
+                }
+                "tr" => {
+                    // <table> with no <thead>/<tbody> wrapper: first <tr> is header.
+                    let mut row: Vec<FormattedTextInline> = Vec::new();
+                    for cell in node.children.borrow().iter() {
+                        let NodeData::Element { name, .. } = &cell.data else { continue };
+                        if name.local.as_ref() != "th" && name.local.as_ref() != "td" {
+                            continue;
+                        }
+                        let cell_children: Vec<Rc<Node>> =
+                            cell.children.borrow().iter().cloned().collect();
+                        row.push(parse_phrasing_content(&cell_children, Styling::default()));
+                    }
+                    if headers.is_empty() {
+                        *headers = row;
+                    } else {
+                        body_rows.push(row);
+                    }
+                }
+                _ => walk(&node.children.borrow(), headers, body_rows),
+            }
+        }
+    }
+
+    walk(rows, &mut headers, &mut body_rows);
+
+    let col_count = headers.len().max(body_rows.iter().map(Vec::len).max().unwrap_or(0));
+    let mut table = FormattedTable {
+        headers,
+        alignments: vec![TableAlignment::Left; col_count],
+        rows: body_rows,
+    };
+    table.normalize_shape();
+    FormattedTextLine::Table(table)
 }
 
 // Parse a HTML style string into its corresponding name -> value hashmap
