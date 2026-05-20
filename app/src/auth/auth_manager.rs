@@ -298,11 +298,6 @@ impl AuthManager {
     pub fn authorize_device(&self, ctx: &mut ModelContext<Self>) {
         if Self::hosted_auth_disabled() {
             log::info!("Refusing device authorization: hosted auth is disabled");
-            ctx.emit(AuthManagerEvent::AuthFailed(
-                UserAuthenticationError::Unexpected(anyhow!(
-                    "hosted auth is unavailable on this channel"
-                )),
-            ));
             return;
         }
 
