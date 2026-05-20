@@ -316,6 +316,11 @@ void init_warp_nswindow(NSWindow<WarpWindowProtocol> *window, bool testMode, boo
     // macOS from cascading or clamping the window position while a tab-drag preview window is
     // being created and positioned under the cursor.
     BOOL _suppressFrameConstraintsDuringDrag;
+    // The view that received the most recent NSEventTypeLeftMouseDown. Used by sendEvent: to
+    // route subsequent MouseDragged and MouseUp events to the same view, so click cycles
+    // initiated inside a native subview (e.g. an embedded WKWebView) complete cleanly without
+    // being hijacked by the CLD-2581 force-dispatch workaround below.
+    NSView *_mouseDownTarget;
 }
 
 @synthesize testMode;
@@ -387,6 +392,20 @@ void init_warp_nswindow(NSWindow<WarpWindowProtocol> *window, bool testMode, boo
 
 - (void)sendEvent:(NSEvent *)event {
     switch (event.type) {
+        // Capture the hit-test target for left-button click cycles so the
+        // subsequent MouseDragged / MouseUp events route to the same view.
+        // Without this, the CLD-2581 force-dispatch path below would deliver
+        // MouseUp to the WarpHostView contentView even when the original
+        // MouseDown went to a native subview (e.g. an embedded WKWebView),
+        // breaking in-page clicks and <select> dropdowns.
+        case NSEventTypeLeftMouseDown: {
+            NSView *contentView = self.contentView;
+            NSPoint contentPoint = [contentView convertPoint:event.locationInWindow fromView:nil];
+            _mouseDownTarget = [contentView hitTest:contentPoint] ?: contentView;
+            [super sendEvent:event];
+            break;
+        }
+
         // In some cases, NSWindow's default sendEvent: implementation will dispatch a MouseDown
         // event and subsequent MouseDragged events to the content view, but then dispatch the
         // remaining MouseDragged events and MouseUp event elsewhere.
@@ -394,13 +413,27 @@ void init_warp_nswindow(NSWindow<WarpWindowProtocol> *window, bool testMode, boo
         // (https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/EventArchitecture/EventArchitecture.html),
         // but it's unclear how or why the events get redirected.
         // This breaks drag-and-drop for panes and tabs (see CLD-2581), so we work around it with
-        // custom dispatching.
+        // custom dispatching -- but only when the original MouseDown was actually claimed by the
+        // WarpHostView contentView. If a native subview owns the click cycle (e.g. WKWebView),
+        // we fall back to AppKit's normal delivery so the subview sees its own MouseUp.
         case NSEventTypeLeftMouseUp:
-            [self.contentView mouseUp:event];
+        case NSEventTypeLeftMouseDragged: {
+            NSView *target = _mouseDownTarget ?: self.contentView;
+            BOOL forceDispatchToContent = (target == self.contentView);
+            if (forceDispatchToContent) {
+                if (event.type == NSEventTypeLeftMouseUp) {
+                    [self.contentView mouseUp:event];
+                } else {
+                    [self.contentView mouseDragged:event];
+                }
+            } else {
+                [super sendEvent:event];
+            }
+            if (event.type == NSEventTypeLeftMouseUp) {
+                _mouseDownTarget = nil;
+            }
             break;
-        case NSEventTypeLeftMouseDragged:
-            [self.contentView mouseDragged:event];
-            break;
+        }
 
         // The NSWindow's default sendEvent: implementation does not propagate RightMouseDown events
         // from the application title bar to the content view when running a development build
