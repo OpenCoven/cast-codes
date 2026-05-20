@@ -1163,21 +1163,37 @@ impl SettingsView {
             me.handle_menu_event(event, ctx);
         });
 
+        // Settings pages that only function with hosted cloud services
+        // (billing, teams, referrals) are excluded on channels that don't
+        // expose them (public CastCodes/OSS).
+        let cloud_services_available =
+            warp_core::channel::ChannelState::cloud_services_available();
+
         let mut settings_pages = vec![
             SettingsPage::new(main_page_handle),
             SettingsPage::new(ai_page_handle),
-            SettingsPage::new(billing_and_usage_page_handle),
-            SettingsPage::new(code_page_handle),
-            SettingsPage::new(teams_page_handle),
+        ];
+        if cloud_services_available {
+            settings_pages.push(SettingsPage::new(billing_and_usage_page_handle));
+        }
+        settings_pages.push(SettingsPage::new(code_page_handle));
+        if cloud_services_available {
+            settings_pages.push(SettingsPage::new(teams_page_handle));
+        }
+        settings_pages.extend(vec![
             SettingsPage::new(appearance_page_handle),
             SettingsPage::new(features_page_handle),
             SettingsPage::new(keybindings_handle),
             SettingsPage::new(platform_page_handle),
             SettingsPage::new(warpify_page_handle),
-            SettingsPage::new(referrals_page_handle),
+        ]);
+        if cloud_services_available {
+            settings_pages.push(SettingsPage::new(referrals_page_handle));
+        }
+        settings_pages.extend(vec![
             SettingsPage::new(show_blocks_view_handle),
             SettingsPage::new(warp_drive_page_handle),
-        ];
+        ]);
 
         settings_pages.extend(vec![
             SettingsPage::new(mcp_servers_page_handle),

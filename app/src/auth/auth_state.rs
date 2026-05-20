@@ -78,6 +78,10 @@ impl AuthState {
     /// 2. Provided API key
     /// 3. WARP_USER_SECRET environment variable
     /// 4. Persisted user from secure storage
+    ///
+    /// In the public CastCodes (OSS) build, cloud services are unavailable, so
+    /// the function short-circuits to a permanently-anonymous state without
+    /// touching the env var or secure storage.
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub fn initialize(ctx: &AppContext, api_key: Option<String>) -> Self {
         let state = Self::new(ctx);
@@ -86,6 +90,13 @@ impl AuthState {
             state.set_user(Some(User::test()));
             #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
             state.set_credentials(Some(Credentials::Test));
+            return state;
+        }
+
+        if !ChannelState::cloud_services_available() {
+            log::info!(
+                "Cloud services unavailable for current channel; running without an authenticated user."
+            );
             return state;
         }
 

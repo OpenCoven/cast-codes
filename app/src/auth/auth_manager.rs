@@ -135,6 +135,13 @@ impl AuthManager {
         }
     }
 
+    /// Returns true when the current channel does not expose hosted auth.
+    /// Public CastCodes (OSS) builds set this; every method that would talk to
+    /// a hosted auth backend should bail out at the top.
+    fn hosted_auth_disabled() -> bool {
+        !ChannelState::cloud_services_available()
+    }
+
     /// Fetches and ultimately sets the user's auth state from an auth payload.
     /// Typically, this function is triggered when a user clicks the intent link from their browser
     /// back to Warp after login (or pastes the URL in the app).
@@ -144,6 +151,11 @@ impl AuthManager {
         enforce_state_validation: bool,
         ctx: &mut ModelContext<Self>,
     ) {
+        if Self::hosted_auth_disabled() {
+            log::info!("Ignoring auth redirect: hosted auth is disabled for this channel");
+            return;
+        }
+
         let AuthRedirectPayload {
             refresh_token,
             user_uid,
@@ -211,6 +223,11 @@ impl AuthManager {
         auth_payload: AuthRedirectPayload,
         ctx: &mut ModelContext<Self>,
     ) {
+        if Self::hosted_auth_disabled() {
+            log::info!("Ignoring interrupted auth payload: hosted auth is disabled");
+            return;
+        }
+
         let AuthRedirectPayload {
             refresh_token,
             user_uid: _,
@@ -235,6 +252,11 @@ impl AuthManager {
 
     #[cfg(target_family = "wasm")]
     pub fn initialize_user_from_session_cookie(&self, ctx: &mut ModelContext<Self>) {
+        if Self::hosted_auth_disabled() {
+            log::info!("Ignoring session-cookie handoff: hosted auth is disabled");
+            return;
+        }
+
         let auth_client = self.auth_client.clone();
         let _ = ctx.spawn(
             async move {
@@ -248,6 +270,10 @@ impl AuthManager {
 
     /// Refreshes the user's auth state using their existing credentials.
     pub fn refresh_user(&self, ctx: &mut ModelContext<Self>) {
+        if Self::hosted_auth_disabled() {
+            return;
+        }
+
         let Some(credentials) = self.auth_state.credentials() else {
             log::warn!("Attempted to refresh user without credentials");
             return;
@@ -270,6 +296,16 @@ impl AuthManager {
     /// This is only used by the Warp CLI if running on a device that does not have the Warp app installed.
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub fn authorize_device(&self, ctx: &mut ModelContext<Self>) {
+        if Self::hosted_auth_disabled() {
+            log::info!("Refusing device authorization: hosted auth is disabled");
+            ctx.emit(AuthManagerEvent::AuthFailed(
+                UserAuthenticationError::Unexpected(anyhow!(
+                    "hosted auth is unavailable on this channel"
+                )),
+            ));
+            return;
+        }
+
         // Clear any stale user state so old credentials don't interfere
         // with the fresh device auth flow.
         self.auth_state.set_credentials(None);
@@ -575,6 +611,12 @@ impl AuthManager {
         referral_code: Option<String>,
         ctx: &mut ModelContext<Self>,
     ) {
+        if Self::hosted_auth_disabled() {
+            log::info!("Skipping anonymous-user creation: hosted auth is disabled");
+            ctx.emit(AuthManagerEvent::SkippedLogin);
+            return;
+        }
+
         let anonymous_user_type = AnonymousUserType::NativeClientAnonymousUserFeatureGated;
 
         let auth_client = self.auth_client.clone();
@@ -661,6 +703,11 @@ impl AuthManager {
         entrypoint: AnonymousUserSignupEntrypoint,
         ctx: &mut ModelContext<Self>,
     ) {
+        if Self::hosted_auth_disabled() {
+            log::info!("Skipping anonymous-user linking ({entrypoint:?}): hosted auth is disabled");
+            return;
+        }
+
         let auth_client = self.auth_client.clone();
         let _ = ctx.spawn(
             async move { auth_client.fetch_new_custom_token().await },

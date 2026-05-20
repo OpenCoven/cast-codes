@@ -244,7 +244,9 @@ impl<P: BackingView> PaneHeader<P> {
 
         if !editability.can_edit() {
             let mut tooltip_text = String::from("Read-only");
-            if matches!(editability, ContentEditability::RequiresLogin) {
+            if matches!(editability, ContentEditability::RequiresLogin)
+                && warp_core::channel::ChannelState::cloud_services_available()
+            {
                 tooltip_text.push_str(". Sign in to edit");
             }
 

@@ -123,7 +123,11 @@ impl SettingsWidget for WarpDriveHeaderWidget {
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
-        FeatureFlag::SkipFirebaseAnonymousUser.is_enabled()
+        // The "create an account to use Cast Drive" prompt only makes sense
+        // when hosted accounts exist. Channels without cloud services (public
+        // CastCodes/OSS) have no account to create, so suppress the widget.
+        warp_core::channel::ChannelState::cloud_services_available()
+            && FeatureFlag::SkipFirebaseAnonymousUser.is_enabled()
             && AuthStateProvider::as_ref(app)
                 .get()
                 .is_anonymous_or_logged_out()

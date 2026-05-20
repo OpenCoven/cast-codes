@@ -115,6 +115,13 @@ impl UriHost {
         // Handle host
         match self {
             UriHost::Auth => {
+                if !ChannelState::cloud_services_available() {
+                    safe_info!(
+                        safe: ("Ignoring auth url: hosted auth is disabled for this channel"),
+                        full: ("Ignoring auth url {url}: hosted auth is disabled for this channel")
+                    );
+                    return;
+                }
                 ctx.window_ids()
                     .collect_vec()
                     .into_iter()

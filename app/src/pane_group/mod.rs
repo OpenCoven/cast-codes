@@ -2511,6 +2511,15 @@ impl PaneGroup {
         open_source: SharedSessionActionSource,
         ctx: &mut ViewContext<Self>,
     ) {
+        // Shared sessions rely on a hosted backend. On channels without
+        // cloud services (public CastCodes/OSS), simply drop the request
+        // rather than prompting the user to sign in to a service we don't
+        // expose.
+        if !warp_core::channel::ChannelState::cloud_services_available() {
+            log::info!("Ignoring share-session-modal request: cloud services unavailable");
+            return;
+        }
+
         let Some(terminal_view) = self.terminal_view_from_pane_id(terminal_pane_id, ctx) else {
             log::warn!("Tried to open share session modal for non-existent terminal pane");
             return;

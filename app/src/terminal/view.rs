@@ -9641,6 +9641,12 @@ impl TerminalView {
     }
 
     fn insert_anonymous_user_ai_sign_up_banner(&mut self, ctx: &mut ViewContext<Self>) {
+        // The signup banner exists to convert anonymous users into hosted
+        // accounts. Channels without hosted auth (public CastCodes/OSS) have
+        // no account to sign up for, so suppress the banner outright.
+        if !warp_core::channel::ChannelState::cloud_services_available() {
+            return;
+        }
         if *GeneralSettings::as_ref(ctx)
             .anonymous_user_ai_sign_up_banner_shown
             .value()

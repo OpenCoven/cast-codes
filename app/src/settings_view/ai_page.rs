@@ -3303,8 +3303,13 @@ impl SettingsWidget for GlobalAIWidget {
             );
         }
 
-        // Show sign-up button for anonymous users, toggle for logged-in users
-        if is_anonymous {
+        // Show sign-up button for anonymous users when hosted accounts exist,
+        // otherwise show the toggle for everyone (channels without hosted auth
+        // like public CastCodes/OSS have no account to sign up for; local AI
+        // still works and the user should be able to toggle it freely).
+        let show_signup_prompt =
+            is_anonymous && warp_core::channel::ChannelState::cloud_services_available();
+        if show_signup_prompt {
             row.add_child(
                 Flex::row()
                     .with_cross_axis_alignment(CrossAxisAlignment::Center)

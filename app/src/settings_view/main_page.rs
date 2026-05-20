@@ -272,22 +272,33 @@ impl MainSettingsPageView {
             ctx.notify();
         });
 
-        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
-            Box::new(AccountWidget::default()),
-            Box::new(DividerWidget {}),
-        ];
+        // Login-gated widgets (account, cloud settings sync, referrals, logout)
+        // are skipped on channels that don't expose hosted auth (public
+        // CastCodes/OSS). The version info remains visible regardless.
+        let cloud_services_available = ChannelState::cloud_services_available();
+        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = Vec::new();
 
-        widgets.push(Box::new(SettingsSyncWidget::default()));
-
-        widgets.push(Box::new(EarnRewardsWidget::default()));
+        if cloud_services_available {
+            widgets.push(Box::new(AccountWidget::default()));
+            widgets.push(Box::new(DividerWidget {}));
+            widgets.push(Box::new(SettingsSyncWidget::default()));
+            widgets.push(Box::new(EarnRewardsWidget::default()));
+        }
 
         if ChannelState::app_version().is_some() {
             widgets.push(Box::new(VersionInfoWidget::default()));
         }
 
-        widgets.push(Box::new(LogoutWidget::default()));
+        if cloud_services_available {
+            widgets.push(Box::new(LogoutWidget::default()));
+        }
 
-        let page = PageType::new_uncategorized(widgets, Some("Account"));
+        let section_title = if cloud_services_available {
+            "Account"
+        } else {
+            "About"
+        };
+        let page = PageType::new_uncategorized(widgets, Some(section_title));
 
         MainSettingsPageView { page, auth_state }
     }

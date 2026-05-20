@@ -1969,7 +1969,9 @@ impl WorkflowView {
         };
 
         if let Some((mode_text, mut edit_button)) = text_and_button {
-            if matches!(editability, ContentEditability::RequiresLogin) {
+            if matches!(editability, ContentEditability::RequiresLogin)
+                && warp_core::channel::ChannelState::cloud_services_available()
+            {
                 let ui_builder = appearance.ui_builder().clone();
                 edit_button = edit_button.with_tooltip(move || {
                     ui_builder
