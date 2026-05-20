@@ -188,6 +188,15 @@ fn parse_markdown_internal<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
     let mut remaining = markdown;
     let mut lines = Vec::new();
     while !remaining.is_empty() {
+        // Try block HTML first; if it matches, splice in its result.
+        if let Ok((rest, html_lines)) = parse_block_html::<E>(remaining) {
+            if !html_lines.is_empty() {
+                lines.extend(html_lines);
+            }
+            remaining = rest;
+            indentation_context.borrow_mut().clear();
+            continue;
+        }
         let (remaining_after_block, mut line) = block(remaining)?;
         remaining = remaining_after_block;
 
@@ -219,6 +228,34 @@ fn parse_markdown_internal<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
     }
 
     Ok((remaining, lines))
+}
+
+/// Parse a block-level HTML span, dispatching to the html_parser helper for rendering.
+fn parse_block_html<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, Vec<FormattedTextLine>, E> {
+    use crate::gfm_html::{HtmlSpanKind, try_lex_html_span};
+    use crate::html_parser::parse_html_block_lines;
+
+    let Some((span, rest)) = try_lex_html_span(input) else {
+        return Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Tag)));
+    };
+    match span.kind {
+        HtmlSpanKind::BlockSafe => {
+            let lines = parse_html_block_lines(span.raw);
+            // Consume one trailing newline if present so we don't emit a spurious blank line.
+            let rest = rest.strip_prefix('\n').unwrap_or(rest);
+            Ok((rest, lines))
+        }
+        HtmlSpanKind::Stripped => {
+            let rest = rest.strip_prefix('\n').unwrap_or(rest);
+            Ok((rest, Vec::new()))
+        }
+        HtmlSpanKind::PhrasingSafe | HtmlSpanKind::Unknown => {
+            // Not a block — let the paragraph parser handle it.
+            Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Tag)))
+        }
+    }
 }
 
 /// Parse a single paragraph of Markdown text.

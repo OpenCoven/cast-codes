@@ -2752,3 +2752,35 @@ fn test_parse_table_with_strikethrough() {
         panic!("Expected table");
     }
 }
+
+#[test]
+fn test_parse_block_html_details() {
+    let source = "<details><summary>Click</summary><p>Body</p></details>\n";
+    let parsed = test_parse_markdown(source);
+    let first = parsed.first().expect("at least one line");
+    match first {
+        FormattedTextLine::Line(fragments) => {
+            let joined: String = fragments.iter().map(|f| f.text.clone()).collect();
+            assert!(joined.starts_with("▾ Click"), "got {joined:?}");
+        }
+        other => panic!("expected Line, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_block_html_strips_script() {
+    let source = "before\n<script>alert(1)</script>\nafter\n";
+    let parsed = test_parse_markdown(source);
+    let texts: Vec<String> = parsed
+        .iter()
+        .filter_map(|line| match line {
+            FormattedTextLine::Line(fragments) => {
+                Some(fragments.iter().map(|f| f.text.clone()).collect::<String>())
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "before"));
+    assert!(texts.iter().any(|t| t == "after"));
+    assert!(!texts.iter().any(|t| t.contains("alert")), "script body must be stripped: {texts:?}");
+}
