@@ -50,7 +50,7 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   non-streaming chat path.
 - ✅ Per-call `warp-agent` gating audit — see
   [Feature-gating audit](#feature-gating-audit-warp-agent-vs-cast-agent)
-  below. Verdict: of the seven warp_* deps the brief listed, only
+  below. Verdict: of the seven warp_* deps the original scope listed, only
   `warp_multi_agent_api` is actually gateable, and even that needs a
   three-phase setup (extract wire types from public API → add
   cast_agent-native parallel types → optional-ify the dep). The other
@@ -727,12 +727,12 @@ here — landed and have moved up to the [Status](#status) section.
 
 ## Feature-gating audit (`warp-agent` vs `cast-agent`)
 
-[`CODY-BRIEF.md`](CODY-BRIEF.md) §2.5 calls for gating the upstream
-`warp_*` dependencies in `crates/ai` behind a `warp-agent` Cargo feature
-so `cast-agent`-only builds are leaner. After auditing every `warp_*`
-import in `crates/ai/src/` against today's code
+An earlier scope note proposed gating the upstream `warp_*` dependencies
+in `crates/ai` behind a `warp-agent` Cargo feature so `cast-agent`-only
+builds are leaner. After auditing every `warp_*` import in
+`crates/ai/src/` against today's code
 (`rg -l 'warp_' crates/ai/src/`), the picture is more constrained than
-the brief implied: most of the listed crates provide **shared infrastructure**
+that proposal implied: most of the listed crates provide **shared infrastructure**
 that `crates/ai` uses for non-agent purposes (telemetry, codebase
 indexing, UI entity primitives, paths). Only one crate is plausibly
 gateable today.
@@ -868,8 +868,8 @@ including conversation persistence, orchestration events, code-review
 threads, and agent-mode integration tests. That's a feature-parity
 gate, not a refactoring gate.
 
-Strategy 2 is a fallback if the brief's "lean cast-agent-only build"
-requirement turns out to be load-bearing before parity lands.
+Strategy 2 is a fallback if the "lean cast-agent-only build" goal turns
+out to be load-bearing before parity lands.
 
 ### What this section is not
 

@@ -1,6 +1,6 @@
 # DESIGN-CHANGES — CastCodes UI/UX Modernization
 
-Tracks Phase 1 of [`CODY-BRIEF.md`](CODY-BRIEF.md) (OpenCoven brand identity).
+Tracks Phase 1 of the OpenCoven brand-identity rebrand.
 
 ## Repo-level guardrails
 
@@ -12,20 +12,17 @@ Tracks Phase 1 of [`CODY-BRIEF.md`](CODY-BRIEF.md) (OpenCoven brand identity).
   real product behavior, compatibility notes, specs, and tests.
 - [`README.md`](README.md) now includes the attribution guard alongside the
   rebrand guard so public-surface changes run both checks together.
-- [`CODY-BRIEF.md`](CODY-BRIEF.md) no longer names specific model/vendor tools
-  as the execution credit line; it now describes the execution environment
-  generically.
 
 ## Scope reconciliation
 
-`CODY-BRIEF.md` was written against a Zed-style codebase layout:
-`crates/theme`, `crates/title_bar`, `crates/workspace/src/pane.rs`,
-`crates/project_panel`, `pane::ToggleTabBar`, `cargo check -p zed`.
+The original Phase 1 scope was written against a Zed-style codebase layout
+(`crates/theme`, `crates/title_bar`, `crates/workspace/src/pane.rs`,
+`crates/project_panel`, `pane::ToggleTabBar`, `cargo check -p zed`).
 
 This repository is the **Warp fork** rebranded as CastCodes. The relevant
 paths here are:
 
-| Brief reference                          | This repo                                        |
+| Zed-style path                           | This repo                                        |
 |------------------------------------------|--------------------------------------------------|
 | `crates/theme`                           | `app/src/themes/`                                |
 | `crates/workspace/src/pane.rs`           | `app/src/workspace/`, `app/src/tab.rs` (1905 LoC)|
@@ -37,12 +34,12 @@ paths here are:
 
 `WarpTheme::new()` accepts seven concrete slots (background fill,
 foreground color, accent fill, optional gradient, details preset, terminal
-ANSI palette, optional background image, display name). Brand slots that
-the brief defines but `WarpTheme` does not (surface, elevated surface,
-border, text secondary, text muted, accent secondary gold, status bar bg,
-title bar bg) have no direct theme slot to map onto — they are computed
-downstream from `details` + `background` + `accent` in dependent UI
-crates.
+ANSI palette, optional background image, display name). Additional brand
+slots from the original scope but not present on `WarpTheme` (surface,
+elevated surface, border, text secondary, text muted, accent secondary
+gold, status bar bg, title bar bg) have no direct theme slot to map
+onto — they are computed downstream from `details` + `background` +
+`accent` in dependent UI crates.
 
 ## Applied (this PR)
 
@@ -141,7 +138,7 @@ These styling changes are valid but require:
 Either approach is a multi-day pass that touches every panel render. The
 new theme already provides the brand background and accent, so the
 existing `details: Darker` derivation gives the dark, accent-purple flavor
-the brief is asking for at a coarse level — finer surface separation
+the brand spec is asking for at a coarse level — finer surface separation
 (surface vs. elevated surface, border at 8% white, etc.) is a follow-up.
 
 ### Build verification

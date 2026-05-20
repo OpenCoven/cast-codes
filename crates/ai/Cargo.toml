@@ -19,7 +19,8 @@ cast-agent = ["dep:cast_agent"]
 # Legacy Warp Agent path. The underlying warp_* deps are still pulled
 # unconditionally today because they are also used outside agent code;
 # this feature exists so call-site gating (`#[cfg(feature = "warp-agent")]`)
-# can be added incrementally per CODY-BRIEF.md §2.5.
+# can be added incrementally. See CAST-AGENT.md "Feature-gating audit" for
+# the dep-by-dep findings.
 warp-agent = []
 
 [dependencies]
