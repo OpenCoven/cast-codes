@@ -285,9 +285,7 @@ impl MainSettingsPageView {
             widgets.push(Box::new(EarnRewardsWidget::default()));
         }
 
-        if ChannelState::app_version().is_some() {
-            widgets.push(Box::new(VersionInfoWidget::default()));
-        }
+        widgets.push(Box::new(VersionInfoWidget::default()));
 
         if cloud_services_available {
             widgets.push(Box::new(LogoutWidget::default()));
@@ -822,6 +820,10 @@ struct VersionInfoWidget {
 }
 
 impl VersionInfoWidget {
+    fn version_label() -> &'static str {
+        ChannelState::app_version().unwrap_or(concat!("v", env!("CARGO_PKG_VERSION"), "-local"))
+    }
+
     fn render_version_info(
         &self,
         version: &'static str,
@@ -1038,14 +1040,9 @@ impl SettingsWidget for VersionInfoWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        if let Some(version) = ChannelState::app_version() {
-            Container::new(self.render_version_info(version, appearance, app))
-                .with_margin_top(VERTICAL_MARGIN)
-                .finish()
-        } else {
-            log::error!("Shouldn't render VersionInfoWidget without GIT_RELEASE_TAG");
-            Empty::new().finish()
-        }
+        Container::new(self.render_version_info(Self::version_label(), appearance, app))
+            .with_margin_top(VERTICAL_MARGIN)
+            .finish()
     }
 }
 
@@ -1099,6 +1096,19 @@ impl SettingsWidget for LogoutWidget {
         )
         .with_margin_top(VERTICAL_MARGIN)
         .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VersionInfoWidget;
+    use warp_core::channel::ChannelState;
+
+    #[test]
+    fn version_info_uses_package_version_when_release_tag_missing() {
+        ChannelState::set_app_version(None);
+
+        assert_eq!(VersionInfoWidget::version_label(), "v0.1.0-local");
     }
 }
 
