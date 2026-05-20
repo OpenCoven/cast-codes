@@ -1638,9 +1638,10 @@ fn parse_inline_token_link_end<'a, E: ContextError<&'a str> + ParseError<&'a str
 ///
 /// Checks (in order):
 /// 1. The span must contain `>` (the open tag was properly closed).
-/// 2. The character immediately after the tag name must be a valid separator:
+/// 2. Close-only tags are rejected so they fall through to literal text parsing.
+/// 3. The character immediately after the tag name must be a valid separator:
 ///    whitespace, `>`, or `/`. This rejects malformed tags like `<b)c>`.
-/// 3. For non-void, non-self-closing open tags, the span must contain a matching
+/// 4. For non-void, non-self-closing open tags, the span must contain a matching
 ///    close tag (`</`). This ensures open-only tags like a bare `<b>` are not
 ///    consumed as complete spans — they fall through to literal-text parsing.
 fn is_well_formed_html_span(raw: &str) -> bool {
@@ -1649,8 +1650,11 @@ fn is_well_formed_html_span(raw: &str) -> bool {
     }
     let bytes = raw.as_bytes();
     let is_close_tag = bytes.get(1) == Some(&b'/');
-    // Skip `<` and optional `/` for close tags.
-    let name_start = if is_close_tag { 2 } else { 1 };
+    if is_close_tag {
+        return false;
+    }
+    // Skip `<`.
+    let name_start = 1;
     // Advance through the tag name.
     let mut i = name_start;
     while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-') {
@@ -1661,8 +1665,8 @@ fn is_well_formed_html_span(raw: &str) -> bool {
     if !matches!(bytes.get(i), Some(b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') | None) {
         return false;
     }
-    // Close tags and self-closing tags are already complete.
-    if is_close_tag || raw.ends_with("/>") {
+    // Self-closing tags are already complete.
+    if raw.ends_with("/>") {
         return true;
     }
     // Void elements are inherently self-contained.

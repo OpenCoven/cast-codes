@@ -2822,6 +2822,18 @@ fn test_parse_inline_html_unknown_tag_passes_through() {
 }
 
 #[test]
+fn test_parse_inline_html_close_only_tag_passes_through() {
+    let source = "before </u> after";
+    let parsed = test_parse_markdown(source);
+    let line = match parsed.first() {
+        Some(FormattedTextLine::Line(line)) => line,
+        other => panic!("expected Line, got {other:?}"),
+    };
+    let joined: String = line.iter().map(|f| f.text.clone()).collect();
+    assert_eq!(joined, "before </u> after");
+}
+
+#[test]
 fn test_parse_inline_html_br_emits_linebreak() {
     let source = "before<br>after";
     let parsed = test_parse_markdown(source);
