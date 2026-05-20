@@ -43,6 +43,17 @@ onto — they are computed downstream from `details` + `background` +
 
 ## Applied (this PR)
 
+### GitHub-Flavored Markdown preview
+
+CodeView's `.md` Rendered preview now renders the GFM HTML safe-list
+(`<details>`, `<summary>`, `<kbd>`, `<sub>`, `<sup>`, `<del>`, raw `<table>`,
+`<img>`, plus inline phrasing tags) and GFM footnotes (`[^id]` references with
+`[^id]:` definitions). `<details>` blocks render always-expanded with a `▾`
+glyph; interactive collapse is not provided in v1. Mermaid blocks render as
+SVG diagrams in the preview, unchanged from prior behavior. Inline HTML is
+parsed via the existing `html5ever` pipeline in `markdown_parser`; no new
+dependencies were added.
+
 ### Brand rebrand sweep
 
 - `app/src/drive/index.rs:109` — `WARP_DRIVE_TITLE` literal updated from
