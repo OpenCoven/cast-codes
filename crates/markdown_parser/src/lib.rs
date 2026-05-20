@@ -6,6 +6,7 @@ use std::{collections::VecDeque, fmt, fmt::Debug};
 pub mod html_parser;
 pub mod markdown_parser;
 pub mod weight;
+mod gfm_html;
 pub use html_parser::parse_html;
 use itertools::Itertools;
 pub use markdown_parser::{
