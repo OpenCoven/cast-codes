@@ -52,7 +52,10 @@ fn webview_url_for(model_url: &str) -> String {
 
 const URL_BAR_HEIGHT: f32 = 32.0;
 const URL_BAR_MIN_WIDTH: f32 = 160.0;
-const TOOLBAR_HEIGHT: f32 = 48.0;
+// Toolbar = URL bar height + 4pt total vertical padding (2pt each side). The
+// previous 48pt left ~16pt of dead space around a 32pt input and made the
+// browser chrome look bulky relative to neighboring panes.
+const TOOLBAR_HEIGHT: f32 = 36.0;
 const TAB_STRIP_HEIGHT: f32 = 32.0;
 const TAB_MAX_WIDTH: f32 = 200.0;
 const TAB_MIN_WIDTH: f32 = 80.0;
@@ -841,7 +844,17 @@ impl BackingView for BrowserView {
 
     fn close(&mut self, ctx: &mut ViewContext<Self>) {
         #[cfg(not(target_family = "wasm"))]
-        self.persist_open_state(false);
+        {
+            // Detach every native webview before the pane group shadow-closes
+            // us. `UndoClosedPanes` keeps `BrowserView` alive, so Drop on
+            // `NativeBrowserWebView` won't run on its own; without this the
+            // WKWebView NSViews remain attached to the parent NSView and
+            // paint as a visible artifact over the workspace.
+            for webview in &self.webviews {
+                webview.borrow_mut().detach_native();
+            }
+            self.persist_open_state(false);
+        }
         ctx.emit(BrowserViewEvent::Pane(PaneEvent::Close));
     }
 

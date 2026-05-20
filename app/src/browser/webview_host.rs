@@ -85,6 +85,28 @@ impl NativeBrowserWebView {
         }
     }
 
+    /// Drop the underlying native webview without changing `desired_visible`.
+    ///
+    /// Why: when the pane is closed, `UndoClosedPanes` keeps `BrowserView`
+    /// alive in a shadow state, so `Drop` on `NativeBrowserWebView` never
+    /// runs and the WKWebView NSView stays attached to the parent NSView,
+    /// painting as a visible artifact over the workspace. Dropping the
+    /// `wry::WebView` here triggers wry's own `Drop`, which removes the
+    /// native view from its superview immediately. If the pane is later
+    /// restored (Cmd+Shift+T), `set_bounds`/`attach_if_needed` will rebuild
+    /// the webview from `pending_url`.
+    pub(crate) fn detach_native(&mut self) {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            if let Some(webview) = self.webview.take() {
+                let _ = webview.set_visible(false);
+                drop(webview);
+            }
+            // Allow a fresh attach if the pane is ever re-painted.
+            self.attach_error_logged = false;
+        }
+    }
+
     pub(crate) fn set_bounds(&mut self, window_id: WindowId, bounds: RectF, app: &AppContext) {
         self.bounds = Some(bounds);
         self.attach_if_needed(window_id, bounds, app);
