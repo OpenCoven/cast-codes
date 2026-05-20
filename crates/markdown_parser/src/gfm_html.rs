@@ -39,7 +39,7 @@ pub(crate) struct HtmlSpan<'a> {
     /// The entire matched span, including `<tag …>` … `</tag>` (or just the open tag if
     /// self-closing or unmatched).
     pub(crate) raw: &'a str,
-    /// Lowercased tag name.
+    /// Tag name as matched in the input, preserving the original case.
     pub(crate) tag: &'a str,
     pub(crate) kind: HtmlSpanKind,
 }
