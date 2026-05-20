@@ -154,7 +154,7 @@ fn rewrite_fragments(
                         styles: FormattedTextStyles {
                             italic: true,
                             hyperlink: Some(Hyperlink::Url(format!("#fn-{id}"))),
-                            ..Default::default()
+                            ..original_styles.clone()
                         },
                     });
                     remaining = &after[close + 1..];
