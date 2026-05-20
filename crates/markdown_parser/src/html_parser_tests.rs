@@ -553,6 +553,23 @@ fn test_code_and_inline_code() {
     );
 }
 
+#[test]
+fn test_parse_html_fragment_after_refactor_inline() {
+    // Regression: a bare inline fragment (no <html>/<body>) must still parse.
+    // This is what the markdown parser will hand into the new pub(crate) helper.
+    let html = "<b>hi</b> there";
+    let parsed = parse_html(html).expect("HTML should parse");
+    assert!(!parsed.lines.is_empty());
+}
+
+#[test]
+fn test_parse_html_fragment_after_refactor_block() {
+    // Regression: a fragment containing only a block element must still parse.
+    let html = "<p>hello</p><p>world</p>";
+    let parsed = parse_html(html).expect("HTML should parse");
+    assert_eq!(parsed.lines.len(), 2);
+}
+
 // Test for CLD-860
 #[test]
 fn test_confluence_code_block() {
