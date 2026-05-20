@@ -23,7 +23,7 @@ You can run the app locally using `./script/run` - see CASTCODES.md for more det
 <!-- Attach screenshots or a short video demonstrating the change, where appropriate. Remove this section if it is not relevant to your PR. -->
 
 ## Agent Mode
-- [ ] CastCodes Agent Mode - This PR was created via CastCodes Agent Mode
+- [ ] CastCodes Agent Mode — PR via [CastCodes](https://cast.codes). Join [OpenCoven on Discord](https://discord.gg/OpenCoven) for support.
 
 <!--
 ## Changelog Entries for Stable

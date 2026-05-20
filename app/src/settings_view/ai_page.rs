@@ -122,7 +122,7 @@ use crate::server::telemetry::{
 };
 use crate::ui_components::icons::Icon;
 use crate::view_components::dropdown::DropdownAction;
-use crate::workspaces::workspace::{AdminEnablementSetting, CustomerType};
+use crate::workspaces::workspace::CustomerType;
 use crate::{
     appearance::Appearance,
     editor::Event as EditorEvent,
@@ -1511,7 +1511,6 @@ impl AISettingsPageView {
                 widgets.push(Box::new(CLIAgentWidget::default()));
                 widgets.push(Box::new(ApiKeysWidget::new(ctx)));
                 widgets.push(Box::new(AwsBedrockWidget::new(ctx)));
-                widgets.push(Box::new(AgentAttributionWidget::default()));
                 widgets.push(Box::new(OtherAIWidget::default()));
                 if FeatureFlag::AgentModeComputerUse.is_enabled() {
                     widgets.push(Box::new(CloudAgentComputerUseWidget::default()));
@@ -1551,7 +1550,6 @@ impl AISettingsPageView {
                 }
                 widgets.push(Box::new(ApiKeysWidget::new(ctx)));
                 widgets.push(Box::new(AwsBedrockWidget::new(ctx)));
-                widgets.push(Box::new(AgentAttributionWidget::default()));
                 widgets.push(Box::new(OtherAIWidget::default()));
                 if FeatureFlag::AgentModeComputerUse.is_enabled() {
                     widgets.push(Box::new(CloudAgentComputerUseWidget::default()));
@@ -2266,7 +2264,6 @@ pub enum AISettingsPageAction {
     ToggleCloudAgentComputerUse,
     ToggleFileBasedMcp,
     ToggleIncludeAgentCommandsInHistory,
-    ToggleAgentAttribution,
     #[cfg(feature = "local_fs")]
     SetConversationLayout(crate::util::file::external_editor::settings::OpenConversationPreference),
     ToggleOrchestration,
@@ -3012,17 +3009,6 @@ impl TypedActionView for AISettingsPageView {
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings
                         .show_conversation_history
-                        .toggle_and_save_value(ctx));
-                });
-                ctx.notify();
-            }
-            AISettingsPageAction::ToggleAgentAttribution => {
-                // The updated value syncs to warp-server automatically via
-                // `CloudPreferencesSyncer` as a `JsonPreference` GSO keyed
-                // `Global_AgentAttributionEnabled`; no bespoke server call needed.
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    report_if_error!(settings
-                        .agent_attribution_enabled
                         .toggle_and_save_value(ctx));
                 });
                 ctx.notify();
@@ -6058,139 +6044,6 @@ impl SettingsWidget for CLIAgentWidget {
         column.finish()
     }
 }
-
-/// The presentation state of the agent attribution toggle, derived from the
-/// org-level [`AdminEnablementSetting`], the user's stored preference, and
-/// whether AI is globally enabled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct AgentAttributionToggleState {
-    /// Whether the toggle is rendered in the checked state.
-    pub(crate) is_enabled: bool,
-    /// Whether the org has forced the value (locking the toggle with a tooltip).
-    pub(crate) is_forced_by_org: bool,
-    /// Whether the toggle should be rendered as non-interactive overall
-    /// (forced by the org, or AI globally disabled).
-    pub(crate) is_disabled: bool,
-}
-
-/// Derive the toggle state from its three inputs.
-pub(crate) fn derive_agent_attribution_toggle_state(
-    org_setting: &AdminEnablementSetting,
-    user_pref: bool,
-    is_any_ai_enabled: bool,
-) -> AgentAttributionToggleState {
-    let is_forced_by_org = match org_setting {
-        AdminEnablementSetting::Enable | AdminEnablementSetting::Disable => true,
-        AdminEnablementSetting::RespectUserSetting => false,
-    };
-    let is_enabled = match org_setting {
-        AdminEnablementSetting::Enable => true,
-        AdminEnablementSetting::Disable => false,
-        AdminEnablementSetting::RespectUserSetting => user_pref,
-    };
-    AgentAttributionToggleState {
-        is_enabled,
-        is_forced_by_org,
-        is_disabled: is_forced_by_org || !is_any_ai_enabled,
-    }
-}
-
-#[derive(Default)]
-struct AgentAttributionWidget {
-    toggle: SwitchStateHandle,
-}
-
-impl SettingsWidget for AgentAttributionWidget {
-    type View = AISettingsPageView;
-
-    fn search_terms(&self) -> &str {
-        "agent attribution commit pull request co-author author credit"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
-
-        let org_setting = UserWorkspaces::as_ref(app).get_agent_attribution_setting();
-        let state = derive_agent_attribution_toggle_state(
-            &org_setting,
-            *ai_settings.agent_attribution_enabled,
-            is_any_ai_enabled,
-        );
-
-        let ui_builder = appearance.ui_builder();
-        let toggle = if state.is_forced_by_org {
-            ui_builder
-                .switch(self.toggle.clone())
-                .check(state.is_enabled)
-                .with_tooltip(TooltipConfig {
-                    text: "This option is enforced by your organization's settings and cannot be customized.".to_string(),
-                    styles: ui_builder.default_tool_tip_styles(),
-                })
-                .disable()
-                .build()
-                .finish()
-        } else if !is_any_ai_enabled {
-            ui_builder
-                .switch(self.toggle.clone())
-                .check(state.is_enabled)
-                .with_disabled(true)
-                .build()
-                .finish()
-        } else {
-            ui_builder
-                .switch(self.toggle.clone())
-                .check(state.is_enabled)
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(AISettingsPageAction::ToggleAgentAttribution);
-                })
-                .finish()
-        };
-
-        let toggle_row = build_toggle_element(
-            render_body_item_label::<AISettingsPageAction>(
-                "Enable agent attribution".to_string(),
-                Some(styles::header_font_color(!state.is_disabled, app)),
-                None,
-                LocalOnlyIconState::Hidden,
-                ToggleState::Enabled,
-                appearance,
-            ),
-            toggle,
-            appearance,
-            None,
-        );
-
-        Flex::column()
-            .with_child(render_separator(appearance))
-            .with_child(
-                build_sub_header(
-                    appearance,
-                    "Agent Attribution",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
-                )
-                .with_padding_bottom(HEADER_PADDING)
-                .finish(),
-            )
-            .with_child(toggle_row)
-            .with_child(render_ai_setting_description(
-                "The agent can add attribution to commit messages and pull requests it creates",
-                !state.is_disabled,
-                app,
-            ))
-            .finish()
-    }
-}
-
-#[cfg(test)]
-#[path = "ai_page_tests.rs"]
-mod tests;
 
 #[derive(Default)]
 struct CloudAgentComputerUseWidget {

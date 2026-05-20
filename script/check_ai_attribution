@@ -18,7 +18,7 @@ patterns=(
   '\bCreated (with|by)[[:space:]]+(Claude|Claude Code|Codex|ChatGPT|OpenAI|Gemini|Copilot|Cursor|Windsurf|Replit Agent|Devin)\b'
   '\bMade (with|by)[[:space:]]+(Claude|Claude Code|Codex|ChatGPT|OpenAI|Gemini|Copilot|Cursor|Windsurf|Replit Agent|Devin)\b'
   '\bPowered by AI\b'
-  '^Co-authored-by:.*\b(Claude|Claude Code|Codex|ChatGPT|OpenAI|Gemini|Copilot|Cursor|Windsurf|Replit Agent|Devin)\b'
+  '(?i)^Co-authored-by:.*\b(Claude|Claude Code|Codex|ChatGPT|OpenAI|Gemini|Copilot|Cursor|Windsurf|Replit Agent|Devin)\b'
 )
 
 for pattern in "${patterns[@]}"; do

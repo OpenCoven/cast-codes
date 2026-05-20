@@ -1447,18 +1447,16 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // Whether the agent should add attribution (co-author line) to commit messages and PRs.
-    // This is the user-level preference; it may be overridden by the team-level
-    // `enable_warp_attribution` AdminEnablementSetting (see
-    // `UserWorkspaces::get_agent_attribution_setting`).
+    // Legacy server preference retained for settings compatibility. CastCodes
+    // does not expose a UI for enabling it.
     agent_attribution_enabled: AgentAttributionEnabled {
         type: bool,
-        default: true,
+        default: false,
         supported_platforms: SupportedPlatforms::ALL,
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::No),
         private: false,
         toml_path: "agents.warp_agent.other.agent_attribution_enabled",
-        description: "Whether the Cast Agent adds an attribution co-author line to commit messages and pull requests it creates.",
+        description: "Legacy Cast Agent attribution preference retained for compatibility.",
     }
 ]);
 

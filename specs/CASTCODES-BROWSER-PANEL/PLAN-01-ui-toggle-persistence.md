@@ -111,7 +111,6 @@ rendering with wry lifecycle. Splitting NativeBrowserWebView into a
 dedicated webview_host module isolates the AppKit/wry plumbing so future
 agent-surface and security changes can land without touching the view tree.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -316,7 +315,6 @@ or a DuckDuckGo search query. Handles loopback hosts (localhost,
 127.0.0.1) on http://; non-loopback hostnames on https://; passes known
 schemes through; routes everything else to DDG.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -458,7 +456,6 @@ Bundled HTML rendered as a data: URL so new tabs land on a CastCodes
 start page instead of opencoven.ai (which would violate the fork-local
 cloud boundary). Plain HTML, no scripts.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -763,7 +760,6 @@ that's a follow-up). Adds versioned BrowserState + TabSnapshot for
 persistence in the next phase. History is intentionally not persisted;
 test asserts this is documented behavior.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -963,7 +959,6 @@ Atomic save (temp-file + rename) and lenient load (missing/malformed/
 unknown-version returns None instead of panicking). No debounce yet;
 debouncing happens at the call site in workspace::view.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1060,7 +1055,6 @@ Collapse dispatches workspace:toggle_browser_pane (wired in Phase 7).
 Open-external opens the active tab URL in the system default browser
 via the `opener` crate.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1123,7 +1117,6 @@ Placeholder updated to 'URL or search the web'. Submit handler now
 routes through browser::url_input::resolve which returns either a URL
 to navigate or a DDG search URL.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1199,7 +1192,6 @@ DEFAULT_BROWSER_URL changes from https://opencoven.ai to about:home,
 keeping the CastCodes public build off any upstream domain by default.
 Webview load_url calls map about:home to the bundled data: URL.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1267,7 +1259,6 @@ Active tab gets an accent border. Close button only visible on hover.
 Hovering a chip surfaces the full tab title via tooltip (which is what
 the floating-title overlay from the design brief was solving).
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1311,7 +1302,6 @@ chore(workspace): add ToggleBrowserPane action variant
 
 Empty handler — will be implemented in the next commit.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1401,7 +1391,6 @@ feat(workspace): implement ToggleBrowserPane action
 Adds Workspace::toggle_browser_pane which adds the pane if absent,
 removes it if present. Persistence is stubbed; wired up in Phase 9.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1483,7 +1472,6 @@ Primary binding workspace:toggle_browser_pane gets the ⌘⌥B shortcut
 (⌃⌥B on Linux/Windows). The old workspace:open_browser_pane action
 remains registered without a shortcut for backward compatibility.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1528,7 +1516,6 @@ feat(app_menus): View → Toggle Browser Pane
 Menu entry now dispatches workspace:toggle_browser_pane and reflects
 the ⌘⌥B shortcut.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1603,7 +1590,6 @@ feat(titlebar): add browser-pane toggle button
 Mirrors the chat panel toggle pattern. Pressed state reflects whether a
 browser pane currently exists in the active pane group.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1735,7 +1721,6 @@ Toggle, tab add/close/select, and navigation each schedule a debounced
 (500ms) JSON save of the BrowserState to the CastCodes support
 directory.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1813,7 +1798,6 @@ If the last persisted state was open, the workspace reopens the browser
 pane with the persisted tab list. The pane is restored without stealing
 focus from the active terminal.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1893,7 +1877,6 @@ test(integration): browser pane toggle via keymap/menu/palette
 Asserts the toggle action opens and closes the pane symmetrically and
 that the workspace:open_browser_pane alias still works.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -1962,7 +1945,6 @@ test(integration): browser pane multi-tab lifecycle
 Covers add/select/close including the close-last-tab path that spawns
 about:home.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
@@ -2026,7 +2008,6 @@ test(integration): browser pane persists across workspace restart
 Two-phase test using shared storage: opens pane + adds tabs in run 1,
 verifies the pane reopens with the same tabs in run 2.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git log -1 --show-signature | head -3
