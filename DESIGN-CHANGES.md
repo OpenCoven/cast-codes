@@ -108,23 +108,26 @@ onto — they are computed downstream from `details` + `background` +
 - `app/src/settings/initializer.rs` now treats `CastCodesDark` as the new-user
   default when the legacy Adeberry feature-flag override is enabled.
 
+### 1.2 Collapsible tab bar
+
+- Added `WorkspaceAction::ToggleTabBar` and the editable
+  `workspace:toggle_tab_bar` binding.
+- Bound horizontal tab-bar collapse to `cmd+shift+b` / `ctrl+shift+b`.
+  The existing vertical-tabs-panel binding keeps the same keystroke only
+  when vertical tabs are active, so the two actions stay context-separated.
+- Added an in-session `Workspace::tab_bar_collapsed` flag. Collapsing the
+  tab bar closes tab-bar popups, hides the tab strip, and leaves a 2px
+  accent-purple reveal line with an expand chevron.
+- Hovering the reveal area temporarily shows the full tab bar again; the
+  expand chevron toggles the persistent collapsed state off.
+- Covered the manual collapse mode resolver with targeted unit tests.
+
 ## Deferred (follow-up PRs)
 
 The remainder of Phase 1 is deferred so this change stays additive and
 reviewable. Each item is non-trivial in this codebase because Warp's UI
 layer (warpui + `app/src/`) does not split surfaces into dedicated crates
 the way Zed does.
-
-### 1.2 Collapsible tab bar
-
-The brief asks for `tab_bar_collapsed` on a `Pane` struct,
-`pane::ToggleTabBar`, and a `cmd+shift+b` keybind. The closest equivalents
-here are `app/src/tab.rs` (1905 LoC, tab rendering + drag/drop/lifecycle)
-and `app/src/workspace/mod.rs` (1581 LoC). There is no `Pane` struct with
-a tab bar field — tab rendering is interleaved with header/toolbar logic.
-A collapsible mode would require a refactor of `tab.rs` to gate the tab
-strip render path and a new global action wired through the existing
-keybinding registry. Out of scope for this PR.
 
 ### 1.3 Title bar / 1.4 Status bar / 1.5 Sidebar / 1.6 Editor area / 1.7 Inputs / 1.8 Buttons
 

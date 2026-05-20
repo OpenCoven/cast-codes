@@ -137,6 +137,7 @@ pub enum WorkspaceAction {
     },
     TabHoverWidthEnd,
     ToggleTabBarOverflowMenu,
+    ToggleTabBar,
     ToggleWelcomeTips,
     CloseTab(usize),
     CloseActiveTab,
@@ -865,6 +866,7 @@ impl WorkspaceAction {
             | ToggleNewSessionMenu { .. }
             | SelectNewSessionMenuItem(_)
             | ToggleTabBarOverflowMenu
+            | ToggleTabBar
             | CheckForUpdate
             | SetA11yVerbosityLevel(_)
             | ToggleNotifications

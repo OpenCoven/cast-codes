@@ -78,8 +78,8 @@ use crate::workspace::view::{
     NEW_TERMINAL_TAB_BINDING_NAME, OPEN_GLOBAL_SEARCH_BINDING_NAME,
     TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME, TOGGLE_NOTIFICATION_MAILBOX_BINDING_NAME,
     TOGGLE_PROJECT_EXPLORER_BINDING_NAME, TOGGLE_RIGHT_PANEL_BINDING_NAME,
-    TOGGLE_TAB_CONFIGS_MENU_BINDING_NAME, TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME,
-    TOGGLE_WARP_DRIVE_BINDING_NAME,
+    TOGGLE_TAB_BAR_BINDING_NAME, TOGGLE_TAB_CONFIGS_MENU_BINDING_NAME,
+    TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME, TOGGLE_WARP_DRIVE_BINDING_NAME,
 };
 pub use one_time_modal_model::OneTimeModalModel;
 pub use registry::WorkspaceRegistry;
@@ -715,6 +715,14 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace"))
         .with_mac_key_binding("cmd-shift-+")
         .with_linux_or_windows_key_binding("ctrl-shift-+"),
+        EditableBinding::new(
+            TOGGLE_TAB_BAR_BINDING_NAME,
+            BindingDescription::new("Toggle tab bar"),
+            WorkspaceAction::ToggleTabBar,
+        )
+        .with_context_predicate(id!("Workspace") & !id!(flags::USE_VERTICAL_TABS_FLAG))
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_key_binding(cmd_or_ctrl_shift("b")),
         EditableBinding::new(
             TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME,
             BindingDescription::new("Toggle vertical tabs panel")

@@ -634,6 +634,7 @@ pub(crate) const TOGGLE_CLI_CHAT_PANEL_BINDING_NAME: &str = "workspace:toggle_cl
 pub(crate) const TOGGLE_BROWSER_PANE_BINDING_NAME: &str = "workspace:toggle_browser_pane";
 pub(crate) const TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME: &str =
     "workspace:toggle_vertical_tabs_panel";
+pub(crate) const TOGGLE_TAB_BAR_BINDING_NAME: &str = "workspace:toggle_tab_bar";
 pub(crate) const OPEN_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:open_global_search";
 pub(crate) const TOGGLE_CONVERSATION_LIST_VIEW_BINDING_NAME: &str =
     "workspace:toggle_conversation_list_view";
@@ -777,6 +778,21 @@ impl ShowTabBar {
     fn has_tab_bar(self) -> bool {
         matches!(self, ShowTabBar::Stacked)
     }
+}
+
+fn resolve_manual_tab_bar_mode(
+    tab_bar_collapsed: bool,
+    reveal_requested: bool,
+) -> Option<ShowTabBar> {
+    if !tab_bar_collapsed {
+        return None;
+    }
+
+    Some(if reveal_requested {
+        ShowTabBar::Stacked
+    } else {
+        ShowTabBar::Hidden
+    })
 }
 
 /// The type of content being displayed when the simplified WASM tab bar is shown.
@@ -1020,6 +1036,7 @@ pub struct Workspace {
     cached_keybindings: HashMap<String, Option<String>>,
     is_user_menu_open: bool,
     tab_bar_pinned_by_popup: bool,
+    tab_bar_collapsed: bool,
     user_menu: ViewHandle<Menu<WorkspaceAction>>,
     native_modal: ViewHandle<NativeModal>,
     shared_objects_creation_denied_modal: ViewHandle<SharedObjectsCreationDeniedModal>,
@@ -3197,6 +3214,7 @@ impl Workspace {
             show_header_toolbar_context_menu: None,
             is_user_menu_open: false,
             tab_bar_pinned_by_popup: false,
+            tab_bar_collapsed: false,
             user_menu,
             native_modal,
             shared_objects_creation_denied_modal,
@@ -12179,15 +12197,6 @@ impl Workspace {
             return ShowTabBar::Stacked;
         }
 
-        if !FeatureFlag::FullScreenZenMode.is_enabled() {
-            return ShowTabBar::default();
-        }
-
-        let is_fullscreen = app
-            .windows()
-            .platform_window(self.window_id)
-            .is_some_and(|window| window.fullscreen_state() == FullscreenState::Fullscreen);
-
         let is_hovered = self
             .tab_bar_hover_state
             .lock()
@@ -12210,6 +12219,22 @@ impl Workspace {
             .active_tab_pane_group()
             .as_ref(app)
             .any_pane_being_dragged(app);
+
+        if let Some(mode) = resolve_manual_tab_bar_mode(
+            self.tab_bar_collapsed,
+            is_pane_being_dragged || is_hovered || is_tab_menu_open,
+        ) {
+            return mode;
+        }
+
+        if !FeatureFlag::FullScreenZenMode.is_enabled() {
+            return ShowTabBar::default();
+        }
+
+        let is_fullscreen = app
+            .windows()
+            .platform_window(self.window_id)
+            .is_some_and(|window| window.fullscreen_state() == FullscreenState::Fullscreen);
 
         let workspace_decoration_visibility = TabSettings::as_ref(app)
             .workspace_decoration_visibility
@@ -17766,6 +17791,37 @@ impl Workspace {
         )
     }
 
+    fn render_collapsed_tab_bar_reveal(
+        &self,
+        appearance: &Appearance,
+        ctx: &AppContext,
+    ) -> Box<dyn Element> {
+        let accent_line = ConstrainedBox::new(
+            Rect::new()
+                .with_background(appearance.theme().accent())
+                .finish(),
+        )
+        .with_height(2.)
+        .finish();
+
+        let reveal_pill =
+            Container::new(self.render_tab_bar_collapse_button(appearance, ctx, true))
+                .with_margin_top(2.)
+                .finish();
+
+        self.render_tab_bar_hoverable(
+            Flex::column()
+                .with_main_axis_size(MainAxisSize::Min)
+                .with_child(accent_line)
+                .with_child(
+                    Container::new(Align::new(reveal_pill).left().finish())
+                        .with_padding_left(self.compute_tab_bar_left_padding(ctx))
+                        .finish(),
+                )
+                .finish(),
+        )
+    }
+
     /// Renders the provided content wrapped in the tab bar hover behavior.
     fn render_tab_bar_hoverable(&self, content: Box<dyn Element>) -> Box<dyn Element> {
         Hoverable::new(self.tab_bar_hover_state.clone(), |_| content)
@@ -17774,6 +17830,36 @@ impl Workspace {
                 ctx.dispatch_typed_action(WorkspaceAction::SyncTrafficLights);
             })
             .finish()
+    }
+
+    fn render_tab_bar_collapse_button(
+        &self,
+        appearance: &Appearance,
+        ctx: &AppContext,
+        is_reveal: bool,
+    ) -> Box<dyn Element> {
+        let icon = if is_reveal {
+            icons::Icon::ChevronDown
+        } else {
+            icons::Icon::ChevronUp
+        };
+        let label = if is_reveal {
+            "Expand tab bar"
+        } else {
+            "Collapse tab bar"
+        };
+
+        self.render_tab_bar_icon_button(
+            appearance,
+            icon,
+            &self.mouse_states.tab_bar_collapse_button,
+            WorkspaceAction::ToggleTabBar,
+            label.to_string(),
+            keybinding_name_to_display_string(TOGGLE_TAB_BAR_BINDING_NAME, ctx),
+            false,
+            false,
+        )
+        .finish()
     }
 
     fn render_tab_hover_indicator(&self, appearance: &Appearance) -> Box<dyn Element> {
@@ -17976,6 +18062,14 @@ impl Workspace {
         // Check if vertical tabs mode is active
         let vertical_tabs_active =
             FeatureFlag::VerticalTabs.is_enabled() && *TabSettings::as_ref(ctx).use_vertical_tabs;
+
+        if !vertical_tabs_active {
+            tab_bar.add_child(
+                Container::new(self.render_tab_bar_collapse_button(appearance, ctx, false))
+                    .with_margin_right(4.)
+                    .finish(),
+            );
+        }
 
         // Render config-driven left-side toolbar buttons (both horizontal and vertical tabs)
         let knowledge_center_closed = true;
@@ -20864,6 +20958,16 @@ impl TypedActionView for Workspace {
                 position,
             } => self.toggle_vertical_tabs_pane_context_menu(*tab_index, *target, *position, ctx),
             ToggleTabBarOverflowMenu => self.toggle_tab_bar_overflow_menu(ctx),
+            ToggleTabBar => {
+                self.tab_bar_collapsed = !self.tab_bar_collapsed;
+                if self.tab_bar_collapsed {
+                    self.close_tab_bar_overflow_menu(ctx);
+                    self.show_tab_right_click_menu = None;
+                    self.close_new_session_dropdown_menu(ctx);
+                }
+                self.sync_window_button_visibility(ctx);
+                ctx.notify();
+            }
             ToggleBlockSnackbar => self.toggle_block_snackbar(ctx),
             ToggleWelcomeTips => self.toggle_welcome_tips_visiblity(ctx),
             CloseTab(index) => self.close_tab(*index, false, true, ctx),
@@ -23390,8 +23494,13 @@ impl View for Workspace {
             ShowTabBar::Stacked => (), // The tab bar was rendered in the content column.
             ShowTabBar::Hidden => {
                 // Hide the tab bar, but include a hover area.
+                let hidden_tab_bar = if self.tab_bar_collapsed {
+                    self.render_collapsed_tab_bar_reveal(appearance, app)
+                } else {
+                    self.render_tab_bar_hover_area()
+                };
                 stack.add_positioned_child(
-                    self.render_tab_bar_hover_area(),
+                    hidden_tab_bar,
                     OffsetPositioning::offset_from_parent(
                         Vector2F::zero(),
                         ParentOffsetBounds::WindowByPosition,
@@ -25136,6 +25245,28 @@ fn compute_default_panel_widths(
         (left, right)
     } else {
         (DEFAULT_LEFT_PANEL_WIDTH, DEFAULT_RIGHT_PANEL_WIDTH)
+    }
+}
+
+#[cfg(test)]
+mod tab_bar_collapse_tests {
+    use super::*;
+
+    #[test]
+    fn manual_collapse_hides_tab_bar_until_revealed() {
+        assert_eq!(
+            resolve_manual_tab_bar_mode(true, false),
+            Some(ShowTabBar::Hidden)
+        );
+        assert_eq!(
+            resolve_manual_tab_bar_mode(true, true),
+            Some(ShowTabBar::Stacked)
+        );
+    }
+
+    #[test]
+    fn manual_collapse_does_not_override_regular_mode_when_disabled() {
+        assert_eq!(resolve_manual_tab_bar_mode(false, false), None);
     }
 }
 

@@ -29,6 +29,7 @@ pub(super) struct WorkspaceMouseStates {
     pub(super) resource_center_icon: MouseStateHandle,
     pub(super) ai_tab_bar_button: MouseStateHandle,
     pub(super) agent_management_view_button: MouseStateHandle,
+    pub(super) tab_bar_collapse_button: MouseStateHandle,
     pub(super) left_panel_icon: MouseStateHandle,
     #[cfg(target_family = "wasm")]
     pub(super) settings_icon: MouseStateHandle,
