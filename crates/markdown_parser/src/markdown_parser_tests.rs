@@ -2784,3 +2784,39 @@ fn test_parse_block_html_strips_script() {
     assert!(texts.iter().any(|t| t == "after"));
     assert!(!texts.iter().any(|t| t.contains("alert")), "script body must be stripped: {texts:?}");
 }
+
+#[test]
+fn test_parse_inline_html_kbd() {
+    let source = "Press <kbd>Cmd</kbd>+<kbd>K</kbd> to clear.";
+    let parsed = test_parse_markdown(source);
+    let line = match parsed.first() {
+        Some(FormattedTextLine::Line(line)) => line,
+        other => panic!("expected Line, got {other:?}"),
+    };
+    let cmd = line.iter().find(|f| f.text == "Cmd").expect("Cmd fragment");
+    assert!(cmd.styles.inline_code, "kbd should map to inline_code: {cmd:?}");
+}
+
+#[test]
+fn test_parse_inline_html_sub_sup() {
+    let source = "H<sub>2</sub>O and E=mc<sup>2</sup>";
+    let parsed = test_parse_markdown(source);
+    let line = match parsed.first() {
+        Some(FormattedTextLine::Line(line)) => line,
+        other => panic!("expected Line, got {other:?}"),
+    };
+    let two = line.iter().find(|f| f.text == "2").expect("subscript 2");
+    assert!(two.styles.italic, "sub should be italic for v1: {two:?}");
+}
+
+#[test]
+fn test_parse_inline_html_unknown_tag_passes_through() {
+    let source = "<foo>bar</foo>";
+    let parsed = test_parse_markdown(source);
+    let line = match parsed.first() {
+        Some(FormattedTextLine::Line(line)) => line,
+        other => panic!("expected Line, got {other:?}"),
+    };
+    let joined: String = line.iter().map(|f| f.text.clone()).collect();
+    assert_eq!(joined, "<foo>bar</foo>");
+}

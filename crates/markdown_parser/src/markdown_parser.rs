@@ -1064,8 +1064,13 @@ fn parse_inline<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
             InlineToken::LinkEnd => {
                 input = parse_link(&mut state, remaining);
             }
-            InlineToken::UnderlineEnd => {
-                input = parse_underline(&mut state, remaining);
+            InlineToken::InlineHtml(fragments) => {
+                for fragment in fragments {
+                    state.push_closed_node(fragment);
+                }
+            }
+            InlineToken::StrippedHtml => {
+                // Emit nothing.
             }
         }
     }
@@ -1312,41 +1317,6 @@ fn parse_link_target<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
 }
 
 /// Parses underlined text using the same logic as parse_link.
-fn parse_underline<'a>(state: &mut InlineState, remaining: &'a str) -> &'a str {
-    let Some((underline_start_index, underline_start)) = state
-        .delimiters
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(_, delimiter)| delimiter.kind == DelimiterKind::UnderlineStart)
-    else {
-        // If there's no underline start, treat this as a literal `</u>`.
-        state.push_text("</u>");
-        return remaining;
-    };
-
-    if !underline_start.active {
-        // If the start is inactive, remove it - this prevents nested underlines.
-        state.delimiters.remove(underline_start_index);
-        state.push_text("</u>");
-        return remaining;
-    }
-
-    let underline_start_node = underline_start.node_index;
-    state.backtrack_styles(underline_start_node, |styles| styles.underline = true);
-    process_emphasis(state, Some(underline_start_index));
-
-    state.delimiters.remove(underline_start_index);
-    for delimiter in &mut state.delimiters[..underline_start_index] {
-        if delimiter.kind == DelimiterKind::UnderlineStart {
-            delimiter.active = false;
-        }
-    }
-
-    state.remove_node(underline_start_node);
-    state.last_node_closed = true;
-    remaining
-}
 
 /// Process emphasis delimiters on the state's delimiter stack, bounded by `stack_bottom`.
 ///
@@ -1579,8 +1549,7 @@ fn parse_inline_token<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
             parse_inline_token_underscore,
             parse_inline_token_strikethrough,
             parse_inline_token_autolink,
-            parse_inline_token_underline_start,
-            parse_inline_token_underline_end,
+            parse_inline_token_html,
             whitespace,
             text,
             // This _must_ be the last parser in the chain. It unconditionally consumes a single
@@ -1663,27 +1632,78 @@ fn parse_inline_token_link_end<'a, E: ContextError<&'a str> + ParseError<&'a str
     context("link_end", map(tag("]"), |_| InlineToken::LinkEnd))(input)
 }
 
-/// Parse an underline-start delimiter.
-fn parse_inline_token_underline_start<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
-    input: &'a str,
-) -> IResult<&'a str, InlineToken<'a>, E> {
-    context(
-        "underline_start",
-        map(tag("<u>"), |_| InlineToken::Delimiter {
-            kind: DelimiterKind::UnderlineStart,
-            count: 1,
-        }),
-    )(input)
+/// Return `true` if `raw` looks like a syntactically well-formed HTML tag or tag pair.
+///
+/// Checks (in order):
+/// 1. The span must contain `>` (the open tag was properly closed).
+/// 2. The character immediately after the tag name must be a valid separator:
+///    whitespace, `>`, or `/`. This rejects malformed tags like `<b)c>`.
+/// 3. For non-void, non-self-closing open tags, the span must contain a matching
+///    close tag (`</`). This ensures open-only tags like a bare `<b>` are not
+///    consumed as complete spans — they fall through to literal-text parsing.
+fn is_well_formed_html_span(raw: &str) -> bool {
+    if !raw.contains('>') {
+        return false;
+    }
+    let bytes = raw.as_bytes();
+    let is_close_tag = bytes.get(1) == Some(&b'/');
+    // Skip `<` and optional `/` for close tags.
+    let name_start = if is_close_tag { 2 } else { 1 };
+    // Advance through the tag name.
+    let mut i = name_start;
+    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-') {
+        i += 1;
+    }
+    // After the tag name there must be whitespace, `>`, or `/` (for self-closing).
+    // Anything else (e.g. `)`, `(`) means this is not a real tag.
+    if !matches!(bytes.get(i), Some(b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') | None) {
+        return false;
+    }
+    // Close tags and self-closing tags are already complete.
+    if is_close_tag || raw.ends_with("/>") {
+        return true;
+    }
+    // Void elements are inherently self-contained.
+    let void_tags = ["br", "hr", "img", "input", "meta", "link"];
+    let tag_name = &raw[name_start..i];
+    if void_tags.iter().any(|t| tag_name.eq_ignore_ascii_case(t)) {
+        return true;
+    }
+    // For regular open tags, require a matching close tag in the same span.
+    // A bare `<b>` (no `</b>`) is rejected so it falls through to literal text.
+    raw.contains("</")
 }
 
-/// Parse an underline-end delimiter.
-fn parse_inline_token_underline_end<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
+/// Parse an inline HTML span. Recognises phrasing-safe tags (routes to html5ever) and
+/// stripped tags (silently dropped). Block-safe and unknown tags are rejected so the caller
+/// falls through to the character-by-character `unmatched_char` parser.
+fn parse_inline_token_html<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
     input: &'a str,
 ) -> IResult<&'a str, InlineToken<'a>, E> {
-    context(
-        "underline_end",
-        map(tag("</u>"), |_| InlineToken::UnderlineEnd),
-    )(input)
+    use crate::gfm_html::{HtmlSpanKind, try_lex_html_span};
+    use crate::html_parser::parse_html_inline_fragments;
+
+    let Some((span, rest)) = try_lex_html_span(input) else {
+        return Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Tag)));
+    };
+    // Reject spans where the open tag was never properly terminated by '>',
+    // or where the character immediately following the tag name is not a
+    // valid separator (whitespace, `>`, `/`). Both of these indicate a
+    // malformed tag that should fall through to literal-text parsing.
+    // E.g. `<b)c>` — `)` is not a valid attribute separator.
+    if !is_well_formed_html_span(span.raw) {
+        return Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Tag)));
+    }
+    match span.kind {
+        HtmlSpanKind::PhrasingSafe => {
+            let fragments = parse_html_inline_fragments(span.raw);
+            Ok((rest, InlineToken::InlineHtml(fragments)))
+        }
+        HtmlSpanKind::Stripped => Ok((rest, InlineToken::StrippedHtml)),
+        HtmlSpanKind::BlockSafe | HtmlSpanKind::Unknown => {
+            Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Tag)))
+        }
+    }
 }
 
 /// Helper to parse a run of delimiters.
@@ -1729,8 +1749,11 @@ enum InlineToken<'a> {
     AutoLink(&'a str),
     /// A closing `]` bracket, which triggers link parsing.
     LinkEnd,
-    /// A closing </u>, which triggers underline parsing.
-    UnderlineEnd,
+    /// A complete inline HTML span on the phrasing safe-list, already parsed
+    /// into fragments by `html_parser::parse_html_inline_fragments`.
+    InlineHtml(Vec<FormattedTextFragment>),
+    /// An HTML span on the stripped-list. Emits nothing.
+    StrippedHtml,
 }
 
 /// An entry in the [delimiter stack](https://spec.commonmark.org/0.30/#delimiter-stack)

@@ -44,7 +44,7 @@ enum ListType {
     ListItem { ordered: bool },
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 struct Styling {
     bold: bool,
     italic: bool,
@@ -561,10 +561,17 @@ fn parse_phrasing_content(nodes: &[Rc<Node>], text_styling: Styling) -> Formatte
                     _ => (),
                 };
 
+                let before = result.len();
                 result.extend(parse_phrasing_content(
                     node.children.borrow().as_ref(),
-                    decorated_styling,
+                    decorated_styling.clone(),
                 ));
+                // If the element added no children (e.g. `<u></u>`) but carries
+                // non-default styling, emit an empty fragment so callers can
+                // detect and preserve the style even when the text is "".
+                if result.len() == before && decorated_styling != Styling::default() {
+                    result.push(phrasing_to_formatted_text("", &decorated_styling));
+                }
             }
         }
     }
