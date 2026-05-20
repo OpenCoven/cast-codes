@@ -112,7 +112,8 @@ pub fn parse_markdown_with_gfm_tables(markdown: &str) -> Result<FormattedText> {
 }
 
 fn parse_markdown_impl(markdown: &str, parse_gfm_tables: bool) -> Result<FormattedText> {
-    parse_markdown_internal::<'_, nom::error::Error<_>>(markdown, parse_gfm_tables)
+    let (stripped, defs) = crate::footnotes::extract_definitions(markdown);
+    let parsed = parse_markdown_internal::<'_, nom::error::Error<_>>(&stripped, parse_gfm_tables)
         .map(|(_, mut res)| {
             if let Some(FormattedTextLine::LineBreak) = res.last() {
                 res.pop();
@@ -125,7 +126,10 @@ fn parse_markdown_impl(markdown: &str, parse_gfm_tables: bool) -> Result<Formatt
             } else {
                 anyhow::anyhow!("Failed to parse Markdown")
             }
-        })
+        })?;
+    let (mut rewritten, ctx) = crate::footnotes::rewrite_references(parsed, defs);
+    crate::footnotes::append_section(&mut rewritten, &ctx);
+    Ok(rewritten)
 }
 
 pub fn parse_markdown_to_raw_text(markdown: &str) -> Result<String> {
