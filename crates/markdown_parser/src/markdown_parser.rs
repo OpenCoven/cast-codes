@@ -1320,8 +1320,6 @@ fn parse_link_target<'a, E: ContextError<&'a str> + ParseError<&'a str>>(
     Ok((input, target))
 }
 
-/// Parses underlined text using the same logic as parse_link.
-
 /// Process emphasis delimiters on the state's delimiter stack, bounded by `stack_bottom`.
 ///
 /// This is approximately equivalent to the CommonMark [process emphasis](https://spec.commonmark.org/0.30/#phase-2-inline-structure)

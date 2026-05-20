@@ -63,8 +63,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
         return None;
     }
     // HTML comment: <!-- … -->
-    if input.starts_with("<!--") {
-        let end = input[4..].find("-->").map(|i| i + 4 + 3).unwrap_or(input.len());
+    if let Some(after_open) = input.strip_prefix("<!--") {
+        let end = after_open
+            .find("-->")
+            .map(|i| input.len() - after_open.len() + i + 3)
+            .unwrap_or(input.len());
         return Some((
             HtmlSpan { raw: &input[..end], tag: "", kind: HtmlSpanKind::Stripped },
             &input[end..],

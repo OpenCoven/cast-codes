@@ -127,8 +127,9 @@ fn type_matches(attributes: &[Attribute], value: &str) -> bool {
 /// Parse an HTML fragment and return its block-level lines.
 ///
 /// Used by the markdown parser when it encounters a block-level HTML span in a `.md` file.
-/// Unlike `parse_html`, this assumes the caller already classified the span as block-level
-/// and does not perform any top-level element skipping.
+/// Delegates to `parse_html`, which top-level-skips wrapper elements like `<html>`, `<body>`,
+/// `<head>`, `<meta>`. Those tags are not in the GFM safe-list, so the skipping is benign
+/// for the markdown→HTML dispatch path.
 pub(crate) fn parse_html_block_lines(html: &str) -> Vec<FormattedTextLine> {
     parse_html(html)
         .map(|formatted| formatted.lines.into_iter().collect())
@@ -548,6 +549,14 @@ fn parse_phrasing_content(nodes: &[Rc<Node>], text_styling: Styling) -> Formatte
             }
             NodeData::Element { name, attrs, .. } => {
                 let node_name = name.local.to_string();
+                // `<br>` in inline context emits a hard line break as a `\n`
+                // text fragment so adjacent text stays visually separated.
+                // Block-context `<br>` is handled by the per-element dispatch
+                // in `parse_html` and produces `FormattedTextLine::LineBreak`.
+                if node_name.as_str() == "br" {
+                    result.push(phrasing_to_formatted_text("\n", &text_styling));
+                    continue;
+                }
                 let mut decorated_styling = text_styling.clone();
                 decorated_styling.update_with_attributes(&attrs.borrow());
                 match node_name.as_ref() {

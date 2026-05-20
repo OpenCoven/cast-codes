@@ -2825,14 +2825,15 @@ fn test_parse_inline_html_unknown_tag_passes_through() {
 fn test_parse_inline_html_br_emits_linebreak() {
     let source = "before<br>after";
     let parsed = test_parse_markdown(source);
-    // The HTML helper emits the <br> as a LineBreak line, then "after" as a
-    // continuation. Joined raw text should reflect the break.
-    let joined = parsed
-        .iter()
-        .map(|line| line.raw_text())
-        .collect::<String>();
-    assert!(joined.contains("before"));
-    assert!(joined.contains("after"));
+    let line = match parsed.first() {
+        Some(FormattedTextLine::Line(fragments)) => fragments,
+        other => panic!("expected single Line, got {other:?}"),
+    };
+    // Inline <br> emits a "\n" text fragment between "before" and "after"
+    // so the two halves aren't visually smashed together. (Block-context
+    // <br>, handled by parse_html, produces FormattedTextLine::LineBreak.)
+    let joined: String = line.iter().map(|f| f.text.clone()).collect();
+    assert_eq!(joined, "before\nafter", "got {joined:?}");
 }
 
 #[test]
