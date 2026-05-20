@@ -48,7 +48,7 @@ impl SettingsInitializer {
             if FeatureFlag::DefaultAdeberryTheme.is_enabled() {
                 log::debug!("Setting default theme to Adeberry for new user");
                 ThemeSettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if *settings.theme_kind.value() == ThemeKind::CastCodesDark {
+                    if !settings.theme_kind.is_value_explicitly_set() {
                         report_if_error!(settings.theme_kind.set_value(ThemeKind::Adeberry, ctx));
                     }
                 });
