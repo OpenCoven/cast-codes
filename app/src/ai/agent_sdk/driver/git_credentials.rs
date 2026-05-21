@@ -162,7 +162,9 @@ pub(crate) fn write_git_credentials(credentials: &[GitCredential]) -> Result<()>
 pub(crate) fn clear_git_credentials() -> Result<()> {
     let home = home_dir()?;
     cleanup_secret_file(&home.join(".git-credentials"))?;
+    cleanup_secret_file(&home.join(".git-credentials.tmp"))?;
     cleanup_secret_file(&home.join(".config").join("gh").join("hosts.yaml"))?;
+    cleanup_secret_file(&home.join(".config").join("gh").join("hosts.yaml.tmp"))?;
     Ok(())
 }
 
