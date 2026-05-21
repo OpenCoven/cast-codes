@@ -6,7 +6,7 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-default = ["cast-agent"]
+default = []
 jemalloc = []
 local_fs = []
 test-util = []

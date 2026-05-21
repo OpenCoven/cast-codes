@@ -591,9 +591,12 @@ jobs:
         run: |
           set -euo pipefail
           for dir in "${{ steps.bundle_app.outputs.packages_dir }}" "${{ steps.bundle_app.outputs.assets_dir }}"; do
-            find "$dir" -maxdepth 1 -type f ! -name '*.sha256' -print0 |
+            find "$dir" -type f ! -name '*.sha256' -print0 |
               while IFS= read -r -d '' file; do
-                sha256sum "$file" > "$file.sha256"
+                (
+                  cd "$(dirname "$file")"
+                  sha256sum "$(basename "$file")" > "$(basename "$file").sha256"
+                )
               done
           done
 
@@ -604,7 +607,7 @@ jobs:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
           files: |
             ${{ steps.bundle_app.outputs.packages_dir }}/*
-            ${{ steps.bundle_app.outputs.assets_dir }}/*
+            ${{ steps.bundle_app.outputs.assets_dir }}/**/*
           token: ${{ github.token }}
 
       - name: Upload web assets as workflow artifact

@@ -28,7 +28,6 @@ lsp-types = "0.97.0"
 node_runtime = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-rustls = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 warp_core = { workspace = true }
@@ -48,3 +47,6 @@ nix = { workspace = true }
 repo_metadata.workspace = true
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["process"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rustls = { workspace = true }
