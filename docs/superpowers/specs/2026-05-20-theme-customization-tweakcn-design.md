@@ -6,7 +6,7 @@
 
 ## Summary
 
-Expand CastCodes' theme schema with an optional, tweakcn-aligned `ui:` token block so users can customize chat-panel backgrounds, text colors, borders, and other semantic UI surfaces that are currently either derived from a small handful of base colors or hardcoded as brand constants. Add an in-settings "Import theme…" flow that accepts pasted CSS or a dropped `.css` file from [tweakcn](https://tweakcn.com/), converts OKLCH→sRGB, writes a YAML theme to `~/.config/warp/themes/`, and selects it.
+Expand CastCodes' theme schema with an optional, tweakcn-aligned `ui:` token block so users can customize chat-panel backgrounds, text colors, borders, and other semantic UI surfaces that are currently either derived from a small handful of base colors or hardcoded as brand constants. Add an in-settings "Import theme…" flow that accepts pasted CSS or a dropped `.css` file from [tweakcn](https://tweakcn.com/), converts OKLCH→sRGB, writes a YAML theme to the app's themes directory (`warp_core::paths::themes_dir()`), and selects it.
 
 The change is purely additive — every existing built-in and user theme keeps working unchanged because missing `ui:` fields fall back to today's derived values.
 
