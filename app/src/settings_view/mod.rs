@@ -76,6 +76,7 @@ use warpui::{
 mod about_page;
 mod admin_actions;
 mod agent_assisted_environment_modal;
+pub mod import_theme_modal;
 mod ai_page;
 mod appearance_page;
 mod billing_and_usage;

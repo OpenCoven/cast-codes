@@ -350,6 +350,9 @@ use crate::terminal::view::{
 use crate::terminal::{BlockListSettings, TerminalModel};
 use crate::themes::theme::{AnsiColorIdentifier, RespectSystemTheme, ThemeKind};
 use crate::themes::theme_chooser::{ThemeChooser, ThemeChooserEvent, ThemeChooserMode};
+use crate::settings_view::import_theme_modal::{
+    ImportThemeModal, ImportThemeModalEvent,
+};
 use crate::themes::theme_creator_modal::{ThemeCreatorModal, ThemeCreatorModalEvent};
 use crate::themes::theme_deletion_modal::{ThemeDeletionModal, ThemeDeletionModalEvent};
 use crate::tips::{TipsEvent, TipsView};
@@ -1017,6 +1020,7 @@ pub struct Workspace {
     show_header_toolbar_context_menu: Option<Vector2F>,
     theme_creator_modal: ViewHandle<ThemeCreatorModal>,
     theme_deletion_modal: ViewHandle<ThemeDeletionModal>,
+    import_theme_modal: ViewHandle<ImportThemeModal>,
     suggested_agent_mode_workflow_modal: ViewHandle<SuggestedAgentModeWorkflowModal>,
     suggested_rule_modal: ViewHandle<SuggestedRuleModal>,
     oz_launch_modal: ModalWithTab<LaunchModal<OzLaunchSlide>>,
@@ -1692,6 +1696,15 @@ impl Workspace {
         });
 
         theme_deletion_modal
+    }
+
+    fn build_import_theme_modal(ctx: &mut ViewContext<Self>) -> ViewHandle<ImportThemeModal> {
+        let import_theme_modal = ctx.add_typed_action_view(ImportThemeModal::new);
+        ctx.subscribe_to_view(&import_theme_modal, move |me, _, event, ctx| {
+            me.handle_import_theme_modal_event(event, ctx);
+        });
+
+        import_theme_modal
     }
 
     fn build_suggested_agent_mode_workflow_modal(
@@ -2749,6 +2762,8 @@ impl Workspace {
 
         let theme_deletion_modal = Self::build_theme_deletion_modal(ctx);
 
+        let import_theme_modal = Self::build_import_theme_modal(ctx);
+
         let suggested_agent_mode_workflow_modal =
             Self::build_suggested_agent_mode_workflow_modal(ctx);
 
@@ -3201,6 +3216,7 @@ impl Workspace {
             workflow_modal,
             theme_creator_modal,
             theme_deletion_modal,
+            import_theme_modal,
             import_modal,
             window_id: ctx.window_id(),
             toast_stack,
@@ -9778,6 +9794,33 @@ impl Workspace {
                         // Reset theme to Dark if we are deleting the current theme
                         theme_chooser_view.select_and_save_theme(&ThemeKind::Dark, ctx);
                     });
+            }
+        }
+    }
+
+    fn handle_import_theme_modal_event(
+        &mut self,
+        event: &ImportThemeModalEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        match event {
+            ImportThemeModalEvent::Close => {
+                self.current_workspace_state.is_import_theme_modal_open = false;
+                ctx.notify();
+            }
+            ImportThemeModalEvent::ThemeSaved { theme } => {
+                self.current_workspace_state.is_import_theme_modal_open = false;
+                self.theme_chooser_view
+                    .update(ctx, |theme_chooser_view, ctx| {
+                        theme_chooser_view.reload_and_set_custom_theme(theme.clone(), ctx);
+                    });
+                ctx.notify();
+            }
+            ImportThemeModalEvent::ShowErrorToast { message } => {
+                self.toast_stack.update(ctx, |view, ctx| {
+                    let new_toast = DismissibleToast::error(message.clone());
+                    view.add_ephemeral_toast(new_toast, ctx);
+                });
             }
         }
     }
@@ -17155,6 +17198,12 @@ impl Workspace {
         ctx.notify();
     }
 
+    fn open_import_theme_modal(&mut self, ctx: &mut ViewContext<Self>) {
+        self.current_workspace_state.is_import_theme_modal_open = true;
+        ctx.focus(&self.import_theme_modal);
+        ctx.notify();
+    }
+
     fn open_theme_deletion_modal(&mut self, theme_kind: ThemeKind, ctx: &mut ViewContext<Self>) {
         self.current_workspace_state.is_theme_deletion_modal_open = true;
         self.theme_deletion_modal
@@ -21283,8 +21332,7 @@ impl TypedActionView for Workspace {
             ShowThemeChooser(mode) => self.show_theme_chooser(Some(*mode), ctx),
             ShowThemeChooserForActiveTheme => self.show_theme_chooser_for_active_theme(ctx),
             ShowImportThemeModal => {
-                // TODO(Task 15): mount the import-theme modal.
-                tracing::info!("import theme modal — not yet implemented");
+                self.open_import_theme_modal(ctx);
             }
             IncreaseFontSize => self.increase_font_size(ctx),
             DecreaseFontSize => self.decrease_font_size(ctx),
@@ -23827,6 +23875,10 @@ impl View for Workspace {
 
         if self.current_workspace_state.is_theme_creator_modal_open {
             stack.add_child(ChildView::new(&self.theme_creator_modal).finish());
+        }
+
+        if self.current_workspace_state.is_import_theme_modal_open {
+            stack.add_child(ChildView::new(&self.import_theme_modal).finish());
         }
 
         if self.current_workspace_state.is_import_modal_open {
