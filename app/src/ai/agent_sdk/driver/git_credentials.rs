@@ -269,7 +269,9 @@ async fn try_refresh(task_id: &str, ai_client: &Arc<dyn AIClient>) -> Result<()>
         .context("Failed to fetch git credentials from server")?;
 
     if credentials.is_empty() {
-        clear_git_credentials()?;
+        if let Err(e) = clear_git_credentials() {
+            log::warn!("Failed to clear git credentials after empty refresh response: {e:#}");
+        }
         log::debug!("No git credentials returned during refresh; removed credential files");
         return Ok(());
     }

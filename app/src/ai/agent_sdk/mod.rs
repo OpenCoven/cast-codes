@@ -1028,7 +1028,7 @@ impl AgentDriverRunner {
         let git_creds_task_id = task_id_str.clone();
         let git_credentials = async move {
             if !FeatureFlag::GitCredentialRefresh.is_enabled() {
-                return Ok(vec![]);
+                return Ok(None);
             }
             let workload_token = match warp_isolation_platform::issue_workload_token(Some(
                 std::time::Duration::from_secs(5 * 60),
@@ -1039,12 +1039,13 @@ impl AgentDriverRunner {
                 Err(e) => {
                     // Not in an isolated environment — no workload token available.
                     log::debug!("Skipping git credentials fetch: {e}");
-                    return Ok(vec![]);
+                    return Ok(None);
                 }
             };
             git_creds_ai_client
                 .get_task_git_credentials(git_creds_task_id, workload_token)
                 .await
+                .map(Some)
         };
 
         let (
@@ -1089,7 +1090,7 @@ impl AgentDriverRunner {
 
         if FeatureFlag::GitCredentialRefresh.is_enabled() {
             match git_credentials_result {
-                Ok(credentials) if !credentials.is_empty() => {
+                Ok(Some(credentials)) if !credentials.is_empty() => {
                     driver::git_credentials::setup_git_config(&credentials);
                     driver::git_credentials::configure_git_identity(&credentials);
                     if let Err(e) = driver::git_credentials::write_git_credentials(&credentials) {
@@ -1098,12 +1099,14 @@ impl AgentDriverRunner {
                         log::info!("Git credentials configured from taskGitCredentials");
                     }
                 }
-                Ok(_) => {
-                    log::debug!(
-                        "Empty git credential result received; leaving existing credential files \
-                         untouched because the fetch may have been skipped"
-                    );
+                Ok(Some(_)) => {
+                    if let Err(e) = driver::git_credentials::clear_git_credentials() {
+                        log::warn!("Failed to clear git credentials after empty response: {e:#}");
+                    } else {
+                        log::debug!("No git credentials returned; removed credential files");
+                    }
                 }
+                Ok(None) => {}
                 Err(e) => {
                     log::warn!("Failed to fetch git credentials: {e:#}");
                 }
