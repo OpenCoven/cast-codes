@@ -1,6 +1,7 @@
 use super::*;
 
-/// Minimal theme with no `ui` block — used by Tasks 3-6 accessor tests.
+/// Minimal `WarpTheme` with no `ui` block — used by accessor tests that
+/// need a theme to exercise fallback paths without overriding behavior.
 fn test_theme_without_ui() -> WarpTheme {
     WarpTheme::new(
         Fill::Solid(ColorU::from_u32(0x090300ff)), // background
@@ -52,6 +53,16 @@ fn sidebar_bg_uses_ui_override_when_set() {
 fn ring_falls_back_to_accent() {
     let theme = test_theme_without_ui();
     assert_eq!(theme.ring(), theme.accent());
+}
+
+#[test]
+fn ring_uses_ui_override_when_set() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        ring: Some(ColorU::from_u32(0x4ade80ff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.ring(), Fill::Solid(ColorU::from_u32(0x4ade80ff)));
 }
 
 #[test]
