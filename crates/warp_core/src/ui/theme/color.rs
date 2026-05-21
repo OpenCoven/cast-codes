@@ -219,7 +219,11 @@ impl WarpTheme {
     }
 
     pub fn active_ui_text_color(&self) -> Fill {
-        self.main_text_color(self.surface_2())
+        self.ui
+            .as_ref()
+            .and_then(|u| u.card_foreground)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.main_text_color(self.surface_2()))
     }
 
     pub fn nonactive_ui_text_color(&self) -> Fill {

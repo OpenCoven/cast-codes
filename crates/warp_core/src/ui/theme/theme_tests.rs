@@ -470,6 +470,23 @@ source_imported_at: '2026-05-20T12:00:00Z'
 }
 
 #[test]
+fn active_ui_text_color_unchanged_without_ui() {
+    let theme = test_theme_without_ui();
+    let derived = theme.main_text_color(theme.surface_2());
+    assert_eq!(theme.active_ui_text_color(), derived);
+}
+
+#[test]
+fn active_ui_text_color_uses_ui_card_foreground_override() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        card_foreground: Some(ColorU::from_u32(0xe8e6e3ff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.active_ui_text_color(), Fill::Solid(ColorU::from_u32(0xe8e6e3ff)));
+}
+
+#[test]
 fn outline_unchanged_without_ui() {
     let theme = test_theme_without_ui();
     let derived = color::internal_colors::fg_overlay_2(&theme);
