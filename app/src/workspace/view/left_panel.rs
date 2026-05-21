@@ -1180,6 +1180,7 @@ impl View for LeftPanelView {
                 .with_main_axis_size(MainAxisSize::Max)
                 .finish()
         })
+        .with_background(appearance.theme().sidebar_bg())
         .finish();
 
         if warpui::platform::is_mobile_device() {
