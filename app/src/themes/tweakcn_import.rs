@@ -304,13 +304,15 @@ pub fn write_imported(
 
     if !blocks.dark.is_empty() {
         let theme = to_warp_theme(blocks, ThemeMode::Dark, inherit_terminal_from, policy)?;
-        let yaml = serde_yaml::to_string(&theme).expect("serialize theme");
+        let yaml = serde_yaml::to_string(&theme)
+            .map_err(|e| io_to_import(std::io::Error::other(e)))?;
         std::fs::write(&primary_path, yaml).map_err(io_to_import)?;
         written.push(primary_path);
     }
     if !blocks.light.is_empty() {
         let theme = to_warp_theme(blocks, ThemeMode::Light, inherit_terminal_from, policy)?;
-        let yaml = serde_yaml::to_string(&theme).expect("serialize theme");
+        let yaml = serde_yaml::to_string(&theme)
+            .map_err(|e| io_to_import(std::io::Error::other(e)))?;
         std::fs::write(&light_path, yaml).map_err(io_to_import)?;
         written.push(light_path);
     }
