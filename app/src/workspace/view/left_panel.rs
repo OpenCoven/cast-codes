@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use warp_core::ui::theme::color::internal_colors;
 use warp_core::{send_telemetry_from_ctx, ui::Icon};
 use warp_util::path::LineAndColumnArg;
 use warpui::{
@@ -11,7 +10,7 @@ use warpui::{
         ParentElement, Resizable, ResizableStateHandle, Shrinkable,
     },
     platform::Cursor,
-    ui_components::components::{Coords, UiComponent, UiComponentStyles},
+    ui_components::components::{BorderStyle, Coords, UiComponent, UiComponentStyles},
     AppContext, Entity, FocusContext, ModelHandle, SingletonEntity, TypedActionView, View,
     ViewContext, ViewHandle, WeakViewHandle,
 };
@@ -893,7 +892,9 @@ impl LeftPanelView {
             height: Some(24.),
             width: Some(24.),
             padding: Some(Coords::uniform(4.)),
-            background: Some(internal_colors::fg_overlay_3(appearance.theme()).into()),
+            border_width: Some(1.0),
+            border_color: Some(appearance.theme().outline().into()),
+            border_style: Some(BorderStyle::Solid),
             ..Default::default()
         })
         .build()

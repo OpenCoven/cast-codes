@@ -107,24 +107,22 @@ impl SettingsUmbrella {
 
         let label = section.to_string() + &match_data.to_string();
 
+        let mut style = UiComponentStyles::default()
+            .set_border_width(0.)
+            .set_margin(Coords::default().left(SUBPAGE_LEFT_MARGIN))
+            .set_padding(Coords::uniform(8.))
+            .set_font_size(SUBPAGE_FONT_SIZE);
+        if is_active {
+            style = style
+                .set_border_width(1.0)
+                .set_border_color(appearance.theme().outline().into());
+        }
+
         let hoverable = appearance
             .ui_builder()
-            .button(
-                if is_active {
-                    ButtonVariant::Accent
-                } else {
-                    ButtonVariant::Text
-                },
-                mouse_state,
-            )
+            .button(ButtonVariant::Text, mouse_state)
             .with_text_label(label)
-            .with_style(
-                UiComponentStyles::default()
-                    .set_border_width(0.)
-                    .set_margin(Coords::default().left(SUBPAGE_LEFT_MARGIN))
-                    .set_padding(Coords::uniform(8.))
-                    .set_font_size(SUBPAGE_FONT_SIZE),
-            )
+            .with_style(style)
             .build();
 
         Some(hoverable)
