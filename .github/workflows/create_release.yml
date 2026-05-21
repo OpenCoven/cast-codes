@@ -618,9 +618,7 @@ jobs:
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          files: |
-            ${{ steps.bundle_app.outputs.packages_dir }}/*
-            ${{ steps.bundle_app.outputs.assets_dir }}/**/*
+          files: ${{ steps.bundle_app.outputs.packages_dir }}/*
           token: ${{ github.token }}
 
       - name: Upload web assets as workflow artifact
@@ -635,9 +633,7 @@ jobs:
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: |
-            ${{ steps.bundle_app.outputs.packages_dir }}/*
-            ${{ steps.bundle_app.outputs.assets_dir }}/*
+          subject-path: ${{ steps.bundle_app.outputs.packages_dir }}/*
 
   release_windows:
     name: Build Release (Windows x64)
