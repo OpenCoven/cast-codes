@@ -276,7 +276,13 @@ jobs:
 
       - name: Checksum DMG
         shell: bash
-        run: shasum -a 256 "${{ steps.bundle_app.outputs.dmg_path }}" > "${{ steps.bundle_app.outputs.dmg_path }}.sha256"
+        run: |
+          set -euo pipefail
+          dmg_path="${{ steps.bundle_app.outputs.dmg_path }}"
+          (
+            cd "$(dirname "$dmg_path")"
+            shasum -a 256 "$(basename "$dmg_path")" > "$(basename "$dmg_path").sha256"
+          )
 
       - name: Add DMG to GitHub release assets
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
@@ -412,7 +418,10 @@ jobs:
           set -euo pipefail
           find "${{ steps.bundle_app.outputs.packages_dir }}" -maxdepth 1 -type f ! -name '*.sha256' -print0 |
             while IFS= read -r -d '' file; do
-              sha256sum "$file" > "$file.sha256"
+              (
+                cd "$(dirname "$file")"
+                sha256sum "$(basename "$file")" > "$(basename "$file").sha256"
+              )
             done
 
       - name: Add Linux app packages to GitHub release assets
@@ -514,7 +523,10 @@ jobs:
           set -euo pipefail
           find "${{ steps.bundle_cli.outputs.packages_dir }}" -maxdepth 1 -type f ! -name '*.sha256' -print0 |
             while IFS= read -r -d '' file; do
-              sha256sum "$file" > "$file.sha256"
+              (
+                cd "$(dirname "$file")"
+                sha256sum "$(basename "$file")" > "$(basename "$file").sha256"
+              )
             done
           sha256sum cast-codes-linux-x86_64.tar.gz > cast-codes-linux-x86_64.tar.gz.sha256
           release_assets_dir="$PWD/release-linux-cli-assets"
@@ -671,7 +683,13 @@ jobs:
 
       - name: Checksum Windows installer
         shell: bash
-        run: sha256sum "${{ steps.bundle_app.outputs.installer_path }}" > "${{ steps.bundle_app.outputs.installer_path }}.sha256"
+        run: |
+          set -euo pipefail
+          installer_path="${{ steps.bundle_app.outputs.installer_path }}"
+          (
+            cd "$(dirname "$installer_path")"
+            sha256sum "$(basename "$installer_path")" > "$(basename "$installer_path").sha256"
+          )
 
       - name: Add installer to GitHub release assets
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
