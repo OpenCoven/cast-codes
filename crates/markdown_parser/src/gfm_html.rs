@@ -34,13 +34,13 @@ pub(crate) enum HtmlSpanKind {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HtmlSpan<'a> {
     /// The entire matched span, including `<tag …>` … `</tag>` (or just the open tag if
     /// self-closing or unmatched).
     pub(crate) raw: &'a str,
-    /// Tag name as matched in the input, preserving the original case.
-    pub(crate) tag: &'a str,
+    /// Lowercased tag name (e.g. `"b"`, `"div"`). Empty string for HTML comments.
+    pub(crate) tag: String,
     pub(crate) kind: HtmlSpanKind,
 }
 
@@ -69,7 +69,7 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
             .map(|i| input.len() - after_open.len() + i + 3)
             .unwrap_or(input.len());
         return Some((
-            HtmlSpan { raw: &input[..end], tag: "", kind: HtmlSpanKind::Stripped },
+            HtmlSpan { raw: &input[..end], tag: String::new(), kind: HtmlSpanKind::Stripped },
             &input[end..],
         ));
     }
@@ -85,13 +85,13 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
     if idx == tag_start {
         return None; // not a tag
     }
-    let tag = &input[tag_start..idx];
+    let tag = input[tag_start..idx].to_ascii_lowercase();
     // For closing tags we have no body to scan; just find '>'.
     if is_close {
         let close_offset = input[idx..].find('>')?;
         let after = idx + close_offset + 1;
         return Some((
-            HtmlSpan { raw: &input[..after], tag, kind: classify(tag) },
+            HtmlSpan { raw: &input[..after], tag: tag.clone(), kind: classify(&tag) },
             &input[after..],
         ));
     }
@@ -119,9 +119,9 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
     }
     // Void / self-closing elements end here.
     let void_tags = ["br", "hr", "img", "input", "meta", "link"];
-    if self_closing || void_tags.iter().any(|t| tag.eq_ignore_ascii_case(t)) {
+    if self_closing || void_tags.contains(&tag.as_str()) {
         return Some((
-            HtmlSpan { raw: &input[..idx], tag, kind: classify(tag) },
+            HtmlSpan { raw: &input[..idx], tag: tag.clone(), kind: classify(&tag) },
             &input[idx..],
         ));
     }
@@ -146,7 +146,7 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
         {
             name_end += 1;
         }
-        let same = input[name_start..name_end].eq_ignore_ascii_case(tag);
+        let same = input[name_start..name_end].eq_ignore_ascii_case(tag.as_str());
         let close_rel = match input[name_end..].find('>') {
             Some(i) => i + 1,
             None => bytes.len() - name_end,
@@ -157,11 +157,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
                 depth -= 1;
                 if depth == 0 {
                     return Some((
-                        HtmlSpan { raw: &input[..after_tag], tag, kind: classify(tag) },
+                        HtmlSpan { raw: &input[..after_tag], tag: tag.clone(), kind: classify(&tag) },
                         &input[after_tag..],
                     ));
                 }
-            } else if !void_tags.iter().any(|t| (*t).eq_ignore_ascii_case(tag)) {
+            } else if !void_tags.contains(&tag.as_str()) {
                 depth += 1;
             }
         }
@@ -169,7 +169,7 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
     }
     // No matching close; treat the open tag alone as the span.
     Some((
-        HtmlSpan { raw: &input[..idx], tag, kind: classify(tag) },
+        HtmlSpan { raw: &input[..idx], tag: tag.clone(), kind: classify(&tag) },
         &input[idx..],
     ))
 }
