@@ -470,6 +470,23 @@ source_imported_at: '2026-05-20T12:00:00Z'
 }
 
 #[test]
+fn outline_unchanged_without_ui() {
+    let theme = test_theme_without_ui();
+    let derived = color::internal_colors::fg_overlay_2(&theme);
+    assert_eq!(theme.outline(), derived);
+}
+
+#[test]
+fn outline_uses_ui_border_override() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        border: Some(ColorU::from_u32(0x2a2520ff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.outline(), Fill::Solid(ColorU::from_u32(0x2a2520ff)));
+}
+
+#[test]
 fn surface_2_unchanged_without_ui() {
     let theme = test_theme_without_ui();
     let derived = Fill::Solid(color::internal_colors::neutral_2(&theme));

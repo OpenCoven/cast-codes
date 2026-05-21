@@ -183,7 +183,11 @@ impl WarpTheme {
     }
 
     pub fn outline(&self) -> Fill {
-        fg_overlay_2(self)
+        self.ui
+            .as_ref()
+            .and_then(|u| u.border)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| fg_overlay_2(self))
     }
 
     // text colors
