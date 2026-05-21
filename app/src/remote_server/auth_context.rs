@@ -9,11 +9,9 @@ use crate::server::server_api::auth::AuthClient;
 /// Builds the app-wide auth context used by remote-server connections.
 pub fn server_api_auth_context(
     auth_state: Arc<AuthState>,
-    auth_client: Arc<dyn AuthClient>,
+    _auth_client: Arc<dyn AuthClient>,
     crash_reporting_enabled: bool,
 ) -> RemoteServerAuthContext {
-    let token_auth_state = auth_state.clone();
-    let token_auth_client = auth_client;
     let identity_auth_state = auth_state.clone();
     let user_id_auth_state = auth_state.clone();
     let user_email_auth_state = auth_state;
@@ -25,11 +23,7 @@ pub fn server_api_auth_context(
     let user_email = user_email_auth_state.user_email().unwrap_or_default();
 
     RemoteServerAuthContext::new(
-        move || -> BoxFuture<'static, Option<String>> {
-            let _ = &token_auth_state;
-            let _ = &token_auth_client;
-            Box::pin(async { None })
-        },
+        || -> BoxFuture<'static, Option<String>> { Box::pin(async { None }) },
         move || remote_server_identity_key(&identity_auth_state),
         user_id,
         user_email,

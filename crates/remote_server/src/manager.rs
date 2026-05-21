@@ -810,7 +810,8 @@ impl RemoteServerManager {
     ///
     /// 1. Calls `transport.connect()` to establish streams.
     /// 2. Transitions the session to `Initializing` while the handshake runs.
-    /// 3. Runs the initialize handshake with the current auth token, if any.
+    /// 3. Runs the initialize handshake without forwarding local cloud auth
+    ///    credentials to the remote host.
     ///
     /// Returns `Ok(InitializeHandshake)` on success, or a phase-tagged error.
     #[cfg(not(target_family = "wasm"))]
@@ -863,7 +864,6 @@ impl RemoteServerManager {
         }
 
         // Phase 2: Initialize handshake.
-        let _auth_token = auth_context.get_auth_token().await;
         let resp = client
             .initialize(
                 None,
@@ -1028,17 +1028,11 @@ impl RemoteServerManager {
         })
     }
 
-    /// Rotates the daemon-wide auth credential on each connected remote host.
+    /// Intentionally does not rotate daemon-wide auth credentials.
     ///
-    /// Only sessions whose stored `identity_key` matches the current identity
-    /// (from `auth_context`) receive the notification. This prevents a stale
-    /// session established under a previous user identity from receiving a
-    /// newly-rotated bearer token that belongs to a different user.
-    ///
-    /// Within the matching identity, a daemon may have multiple client
-    /// connections. The credential is stored daemon-wide, so sending one
-    /// notification per connected host is sufficient.
-    pub fn rotate_auth_token(&self, _token: String) {
+    /// CastCodes never forwards local cloud auth credentials to SSH-side
+    /// remote-server daemons, including after local token refresh events.
+    pub fn rotate_auth_token(&self) {
         // Intentionally no-op in CastCodes: never forward local cloud auth
         // credentials to SSH-side remote-server daemons.
     }
