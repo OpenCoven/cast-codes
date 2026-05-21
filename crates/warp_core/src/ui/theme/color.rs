@@ -124,7 +124,11 @@ impl WarpTheme {
     /// Doesn't allow gradients because these surfaces will often be too small
     /// for the gradients to look appealing.
     pub fn surface_2(&self) -> Fill {
-        Fill::Solid(neutral_2(self))
+        self.ui
+            .as_ref()
+            .and_then(|u| u.card)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| Fill::Solid(neutral_2(self)))
     }
 
     /// Background color for UI elements that need to stand out from the main

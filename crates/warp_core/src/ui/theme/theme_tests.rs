@@ -470,6 +470,23 @@ source_imported_at: '2026-05-20T12:00:00Z'
 }
 
 #[test]
+fn surface_2_unchanged_without_ui() {
+    let theme = test_theme_without_ui();
+    let derived = Fill::Solid(color::internal_colors::neutral_2(&theme));
+    assert_eq!(theme.surface_2(), derived);
+}
+
+#[test]
+fn surface_2_uses_ui_card_override() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        card: Some(ColorU::from_u32(0x0f0905ff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.surface_2(), Fill::Solid(ColorU::from_u32(0x0f0905ff)));
+}
+
+#[test]
 fn warp_theme_without_ui_block_still_parses() {
     let yaml = r#"
 accent: '#01a0e4'
