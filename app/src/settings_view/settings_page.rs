@@ -176,7 +176,7 @@ impl SettingsPage {
     ) -> Hoverable {
         let mut style = UiComponentStyles::default()
             .set_border_width(1.0)
-            .set_border_color(ColorU::transparent())
+            .set_border_color(warpui::elements::Fill::Solid(ColorU::transparent_black()))
             .set_margin(Coords::default().left(NAV_ITEM_LEFT_MARGIN))
             .set_padding(Coords::uniform(8.));
         if clicked {
