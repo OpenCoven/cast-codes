@@ -47,6 +47,39 @@ pub struct ResolvedLspBinaryConfig {
     pub custom_config: Option<CustomBinaryConfig>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn resolve_binary_on_path(
+    binary_name: &str,
+    path_env_var: Option<&str>,
+) -> Option<PathBuf> {
+    let path_var = path_env_var
+        .map(std::borrow::ToOwned::to_owned)
+        .or_else(|| std::env::var("PATH").ok())?;
+
+    for dir in std::env::split_paths(&path_var) {
+        if !dir.is_absolute() {
+            continue;
+        }
+
+        #[cfg(windows)]
+        let candidates = [
+            dir.join(binary_name),
+            dir.join(format!("{binary_name}.exe")),
+            dir.join(format!("{binary_name}.cmd")),
+            dir.join(format!("{binary_name}.bat")),
+        ];
+        #[cfg(not(windows))]
+        let candidates = [dir.join(binary_name)];
+
+        for candidate in candidates {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
 pub const TYPESCRIPT_LSP_REPAIR_ACTION: &str = "Install/repair TypeScript language server";
 
 const TYPESCRIPT_LSP_MISSING_BINARY_PREFIX: &str = "typescript-language-server is not available.";
