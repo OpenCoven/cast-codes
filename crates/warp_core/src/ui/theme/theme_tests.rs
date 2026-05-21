@@ -1,5 +1,59 @@
 use super::*;
 
+/// Minimal theme with no `ui` block — used by Tasks 3-6 accessor tests.
+fn test_theme_without_ui() -> WarpTheme {
+    WarpTheme::new(
+        Fill::Solid(ColorU::from_u32(0x090300ff)), // background
+        ColorU::from_u32(0xa5a2a2ff),              // foreground
+        Fill::Solid(ColorU::from_u32(0x01a0e4ff)), // accent
+        None,                                       // cursor
+        Some(Details::Darker),                      // details
+        mock_terminal_colors(),                     // terminal colors
+        None,                                       // background_image
+        None,                                       // name
+    )
+}
+
+#[test]
+fn muted_foreground_falls_back_to_opencoven_muted() {
+    let theme = test_theme_without_ui();
+    // OPENCOVEN_MUTED is pub(crate) in app crate, so re-derive its value:
+    let expected = ColorU { r: 90, g: 90, b: 101, a: 255 };
+    assert_eq!(theme.muted_foreground(), expected);
+}
+
+#[test]
+fn muted_foreground_uses_ui_override_when_set() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        muted_foreground: Some(ColorU::from_u32(0xabcdefff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.muted_foreground(), ColorU::from_u32(0xabcdefff));
+}
+
+#[test]
+fn sidebar_bg_falls_back_to_surface_1() {
+    let theme = test_theme_without_ui();
+    assert_eq!(theme.sidebar_bg(), theme.surface_1());
+}
+
+#[test]
+fn sidebar_bg_uses_ui_override_when_set() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        sidebar: Some(ColorU::from_u32(0x0a0604ff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.sidebar_bg(), Fill::Solid(ColorU::from_u32(0x0a0604ff)));
+}
+
+#[test]
+fn ring_falls_back_to_accent() {
+    let theme = test_theme_without_ui();
+    assert_eq!(theme.ring(), theme.accent());
+}
+
 #[test]
 fn serialize_test() {
     let theme = WarpTheme::new(

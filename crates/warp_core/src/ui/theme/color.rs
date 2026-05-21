@@ -21,6 +21,10 @@ use warpui::color::ColorU;
 
 const BLOCK_SELECTION_OPACITY: Opacity = 10;
 
+/// Fallback for `WarpTheme::muted_foreground()` when no `ui.muted_foreground` is set.
+/// Matches `OPENCOVEN_MUTED` (#5A5A65) in `app/src/ai/coven_brand.rs` — keep in sync.
+const MUTED_FOREGROUND_FALLBACK: ColorU = ColorU { r: 90, g: 90, b: 101, a: 255 };
+
 #[derive(Serialize, Copy, Clone, Debug, Deserialize, Getters, PartialEq, Eq)]
 #[get = "pub"]
 // TODO handle optional fields (so users can specify some and not all)
@@ -133,6 +137,29 @@ impl WarpTheme {
 
     pub fn cursor(&self) -> Fill {
         self.cursor.unwrap_or(self.accent())
+    }
+
+    pub fn muted_foreground(&self) -> ColorU {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.muted_foreground)
+            .unwrap_or(MUTED_FOREGROUND_FALLBACK)
+    }
+
+    pub fn sidebar_bg(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.sidebar)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.surface_1())
+    }
+
+    pub fn ring(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.ring)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.accent())
     }
 
     pub fn ui_warning_color(&self) -> ColorU {
