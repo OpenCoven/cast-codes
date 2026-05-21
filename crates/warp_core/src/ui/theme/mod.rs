@@ -722,6 +722,21 @@ impl WarpTheme {
         self
     }
 
+    /// Returns a reference to the optional UI token block, if present.
+    pub fn ui(&self) -> Option<&UiTokens> {
+        self.ui.as_ref()
+    }
+
+    /// Returns the provenance source tag (e.g. `"tweakcn"`), if set.
+    pub fn source(&self) -> Option<&str> {
+        self.source.as_deref()
+    }
+
+    /// Returns the raw foreground `ColorU` (no wrapping `Fill`).
+    pub fn foreground_color(&self) -> ColorU {
+        self.foreground
+    }
+
     pub fn details(&self) -> CustomDetails {
         match self.details {
             Details::Darker => CustomDetails::darker_details(),
@@ -762,6 +777,22 @@ pub fn mock_terminal_colors() -> TerminalColors {
             AnsiColor::from_u32(0xE5E6FEFF),
             AnsiColor::from_u32(0xFEFFFFFF),
         ),
+    )
+}
+
+/// Minimal `WarpTheme` suitable for use in tests across crates.
+/// Dark background, light foreground, blue accent; no `ui` block.
+#[cfg(any(test, feature = "test-util"))]
+pub fn mock_warp_theme() -> WarpTheme {
+    WarpTheme::new(
+        Fill::Solid(ColorU::from_u32(0x090300ff)), // background
+        ColorU::from_u32(0xa5a2a2ff),              // foreground
+        Fill::Solid(ColorU::from_u32(0x01a0e4ff)), // accent
+        None,                                       // cursor
+        Some(Details::Darker),                      // details
+        mock_terminal_colors(),                     // terminal_colors
+        None,                                       // background_image
+        None,                                       // name
     )
 }
 

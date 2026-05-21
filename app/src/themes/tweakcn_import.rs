@@ -153,6 +153,190 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
     Ok(blocks)
 }
 
+// ─── Mapper: ParsedBlocks → WarpTheme ──────────────────────────────────────
+
+use warp_core::ui::theme::{Fill, UiTokens, WarpTheme};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThemeMode {
+    Light,
+    Dark,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GamutPolicy {
+    Clamp,
+    Strict,
+}
+
+fn convert(triple: (f64, f64, f64), var: &str, policy: GamutPolicy) -> Result<ColorU, ImportError> {
+    match oklch_to_srgb_u8(triple.0, triple.1, triple.2) {
+        Ok(c) => Ok(c),
+        Err(clamped) => match policy {
+            GamutPolicy::Clamp => Ok(clamped),
+            GamutPolicy::Strict => Err(ImportError::OutOfSrgbGamut {
+                var: var.to_string(),
+                srgb: clamped,
+            }),
+        },
+    }
+}
+
+/// Map a [`ParsedBlocks`] (from [`parse_blocks`]) into a complete [`WarpTheme`].
+///
+/// `inherit_terminal_from` is used as the source of terminal colors (ANSI
+/// palette), background/foreground/accent fallbacks when the CSS block omits
+/// them, and as the structural template.  `mode` selects which block
+/// (`:root` → Light, `.dark` → Dark) to read from.
+pub fn to_warp_theme(
+    blocks: &ParsedBlocks,
+    mode: ThemeMode,
+    inherit_terminal_from: &WarpTheme,
+    policy: GamutPolicy,
+) -> Result<WarpTheme, ImportError> {
+    let block = match mode {
+        ThemeMode::Dark => &blocks.dark,
+        ThemeMode::Light => &blocks.light,
+    };
+    if block.is_empty() {
+        return Err(ImportError::NoColorBlocksFound);
+    }
+
+    let lookup = |key: &str| -> Result<Option<ColorU>, ImportError> {
+        match block.get(key) {
+            Some(&t) => convert(t, key, policy).map(Some),
+            None => Ok(None),
+        }
+    };
+
+    let background: Fill = match lookup("background")? {
+        Some(c) => Fill::Solid(c),
+        None => inherit_terminal_from.background(),
+    };
+    let foreground: ColorU = lookup("foreground")?
+        .unwrap_or_else(|| inherit_terminal_from.foreground_color());
+    let accent: Fill = match lookup("primary")? {
+        Some(c) => Fill::Solid(c),
+        None => inherit_terminal_from.accent(),
+    };
+
+    let mut ui = UiTokens::default();
+    for &(css_name, setter) in tweakcn_ui_mapping() {
+        if let Some(&triple) = block.get(css_name) {
+            let c = convert(triple, css_name, policy)?;
+            setter(&mut ui, c);
+        }
+    }
+
+    let now = {
+        use std::time::SystemTime;
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| format!("ts-{}", d.as_secs()))
+            .unwrap_or_else(|_| "ts-unknown".to_string())
+    };
+
+    let theme = WarpTheme::new(
+        background,
+        foreground,
+        accent,
+        None,
+        None,
+        inherit_terminal_from.terminal_colors().clone(),
+        None,
+        blocks.name_comment.clone(),
+    );
+    Ok(theme.with_ui(ui, "tweakcn", now))
+}
+
+fn tweakcn_ui_mapping() -> &'static [(&'static str, fn(&mut UiTokens, ColorU))] {
+    &[
+        ("card",                 |u, c| u.card = Some(c)),
+        ("card-foreground",      |u, c| u.card_foreground = Some(c)),
+        ("popover",              |u, c| u.popover = Some(c)),
+        ("popover-foreground",   |u, c| u.popover_foreground = Some(c)),
+        ("primary",              |u, c| u.primary = Some(c)),
+        ("primary-foreground",   |u, c| u.primary_foreground = Some(c)),
+        ("secondary",            |u, c| u.secondary = Some(c)),
+        ("secondary-foreground", |u, c| u.secondary_foreground = Some(c)),
+        ("muted",                |u, c| u.muted = Some(c)),
+        ("muted-foreground",     |u, c| u.muted_foreground = Some(c)),
+        ("destructive",          |u, c| u.destructive = Some(c)),
+        ("border",               |u, c| u.border = Some(c)),
+        ("input",                |u, c| u.input = Some(c)),
+        ("ring",                 |u, c| u.ring = Some(c)),
+        ("sidebar",              |u, c| u.sidebar = Some(c)),
+        ("sidebar-foreground",   |u, c| u.sidebar_foreground = Some(c)),
+    ]
+}
+
+// ─── map_tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod map_tests {
+    use super::*;
+
+    fn inherit_from() -> WarpTheme {
+        warp_core::ui::theme::mock_warp_theme()
+    }
+
+    #[test]
+    fn maps_dark_block_into_warp_theme() {
+        let css = r#"
+:root { --background: oklch(1 0 0); --foreground: oklch(0.1 0 0); }
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --primary: oklch(0.6 0.18 250);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --sidebar: oklch(0.205 0 0);
+}
+"#;
+        let blocks = parse_blocks(css).unwrap();
+        let base = inherit_from();
+        let theme = to_warp_theme(&blocks, ThemeMode::Dark, &base, GamutPolicy::Clamp).unwrap();
+        let ui = theme.ui().expect("ui block set");
+        assert!(ui.card.is_some());
+        assert!(ui.card_foreground.is_some());
+        assert!(ui.muted_foreground.is_some());
+        assert!(ui.sidebar.is_some());
+        // Provenance written
+        assert_eq!(theme.source(), Some("tweakcn"));
+        // Terminal colors inherited
+        assert_eq!(theme.terminal_colors(), base.terminal_colors());
+    }
+
+    #[test]
+    fn light_mode_uses_root_block() {
+        let css = ":root { --background: oklch(1 0 0); --card: oklch(0.95 0 0); }";
+        let blocks = parse_blocks(css).unwrap();
+        let base = inherit_from();
+        let theme = to_warp_theme(&blocks, ThemeMode::Light, &base, GamutPolicy::Clamp).unwrap();
+        assert!(theme.ui().unwrap().card.is_some());
+    }
+
+    #[test]
+    fn missing_mode_errors() {
+        let css = ":root { --background: oklch(1 0 0); }";
+        let blocks = parse_blocks(css).unwrap();
+        let base = inherit_from();
+        let err = to_warp_theme(&blocks, ThemeMode::Dark, &base, GamutPolicy::Clamp).unwrap_err();
+        assert_eq!(err, ImportError::NoColorBlocksFound);
+    }
+
+    #[test]
+    fn out_of_gamut_errors_when_policy_is_strict() {
+        let css = ".dark { --background: oklch(0.5 0.4 30); }";
+        let blocks = parse_blocks(css).unwrap();
+        let base = inherit_from();
+        let err = to_warp_theme(&blocks, ThemeMode::Dark, &base, GamutPolicy::Strict).unwrap_err();
+        assert!(matches!(err, ImportError::OutOfSrgbGamut { .. }));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
