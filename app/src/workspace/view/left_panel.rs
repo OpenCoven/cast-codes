@@ -895,7 +895,7 @@ impl LeftPanelView {
             font_color: Some(icon_color),
             height: Some(24.),
             width: Some(24.),
-            padding: Some(Coords::uniform(3.)),
+            padding: Some(Coords::uniform(4.)),
             border_width: Some(1.0),
             border_color: Some(appearance.theme().outline().into()),
             border_style: Some(BorderStyle::Solid),
