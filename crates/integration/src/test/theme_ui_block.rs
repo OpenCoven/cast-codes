@@ -59,8 +59,7 @@ pub fn test_ui_block_theme_drives_colour_accessors() -> Builder {
             // 1. Write the sentinel theme YAML into the hermetic themes dir.
             //    HOME is already redirected to the test sandbox at this point.
             let dest_dir = themes_dir();
-            std::fs::create_dir_all(&dest_dir)
-                .expect("should create hermetic themes dir");
+            std::fs::create_dir_all(&dest_dir).expect("should create hermetic themes dir");
 
             let dest_path = dest_dir.join(THEME_FILE_NAME);
             create_file_from_assets(TEST_ONLY_ASSETS, THEME_FILE_NAME, &dest_path);
@@ -87,48 +86,39 @@ pub fn test_ui_block_theme_drives_colour_accessors() -> Builder {
 
             let prefs_path = warp::settings::user_preferences_file_path();
             if let Some(parent) = prefs_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .expect("should create config local dir");
+                std::fs::create_dir_all(parent).expect("should create config local dir");
             }
             // The user-preferences JSON maps storage_key → JSON-encoded value.
-            let prefs_json =
-                serde_json::json!({ "Theme": theme_kind_json }).to_string();
-            std::fs::write(&prefs_path, prefs_json)
-                .expect("should write user preferences");
+            let prefs_json = serde_json::json!({ "Theme": theme_kind_json }).to_string();
+            std::fs::write(&prefs_path, prefs_json).expect("should write user preferences");
         })
         // Wait for the app to boot and the terminal to reach a stable state.
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         // Assert that the Appearance singleton loaded our sentinel theme.
         .with_step(
             TestStep::new("ui: block sentinel colours reach Appearance")
-                .add_named_assertion(
-                    "surface_2() == Fill::Solid(#ff00ff)",
-                    |app, window_id| {
-                        // Access Appearance through any live ViewContext.
-                        // ViewContext<T> derefs to AppContext, so
-                        // Appearance::as_ref(ctx) resolves correctly.
-                        workspace_view(app, window_id).read(app, |_view, ctx| {
-                            let theme = Appearance::as_ref(ctx).theme();
-                            async_assert_eq!(
-                                theme.surface_2(),
-                                Fill::Solid(ColorU::from_u32(SENTINEL_CARD)),
-                                "surface_2() should equal sentinel card colour #ff00ff"
-                            )
-                        })
-                    },
-                )
-                .add_named_assertion(
-                    "muted_foreground() == #ffff00",
-                    |app, window_id| {
-                        workspace_view(app, window_id).read(app, |_view, ctx| {
-                            let theme = Appearance::as_ref(ctx).theme();
-                            async_assert_eq!(
-                                theme.muted_foreground(),
-                                ColorU::from_u32(SENTINEL_MUTED_FG),
-                                "muted_foreground() should equal sentinel colour #ffff00"
-                            )
-                        })
-                    },
-                ),
+                .add_named_assertion("surface_2() == Fill::Solid(#ff00ff)", |app, window_id| {
+                    // Access Appearance through any live ViewContext.
+                    // ViewContext<T> derefs to AppContext, so
+                    // Appearance::as_ref(ctx) resolves correctly.
+                    workspace_view(app, window_id).read(app, |_view, ctx| {
+                        let theme = Appearance::as_ref(ctx).theme();
+                        async_assert_eq!(
+                            theme.surface_2(),
+                            Fill::Solid(ColorU::from_u32(SENTINEL_CARD)),
+                            "surface_2() should equal sentinel card colour #ff00ff"
+                        )
+                    })
+                })
+                .add_named_assertion("muted_foreground() == #ffff00", |app, window_id| {
+                    workspace_view(app, window_id).read(app, |_view, ctx| {
+                        let theme = Appearance::as_ref(ctx).theme();
+                        async_assert_eq!(
+                            theme.muted_foreground(),
+                            ColorU::from_u32(SENTINEL_MUTED_FG),
+                            "muted_foreground() should equal sentinel colour #ffff00"
+                        )
+                    })
+                }),
         )
 }

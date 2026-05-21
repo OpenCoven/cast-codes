@@ -24,7 +24,7 @@ pub(crate) fn oklch_to_srgb_u8(l: f64, c: f64, h_deg: f64) -> Result<ColorU, Col
     let m3 = m_ * m_ * m_;
     let s3 = s_ * s_ * s_;
 
-    let r_lin =  4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+    let r_lin = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
     let g_lin = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
     let b_lin = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
 
@@ -34,7 +34,11 @@ pub(crate) fn oklch_to_srgb_u8(l: f64, c: f64, h_deg: f64) -> Result<ColorU, Col
 
     let to_srgb = |c: f64| {
         let c = c.clamp(0.0, 1.0);
-        if c <= 0.0031308 { 12.92 * c } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+        if c <= 0.0031308 {
+            12.92 * c
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
     };
 
     let r = (to_srgb(r_lin) * 255.0).round() as u8;
@@ -42,7 +46,11 @@ pub(crate) fn oklch_to_srgb_u8(l: f64, c: f64, h_deg: f64) -> Result<ColorU, Col
     let b = (to_srgb(b_lin) * 255.0).round() as u8;
     let color = ColorU { r, g, b, a: 255 };
 
-    if in_gamut { Ok(color) } else { Err(color) }
+    if in_gamut {
+        Ok(color)
+    } else {
+        Err(color)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -77,7 +85,10 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
         if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
             // Find closing */
             let start = i + 2;
-            let end = css[start..].find("*/").map(|j| start + j).unwrap_or(bytes.len());
+            let end = css[start..]
+                .find("*/")
+                .map(|j| start + j)
+                .unwrap_or(bytes.len());
             let comment = css[start..end].trim();
             if name_hint.is_none() {
                 // Look for "tweakcn theme: <slug>" or just take the comment if it's a single word.
@@ -87,7 +98,11 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
                     name_hint = Some(comment.to_string());
                 }
             }
-            i = if end < bytes.len() { end + 2 } else { bytes.len() };
+            i = if end < bytes.len() {
+                end + 2
+            } else {
+                bytes.len()
+            };
         } else {
             cleaned.push(bytes[i] as char);
             i += 1;
@@ -117,29 +132,46 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
         Some(&haystack[body_start..end])
     }
 
-    let parse_decls = |body: &str, target: &mut std::collections::HashMap<String, (f64, f64, f64)>| {
-        for decl in body.split(';') {
-            let decl = decl.trim();
-            if !decl.starts_with("--") { continue; }
-            let Some((name, value)) = decl.split_once(':') else { continue };
-            let name = name.trim().trim_start_matches("--").to_string();
-            let value = value.trim();
-            // Only `oklch(L C H[ / a])` is supported; anything else is silently skipped.
-            let Some(args) = value.strip_prefix("oklch(").and_then(|s| s.strip_suffix(')')) else {
-                continue;
-            };
-            let triple: Vec<&str> = args.split_whitespace().take(3).collect();
-            if triple.len() < 3 { continue; }
-            let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
-            // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
-            let l = if triple[0].ends_with('%') { l / 100.0 } else { l };
-            let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
-            let h: f64 = triple[2].trim_end_matches("deg").parse().unwrap_or(f64::NAN);
-            if l.is_finite() && c.is_finite() && h.is_finite() {
-                target.insert(name, (l, c, h));
+    let parse_decls =
+        |body: &str, target: &mut std::collections::HashMap<String, (f64, f64, f64)>| {
+            for decl in body.split(';') {
+                let decl = decl.trim();
+                if !decl.starts_with("--") {
+                    continue;
+                }
+                let Some((name, value)) = decl.split_once(':') else {
+                    continue;
+                };
+                let name = name.trim().trim_start_matches("--").to_string();
+                let value = value.trim();
+                // Only `oklch(L C H[ / a])` is supported; anything else is silently skipped.
+                let Some(args) = value
+                    .strip_prefix("oklch(")
+                    .and_then(|s| s.strip_suffix(')'))
+                else {
+                    continue;
+                };
+                let triple: Vec<&str> = args.split_whitespace().take(3).collect();
+                if triple.len() < 3 {
+                    continue;
+                }
+                let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
+                // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
+                let l = if triple[0].ends_with('%') {
+                    l / 100.0
+                } else {
+                    l
+                };
+                let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
+                let h: f64 = triple[2]
+                    .trim_end_matches("deg")
+                    .parse()
+                    .unwrap_or(f64::NAN);
+                if l.is_finite() && c.is_finite() && h.is_finite() {
+                    target.insert(name, (l, c, h));
+                }
             }
-        }
-    };
+        };
 
     if let Some(body) = extract_block(&cleaned, ":root") {
         parse_decls(body, &mut blocks.light);
@@ -214,8 +246,8 @@ pub fn to_warp_theme(
         Some(c) => Fill::Solid(c),
         None => inherit_terminal_from.background(),
     };
-    let foreground: ColorU = lookup("foreground")?
-        .unwrap_or_else(|| inherit_terminal_from.foreground_color());
+    let foreground: ColorU =
+        lookup("foreground")?.unwrap_or_else(|| inherit_terminal_from.foreground_color());
     let accent: Fill = match lookup("primary")? {
         Some(c) => Fill::Solid(c),
         None => inherit_terminal_from.accent(),
@@ -319,22 +351,24 @@ fn io_to_import(e: std::io::Error) -> ImportError {
 
 fn tweakcn_ui_mapping() -> &'static [(&'static str, fn(&mut UiTokens, ColorU))] {
     &[
-        ("card",                 |u, c| u.card = Some(c)),
-        ("card-foreground",      |u, c| u.card_foreground = Some(c)),
-        ("popover",              |u, c| u.popover = Some(c)),
-        ("popover-foreground",   |u, c| u.popover_foreground = Some(c)),
-        ("primary",              |u, c| u.primary = Some(c)),
-        ("primary-foreground",   |u, c| u.primary_foreground = Some(c)),
-        ("secondary",            |u, c| u.secondary = Some(c)),
-        ("secondary-foreground", |u, c| u.secondary_foreground = Some(c)),
-        ("muted",                |u, c| u.muted = Some(c)),
-        ("muted-foreground",     |u, c| u.muted_foreground = Some(c)),
-        ("destructive",          |u, c| u.destructive = Some(c)),
-        ("border",               |u, c| u.border = Some(c)),
-        ("input",                |u, c| u.input = Some(c)),
-        ("ring",                 |u, c| u.ring = Some(c)),
-        ("sidebar",              |u, c| u.sidebar = Some(c)),
-        ("sidebar-foreground",   |u, c| u.sidebar_foreground = Some(c)),
+        ("card", |u, c| u.card = Some(c)),
+        ("card-foreground", |u, c| u.card_foreground = Some(c)),
+        ("popover", |u, c| u.popover = Some(c)),
+        ("popover-foreground", |u, c| u.popover_foreground = Some(c)),
+        ("primary", |u, c| u.primary = Some(c)),
+        ("primary-foreground", |u, c| u.primary_foreground = Some(c)),
+        ("secondary", |u, c| u.secondary = Some(c)),
+        ("secondary-foreground", |u, c| {
+            u.secondary_foreground = Some(c)
+        }),
+        ("muted", |u, c| u.muted = Some(c)),
+        ("muted-foreground", |u, c| u.muted_foreground = Some(c)),
+        ("destructive", |u, c| u.destructive = Some(c)),
+        ("border", |u, c| u.border = Some(c)),
+        ("input", |u, c| u.input = Some(c)),
+        ("ring", |u, c| u.ring = Some(c)),
+        ("sidebar", |u, c| u.sidebar = Some(c)),
+        ("sidebar-foreground", |u, c| u.sidebar_foreground = Some(c)),
     ]
 }
 
@@ -435,7 +469,13 @@ mod tests {
         let dr = (c.r as i32 - 0x0a).abs();
         let dg = (c.g as i32 - 0x0a).abs();
         let db = (c.b as i32 - 0x0a).abs();
-        assert!(dr <= 1 && dg <= 1 && db <= 1, "got #{:02x}{:02x}{:02x}", c.r, c.g, c.b);
+        assert!(
+            dr <= 1 && dg <= 1 && db <= 1,
+            "got #{:02x}{:02x}{:02x}",
+            c.r,
+            c.g,
+            c.b
+        );
     }
 
     /// Out-of-gamut OKLCH (very saturated red) should return Err but still
@@ -522,35 +562,49 @@ mod snapshot_tests {
         std::fs::write(
             "../crates/integration/tests/data/tweakcn_sample_dark.yaml",
             serde_yaml::to_string(&dark).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         std::fs::write(
             "../crates/integration/tests/data/tweakcn_sample_light.yaml",
             serde_yaml::to_string(&light).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
     fn dark_block_matches_golden() {
         let css = include_str!("../../../crates/integration/tests/data/tweakcn_sample.css");
-        let golden = include_str!("../../../crates/integration/tests/data/tweakcn_sample_dark.yaml");
+        let golden =
+            include_str!("../../../crates/integration/tests/data/tweakcn_sample_dark.yaml");
         let blocks = parse_blocks(css).unwrap();
         let base = warp_core::ui::theme::mock_warp_theme();
         let theme = to_warp_theme(&blocks, ThemeMode::Dark, &base, GamutPolicy::Clamp).unwrap();
         let actual = serde_yaml::to_string(&theme).unwrap();
         // Strip the `source_imported_at` line because it embeds wall-clock time.
-        let strip = |s: &str| s.lines().filter(|l| !l.contains("source_imported_at")).collect::<Vec<_>>().join("\n");
+        let strip = |s: &str| {
+            s.lines()
+                .filter(|l| !l.contains("source_imported_at"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
         assert_eq!(strip(&actual), strip(golden));
     }
 
     #[test]
     fn light_block_matches_golden() {
         let css = include_str!("../../../crates/integration/tests/data/tweakcn_sample.css");
-        let golden = include_str!("../../../crates/integration/tests/data/tweakcn_sample_light.yaml");
+        let golden =
+            include_str!("../../../crates/integration/tests/data/tweakcn_sample_light.yaml");
         let blocks = parse_blocks(css).unwrap();
         let base = warp_core::ui::theme::mock_warp_theme();
         let theme = to_warp_theme(&blocks, ThemeMode::Light, &base, GamutPolicy::Clamp).unwrap();
         let actual = serde_yaml::to_string(&theme).unwrap();
-        let strip = |s: &str| s.lines().filter(|l| !l.contains("source_imported_at")).collect::<Vec<_>>().join("\n");
+        let strip = |s: &str| {
+            s.lines()
+                .filter(|l| !l.contains("source_imported_at"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
         assert_eq!(strip(&actual), strip(golden));
     }
 }
@@ -569,19 +623,19 @@ mod writer_tests {
         let written = write_imported(&blocks, "my-theme", &base, GamutPolicy::Clamp, &dir).unwrap();
         assert_eq!(written.len(), 1);
         assert!(written[0].ends_with("my-theme.yaml"));
-        assert!(std::fs::read_to_string(&written[0]).unwrap().contains("ui:"));
+        assert!(std::fs::read_to_string(&written[0])
+            .unwrap()
+            .contains("ui:"));
     }
 
     #[test]
     fn writes_both_when_both_blocks_present() {
         let tmp = tempfile::TempDir::new().unwrap();
         let dir = tmp.path().to_path_buf();
-        let css =
-            ":root { --background: oklch(1 0 0); } .dark { --background: oklch(0 0 0); }";
+        let css = ":root { --background: oklch(1 0 0); } .dark { --background: oklch(0 0 0); }";
         let blocks = parse_blocks(css).unwrap();
         let base = warp_core::ui::theme::mock_warp_theme();
-        let written =
-            write_imported(&blocks, "duo", &base, GamutPolicy::Clamp, &dir).unwrap();
+        let written = write_imported(&blocks, "duo", &base, GamutPolicy::Clamp, &dir).unwrap();
         let names: Vec<String> = written
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().to_string())

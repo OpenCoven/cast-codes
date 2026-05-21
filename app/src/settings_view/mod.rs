@@ -76,7 +76,6 @@ use warpui::{
 mod about_page;
 mod admin_actions;
 mod agent_assisted_environment_modal;
-pub mod import_theme_modal;
 mod ai_page;
 mod appearance_page;
 mod billing_and_usage;
@@ -88,6 +87,7 @@ pub(crate) mod environments_page;
 mod execution_profile_view;
 mod features;
 mod features_page;
+pub mod import_theme_modal;
 pub mod keybindings;
 mod main_page;
 pub mod mcp_servers;
@@ -1167,8 +1167,7 @@ impl SettingsView {
         // Settings pages that only function with hosted cloud services
         // (billing, teams, referrals) are excluded on channels that don't
         // expose them (public CastCodes/OSS).
-        let cloud_services_available =
-            warp_core::channel::ChannelState::cloud_services_available();
+        let cloud_services_available = warp_core::channel::ChannelState::cloud_services_available();
 
         let mut settings_pages = vec![
             SettingsPage::new(main_page_handle),

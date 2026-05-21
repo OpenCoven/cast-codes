@@ -23,7 +23,12 @@ const BLOCK_SELECTION_OPACITY: Opacity = 10;
 
 /// Fallback for `WarpTheme::muted_foreground()` when no `ui.muted_foreground` is set.
 /// Matches `OPENCOVEN_MUTED` (#5A5A65) in `app/src/ai/coven_brand.rs` — keep in sync.
-const MUTED_FOREGROUND_FALLBACK: ColorU = ColorU { r: 90, g: 90, b: 101, a: 255 };
+const MUTED_FOREGROUND_FALLBACK: ColorU = ColorU {
+    r: 90,
+    g: 90,
+    b: 101,
+    a: 255,
+};
 
 #[derive(Serialize, Copy, Clone, Debug, Deserialize, Getters, PartialEq, Eq)]
 #[get = "pub"]

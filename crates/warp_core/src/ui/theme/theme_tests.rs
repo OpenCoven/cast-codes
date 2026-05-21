@@ -7,11 +7,11 @@ fn test_theme_without_ui() -> WarpTheme {
         Fill::Solid(ColorU::from_u32(0x090300ff)), // background
         ColorU::from_u32(0xa5a2a2ff),              // foreground
         Fill::Solid(ColorU::from_u32(0x01a0e4ff)), // accent
-        None,                                       // cursor
-        Some(Details::Darker),                      // details
-        mock_terminal_colors(),                     // terminal colors
-        None,                                       // background_image
-        None,                                       // name
+        None,                                      // cursor
+        Some(Details::Darker),                     // details
+        mock_terminal_colors(),                    // terminal colors
+        None,                                      // background_image
+        None,                                      // name
     )
 }
 
@@ -19,7 +19,12 @@ fn test_theme_without_ui() -> WarpTheme {
 fn muted_foreground_falls_back_to_opencoven_muted() {
     let theme = test_theme_without_ui();
     // OPENCOVEN_MUTED is pub(crate) in app crate, so re-derive its value:
-    let expected = ColorU { r: 90, g: 90, b: 101, a: 255 };
+    let expected = ColorU {
+        r: 90,
+        g: 90,
+        b: 101,
+        a: 255,
+    };
     assert_eq!(theme.muted_foreground(), expected);
 }
 
@@ -46,7 +51,10 @@ fn sidebar_bg_uses_ui_override_when_set() {
         sidebar: Some(ColorU::from_u32(0x0a0604ff)),
         ..Default::default()
     });
-    assert_eq!(theme.sidebar_bg(), Fill::Solid(ColorU::from_u32(0x0a0604ff)));
+    assert_eq!(
+        theme.sidebar_bg(),
+        Fill::Solid(ColorU::from_u32(0x0a0604ff))
+    );
 }
 
 #[test]
@@ -78,7 +86,10 @@ fn ui_sidebar_override_returns_some_when_ui_sidebar_set() {
         sidebar: Some(ColorU::from_u32(0x0a0604ff)),
         ..Default::default()
     });
-    assert_eq!(theme.ui_sidebar_override(), Some(Fill::Solid(ColorU::from_u32(0x0a0604ff))));
+    assert_eq!(
+        theme.ui_sidebar_override(),
+        Some(Fill::Solid(ColorU::from_u32(0x0a0604ff)))
+    );
 }
 
 #[test]
@@ -439,7 +450,10 @@ muted_foreground: '#5a5a65'
 "#;
     let tokens: UiTokens = serde_yaml::from_str(yaml).unwrap();
     assert_eq!(tokens.card.unwrap(), ColorU::from_u32(0x0f0905ff));
-    assert_eq!(tokens.muted_foreground.unwrap(), ColorU::from_u32(0x5a5a65ff));
+    assert_eq!(
+        tokens.muted_foreground.unwrap(),
+        ColorU::from_u32(0x5a5a65ff)
+    );
     assert!(tokens.popover.is_none());
 }
 
@@ -499,7 +513,10 @@ fn active_ui_text_color_uses_ui_card_foreground_override() {
         card_foreground: Some(ColorU::from_u32(0xe8e6e3ff)),
         ..Default::default()
     });
-    assert_eq!(theme.active_ui_text_color(), Fill::Solid(ColorU::from_u32(0xe8e6e3ff)));
+    assert_eq!(
+        theme.active_ui_text_color(),
+        Fill::Solid(ColorU::from_u32(0xe8e6e3ff))
+    );
 }
 
 #[test]

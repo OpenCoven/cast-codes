@@ -37,11 +37,8 @@ mod opt_hex_color {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<ColorU>, D::Error> {
         let opt: Option<String> = Option::deserialize(d)?;
-        opt.map(|s| {
-            super::hex_color::coloru_from_hex_string(&s)
-                .map_err(serde::de::Error::custom)
-        })
-        .transpose()
+        opt.map(|s| super::hex_color::coloru_from_hex_string(&s).map_err(serde::de::Error::custom))
+            .transpose()
     }
 }
 
@@ -614,37 +611,101 @@ impl TerminalColors {
 /// Field names mirror tweakcn (`--card`, `--card-foreground`, etc.) snake_cased.
 #[derive(Serialize, Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct UiTokens {
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub card: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub card_foreground: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub popover: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub popover_foreground: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub primary: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub primary_foreground: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub secondary: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub secondary_foreground: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub muted: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub muted_foreground: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub destructive: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub border: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub input: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub ring: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub sidebar: Option<ColorU>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
     pub sidebar_foreground: Option<ColorU>,
 }
 
@@ -715,7 +776,12 @@ impl WarpTheme {
         self.name = Some(name);
     }
 
-    pub fn with_ui(mut self, ui: UiTokens, source: impl Into<String>, imported_at: impl Into<String>) -> Self {
+    pub fn with_ui(
+        mut self,
+        ui: UiTokens,
+        source: impl Into<String>,
+        imported_at: impl Into<String>,
+    ) -> Self {
         self.ui = Some(ui);
         self.source = Some(source.into());
         self.source_imported_at = Some(imported_at.into());
@@ -788,11 +854,11 @@ pub fn mock_warp_theme() -> WarpTheme {
         Fill::Solid(ColorU::from_u32(0x090300ff)), // background
         ColorU::from_u32(0xa5a2a2ff),              // foreground
         Fill::Solid(ColorU::from_u32(0x01a0e4ff)), // accent
-        None,                                       // cursor
-        Some(Details::Darker),                      // details
-        mock_terminal_colors(),                     // terminal_colors
-        None,                                       // background_image
-        None,                                       // name
+        None,                                      // cursor
+        Some(Details::Darker),                     // details
+        mock_terminal_colors(),                    // terminal_colors
+        None,                                      // background_image
+        None,                                      // name
     )
 }
 

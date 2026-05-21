@@ -1058,7 +1058,11 @@ impl AIAssistantPanelView {
         let ui_font = appearance.ui_font_family();
 
         let make_entry = |label: String, body_text: String, dim: bool| -> Box<dyn Element> {
-            let body_color = if dim { theme.muted_foreground() } else { primary };
+            let body_color = if dim {
+                theme.muted_foreground()
+            } else {
+                primary
+            };
             let header = Container::new(
                 ui_builder
                     .wrappable_text(label, false)

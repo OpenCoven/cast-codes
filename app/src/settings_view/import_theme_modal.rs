@@ -21,12 +21,14 @@ use crate::themes::theme::{CustomTheme, ThemeKind};
 use crate::themes::tweakcn_import::{parse_blocks, write_imported, GamutPolicy, ParsedBlocks};
 #[cfg(feature = "local_fs")]
 use crate::user_config;
+use warpui::elements::Point;
 use warpui::elements::{
     Container, CornerRadius, CrossAxisAlignment, Fill, Flex, MainAxisSize, ParentElement, Radius,
     Shrinkable, Text,
 };
 use warpui::event::DispatchedEvent;
 use warpui::fonts::Weight;
+use warpui::geometry::vector::Vector2F;
 use warpui::presenter::ChildView;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent as _, UiComponentStyles};
@@ -36,8 +38,6 @@ use warpui::{
     AfterLayoutContext, AppContext, Element, Entity, Event, EventContext, LayoutContext,
     PaintContext, SingletonEntity as _, SizeConstraint, TypedActionView, View, ViewContext,
 };
-use warpui::geometry::vector::Vector2F;
-use warpui::elements::Point;
 
 // ─── FileDropZone ─────────────────────────────────────────────────────────────
 //
@@ -96,7 +96,9 @@ impl Element for FileDropZone {
             if let Some(z_index) = self.z_index() {
                 if let Some(inner) = event.at_z_index(z_index, ctx) {
                     if let Event::DragAndDropFiles { paths, location } = inner {
-                        if self.bounds().map_or(false, |b| b.contains_point(*location)) && !paths.is_empty() {
+                        if self.bounds().map_or(false, |b| b.contains_point(*location))
+                            && !paths.is_empty()
+                        {
                             let paths: Vec<String> = paths.iter().map(ToOwned::to_owned).collect();
                             ctx.dispatch_typed_action(ImportThemeBodyAction::FileDropped(paths));
                             return true;
@@ -189,14 +191,18 @@ impl ImportThemeBody {
 
     fn handle_css_editor_event(&mut self, event: &EditorEvent, ctx: &mut ViewContext<Self>) {
         if let EditorEvent::Edited(_) = event {
-            let text = self.css_editor.read(ctx, |editor, app| editor.buffer_text(app));
+            let text = self
+                .css_editor
+                .read(ctx, |editor, app| editor.buffer_text(app));
             self.on_css_changed(text, ctx);
         }
     }
 
     fn handle_name_editor_event(&mut self, event: &EditorEvent, ctx: &mut ViewContext<Self>) {
         if let EditorEvent::Edited(_) = event {
-            let text = self.name_editor.read(ctx, |editor, app| editor.buffer_text(app));
+            let text = self
+                .name_editor
+                .read(ctx, |editor, app| editor.buffer_text(app));
             self.name = text;
             ctx.notify();
         }
@@ -294,8 +300,9 @@ impl ImportThemeBody {
 
         #[cfg(not(feature = "local_fs"))]
         {
-            self.show_error =
-                Some("Theme import requires a local filesystem, not available in web mode.".to_string());
+            self.show_error = Some(
+                "Theme import requires a local filesystem, not available in web mode.".to_string(),
+            );
             ctx.notify();
         }
     }
@@ -429,11 +436,19 @@ impl View for ImportThemeBody {
             _ => (false, false),
         };
 
-        let light_text = if has_light { "Light: ✓" } else { "Light: –" };
+        let light_text = if has_light {
+            "Light: ✓"
+        } else {
+            "Light: –"
+        };
         let dark_text = if has_dark { "Dark: ✓" } else { "Dark: –" };
 
         // ── Clamp toggle text ──────────────────────────────────────────────
-        let clamp_indicator = if self.clamp_out_of_gamut { "☑" } else { "☐" };
+        let clamp_indicator = if self.clamp_out_of_gamut {
+            "☑"
+        } else {
+            "☐"
+        };
         let clamp_label = format!("{clamp_indicator} Clamp out-of-gamut colors");
 
         // ── Save / Cancel buttons ──────────────────────────────────────────
@@ -571,8 +586,7 @@ impl View for ImportThemeBody {
         .finish();
 
         // ── Layout ───────────────────────────────────────────────────────
-        let mut layout =
-            Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
+        let mut layout = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
 
         // CSS paste label + field
         layout.add_child(
@@ -595,18 +609,10 @@ impl View for ImportThemeBody {
         layout.add_child(name_input);
 
         // Detected blocks row
-        layout.add_child(
-            Container::new(badge_row)
-                .with_margin_top(10.)
-                .finish(),
-        );
+        layout.add_child(Container::new(badge_row).with_margin_top(10.).finish());
 
         // Clamp toggle
-        layout.add_child(
-            Container::new(clamp_row)
-                .with_margin_top(8.)
-                .finish(),
-        );
+        layout.add_child(Container::new(clamp_row).with_margin_top(8.).finish());
 
         // Error (conditional)
         if let Some(error_element) = maybe_error {
@@ -655,8 +661,8 @@ pub enum ImportThemeModalEvent {
 }
 
 pub fn init(app: &mut warpui::AppContext) {
-    use warpui::keymap::FixedBinding;
     use warpui::keymap::macros::*;
+    use warpui::keymap::FixedBinding;
 
     app.register_fixed_bindings([FixedBinding::new(
         "escape",

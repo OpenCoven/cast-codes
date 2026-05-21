@@ -132,7 +132,11 @@ fn builtin_themes_render_identically_without_ui_block() {
         received_referral_reward(),
     ];
 
-    assert_eq!(builtins.len(), 24, "update this test when adding/removing built-in themes");
+    assert_eq!(
+        builtins.len(),
+        24,
+        "update this test when adding/removing built-in themes"
+    );
 
     for theme in &builtins {
         let name = theme.name();
