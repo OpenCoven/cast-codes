@@ -3,24 +3,24 @@ use std::time::Duration;
 
 use chrono::Local;
 
-use pathfinder_geometry::vector::{vec2f, Vector2F};
+use pathfinder_geometry::vector::{Vector2F, vec2f};
 use warp_editor::editor::NavigationKey;
+use warpui::r#async::Timer;
 use warpui::clipboard::ClipboardContent;
 use warpui::elements::{
-    resizable_state_handle, Align, Border, ChildAnchor, ConstrainedBox, Container, CornerRadius,
-    CrossAxisAlignment, DispatchEventResult, DragBarSide, Empty, EventHandler, Fill, Flex,
-    HyperlinkUrl, Icon, MainAxisAlignment, MainAxisSize, OffsetPositioning, ParentAnchor,
-    PositionedElementAnchor, PositionedElementOffsetBounds, Radius, SavePosition, Shrinkable,
-    Stack, Text,
+    Align, Border, ChildAnchor, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment,
+    DispatchEventResult, DragBarSide, Empty, EventHandler, Fill, Flex, HyperlinkUrl, Icon,
+    MainAxisAlignment, MainAxisSize, OffsetPositioning, ParentAnchor, PositionedElementAnchor,
+    PositionedElementOffsetBounds, Radius, SavePosition, Shrinkable, Stack, Text,
+    resizable_state_handle,
 };
 use warpui::fonts::Properties;
 use warpui::keymap::{EditableBinding, FixedBinding};
 use warpui::platform::Cursor;
 use warpui::presenter::ChildView;
-use warpui::r#async::Timer;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
-use warpui::{elements::Element, AppContext, Entity, TypedActionView, View, ViewContext};
+use warpui::{AppContext, Entity, TypedActionView, View, ViewContext, elements::Element};
 use warpui::{FocusContext, ModelHandle, SingletonEntity, ViewHandle};
 
 use crate::ai::coven_brand::{OPENCOVEN_SUCCESS, OPENCOVEN_WARNING};
@@ -31,17 +31,19 @@ use crate::editor::{
 use crate::input_suggestions::{Event as InputSuggestionsEvent, InputSuggestions};
 
 use crate::send_telemetry_from_ctx;
-use crate::server::server_api::ai::AIClient;
 use crate::server::server_api::ServerApi;
+use crate::server::server_api::ai::AIClient;
 use crate::server::telemetry::{TelemetryEvent, WarpAIActionType};
-use crate::terminal::resizable_data::{ModalType, ResizableData, DEFAULT_WARP_AI_WIDTH};
+use crate::terminal::resizable_data::{DEFAULT_WARP_AI_WIDTH, ModalType, ResizableData};
 use crate::ui_components::blended_colors;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 use crate::ui_components::buttons::icon_button;
-use crate::workspace::{ActiveSession, WorkspaceAction, TAB_BAR_HEIGHT};
+#[cfg(feature = "cast-agent")]
+use crate::workspace::WorkspaceAction;
+use crate::workspace::{ActiveSession, TAB_BAR_HEIGHT};
 
-use crate::util::bindings::{cmd_or_ctrl_shift, CustomAction};
+use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift};
 use warpui::elements::MouseStateHandle;
 use warpui::elements::ParentElement;
 use warpui::elements::Resizable;
@@ -50,10 +52,10 @@ use warpui::elements::ResizableStateHandle;
 use super::execution_context::WarpAiExecutionContext;
 use super::requests::{Event as RequestsEvent, RequestStatus, Requests};
 use super::transcript::{Transcript, TranscriptEvent};
-use super::utils::{render_prepared_response_button, render_request_limit_info, TranscriptPart};
+use super::utils::{TranscriptPart, render_prepared_response_button, render_request_limit_info};
 use super::{
-    AskAIType, AI_ASSISTANT_FEATURE_NAME, AI_ASSISTANT_LOGO_COLOR, AI_ASSISTANT_SVG_PATH,
-    ASK_AI_ASSISTANT_TEXT, PROMPT_CHARACTER_LIMIT,
+    AI_ASSISTANT_FEATURE_NAME, AI_ASSISTANT_LOGO_COLOR, AI_ASSISTANT_SVG_PATH,
+    ASK_AI_ASSISTANT_TEXT, AskAIType, PROMPT_CHARACTER_LIMIT,
 };
 
 const INFO_ICON_SVG_PATH: &str = "bundled/svg/info.svg";
@@ -1177,6 +1179,12 @@ impl AIAssistantPanelView {
     /// No click handler in this first cut — the click-through (open a
     /// terminal pane at the session CWD) requires touching the workspace
     /// pane API and is intentionally deferred. See `CAST-AGENT.md`.
+    #[cfg(not(feature = "cast-agent"))]
+    fn render_sessions_section(&self, _: &Appearance) -> Box<dyn Element> {
+        Empty::new().finish()
+    }
+
+    #[cfg(feature = "cast-agent")]
     fn render_sessions_section(&self, appearance: &Appearance) -> Box<dyn Element> {
         const SECTION_HEADER_FONT_SIZE: f32 = 10.;
         const ROW_FONT_SIZE: f32 = 12.;
