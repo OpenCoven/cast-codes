@@ -1099,7 +1099,11 @@ impl AgentDriverRunner {
                     }
                 }
                 Ok(_) => {
-                    log::debug!("No git credentials returned; skipping credential file setup");
+                    if let Err(e) = driver::git_credentials::clear_git_credentials() {
+                        log::warn!("Failed to clear git credentials after empty response: {e:#}");
+                    } else {
+                        log::debug!("No git credentials returned; removed credential files");
+                    }
                 }
                 Err(e) => {
                     log::warn!("Failed to fetch git credentials: {e:#}");
