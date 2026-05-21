@@ -1,0 +1,55 @@
+---
+background: "#0a0a0a"
+accent: "#e5e5e5"
+foreground: "#fafafa"
+details:
+  custom:
+    main_text_opacity: 90
+    sub_text_opacity: 60
+    hint_text_opacity: 40
+    disabled_text_opacity: 20
+    foreground_button_opacity: 30
+    accent_button_opacity: 0
+    button_hover_opacity: 10
+    button_click_opacity: 20
+    keybinding_row_overlay_opacity: 40
+    welcome_tips_completion_overlay_opacity: 90
+terminal_colors:
+  normal:
+    black: "#616161"
+    red: "#ff8272"
+    green: "#b4fa72"
+    yellow: "#fefdc2"
+    blue: "#a5d5fe"
+    magenta: "#ff8ffd"
+    cyan: "#d0d1fe"
+    white: "#f1f1f1"
+  bright:
+    black: "#8e8e8e"
+    red: "#ffc4bd"
+    green: "#d6fcb9"
+    yellow: "#fefdd5"
+    blue: "#c1e3fe"
+    magenta: "#ffb1fe"
+    cyan: "#e5e6fe"
+    white: "#feffff"
+name: cast-codes-sample
+ui:
+  card: "#171717"
+  card_foreground: "#fafafa"
+  popover: "#262626"
+  popover_foreground: "#fafafa"
+  primary: "#e5e5e5"
+  primary_foreground: "#171717"
+  secondary: "#262626"
+  secondary_foreground: "#fafafa"
+  muted: "#262626"
+  muted_foreground: "#a1a1a1"
+  destructive: "#ff6467"
+  border: "#262626"
+  input: "#404040"
+  ring: "#525252"
+  sidebar: "#171717"
+  sidebar_foreground: "#fafafa"
+source: tweakcn
+source_imported_at: ts-1779337661

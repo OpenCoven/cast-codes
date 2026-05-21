@@ -506,6 +506,56 @@ mod parse_block_tests {
 }
 
 #[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    #[ignore] // Run with `cargo test -- --ignored regenerate_golden` to refresh fixtures.
+    fn regenerate_golden() {
+        // include_str! is relative to the source file's location: app/src/themes/
+        let css = include_str!("../../../crates/integration/tests/data/tweakcn_sample.css");
+        let blocks = parse_blocks(css).unwrap();
+        let base = warp_core::ui::theme::mock_warp_theme();
+        let dark = to_warp_theme(&blocks, ThemeMode::Dark, &base, GamutPolicy::Clamp).unwrap();
+        let light = to_warp_theme(&blocks, ThemeMode::Light, &base, GamutPolicy::Clamp).unwrap();
+        // Note: path is relative to the crate root (app/), so go up to workspace root first.
+        std::fs::write(
+            "../crates/integration/tests/data/tweakcn_sample_dark.yaml",
+            serde_yaml::to_string(&dark).unwrap(),
+        ).unwrap();
+        std::fs::write(
+            "../crates/integration/tests/data/tweakcn_sample_light.yaml",
+            serde_yaml::to_string(&light).unwrap(),
+        ).unwrap();
+    }
+
+    #[test]
+    fn dark_block_matches_golden() {
+        let css = include_str!("../../../crates/integration/tests/data/tweakcn_sample.css");
+        let golden = include_str!("../../../crates/integration/tests/data/tweakcn_sample_dark.yaml");
+        let blocks = parse_blocks(css).unwrap();
+        let base = warp_core::ui::theme::mock_warp_theme();
+        let theme = to_warp_theme(&blocks, ThemeMode::Dark, &base, GamutPolicy::Clamp).unwrap();
+        let actual = serde_yaml::to_string(&theme).unwrap();
+        // Strip the `source_imported_at` line because it embeds wall-clock time.
+        let strip = |s: &str| s.lines().filter(|l| !l.contains("source_imported_at")).collect::<Vec<_>>().join("\n");
+        assert_eq!(strip(&actual), strip(golden));
+    }
+
+    #[test]
+    fn light_block_matches_golden() {
+        let css = include_str!("../../../crates/integration/tests/data/tweakcn_sample.css");
+        let golden = include_str!("../../../crates/integration/tests/data/tweakcn_sample_light.yaml");
+        let blocks = parse_blocks(css).unwrap();
+        let base = warp_core::ui::theme::mock_warp_theme();
+        let theme = to_warp_theme(&blocks, ThemeMode::Light, &base, GamutPolicy::Clamp).unwrap();
+        let actual = serde_yaml::to_string(&theme).unwrap();
+        let strip = |s: &str| s.lines().filter(|l| !l.contains("source_imported_at")).collect::<Vec<_>>().join("\n");
+        assert_eq!(strip(&actual), strip(golden));
+    }
+}
+
+#[cfg(test)]
 mod writer_tests {
     use super::*;
 
