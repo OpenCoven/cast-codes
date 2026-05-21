@@ -28,7 +28,10 @@ use tokio::fs as tokio_fs;
 use warpui::r#async::FutureExt as _;
 
 use crate::ai::agent::conversation::AIConversation;
-use crate::ai::agent::{AIAgentAction, AIAgentActionType, AIAgentOutputMessageType};
+use crate::ai::agent::{
+    AIAgentAction, AIAgentActionResult, AIAgentActionResultType, AIAgentActionType,
+    AIAgentOutputMessageType, RequestFileEditsResult, UploadArtifactResult,
+};
 use crate::ai::blocklist::agent_view::agent_input_footer::sort_environments_by_recency;
 use crate::ai::cloud_environments::{CloudAmbientAgentEnvironment, GithubRepo};
 use crate::server::ids::SyncId;
@@ -274,6 +277,10 @@ pub(crate) fn extract_paths_from_conversation(conversation: &AIConversation) -> 
     // Walk exchanges newest-first so we can stop once we've consumed the cap.
     // Within each exchange we count every `Action` message against the budget
     // and bail early if we hit it mid-exchange.
+    //
+    // Only action IDs with successful write/upload results are eligible; this
+    // prevents cancelled or failed requests from staging arbitrary local files
+    // for handoff upload.
     let mut paths: Vec<PathBuf> = Vec::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut tool_calls_remaining = MAX_TOOL_CALLS_TO_SCAN;
@@ -293,6 +300,14 @@ pub(crate) fn extract_paths_from_conversation(conversation: &AIConversation) -> 
             }
         }
 
+        let successful_write_action_ids: HashSet<_> = exchange
+            .input
+            .iter()
+            .filter_map(|input| input.action_result())
+            .filter(is_successful_write_action_result)
+            .map(|result| result.id.clone())
+            .collect();
+
         let Some(output) = exchange.output_status.output() else {
             continue;
         };
@@ -308,11 +323,21 @@ pub(crate) fn extract_paths_from_conversation(conversation: &AIConversation) -> 
                 break;
             }
             tool_calls_remaining -= 1;
-            extract_action_paths(action, cwd, &mut paths, &mut seen);
+            if successful_write_action_ids.contains(&action.id) {
+                extract_action_paths(action, cwd, &mut paths, &mut seen);
+            }
         }
     }
 
     paths
+}
+
+fn is_successful_write_action_result(result: &AIAgentActionResult) -> bool {
+    matches!(
+        result.result,
+        AIAgentActionResultType::RequestFileEdits(RequestFileEditsResult::Success { .. })
+            | AIAgentActionResultType::UploadArtifact(UploadArtifactResult::Success { .. })
+    )
 }
 
 fn extract_action_paths(
