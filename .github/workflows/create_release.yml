@@ -508,6 +508,7 @@ jobs:
           artifact: cli
 
       - name: Checksum Linux CLI packages
+        id: cli_assets
         shell: bash
         run: |
           set -euo pipefail
@@ -516,35 +517,36 @@ jobs:
               sha256sum "$file" > "$file.sha256"
             done
           sha256sum cast-codes-linux-x86_64.tar.gz > cast-codes-linux-x86_64.tar.gz.sha256
+          release_assets_dir="$PWD/release-linux-cli-assets"
+          rm -rf "$release_assets_dir"
+          mkdir -p "$release_assets_dir"
+          find "${{ steps.bundle_cli.outputs.packages_dir }}" -maxdepth 1 -type f \
+            \( -name '*.deb' -o -name '*.deb.sha256' \
+            -o -name '*.rpm' -o -name '*.rpm.sha256' \
+            -o -name '*.pkg.tar.zst' -o -name '*.pkg.tar.zst.sha256' \) \
+            -exec cp '{}' "$release_assets_dir/" \;
+          cp cast-codes-linux-x86_64.tar.gz cast-codes-linux-x86_64.tar.gz.sha256 "$release_assets_dir/"
+          echo "release_assets_dir=$release_assets_dir" >> "$GITHUB_OUTPUT"
 
       - name: Add Linux CLI packages to GitHub release assets
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          files: |
-            ${{ steps.bundle_cli.outputs.packages_dir }}/*
-            cast-codes-linux-x86_64.tar.gz
-            cast-codes-linux-x86_64.tar.gz.sha256
+          files: ${{ steps.cli_assets.outputs.release_assets_dir }}/*
           token: ${{ github.token }}
 
       - name: Upload Linux CLI packages as workflow artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-linux-cli-x86_64-${{ needs.prepare_release.outputs.channel }}
-          path: |
-            ${{ steps.bundle_cli.outputs.packages_dir }}
-            cast-codes-linux-x86_64.tar.gz
-            cast-codes-linux-x86_64.tar.gz.sha256
+          path: ${{ steps.cli_assets.outputs.release_assets_dir }}/*
 
       - name: Attest Linux CLI packages
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: |
-            ${{ steps.bundle_cli.outputs.packages_dir }}/*
-            cast-codes-linux-x86_64.tar.gz
-            cast-codes-linux-x86_64.tar.gz.sha256
+          subject-path: ${{ steps.cli_assets.outputs.release_assets_dir }}/*
 
   release_web:
     name: Build Release (Web)
