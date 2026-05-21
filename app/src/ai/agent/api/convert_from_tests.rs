@@ -6,7 +6,7 @@ use crate::ai::agent::task::TaskId;
 use crate::ai::agent::{
     AIAgentActionType, AIAgentOutputMessageType, LifecycleEventType, StartAgentExecutionMode,
 };
-use ai::agent::action::AskUserQuestionType;
+use ai::agent::action::{AskUserQuestionType, RunAgentsExecutionMode};
 use ai::skills::SkillReference;
 use warp_multi_agent_api as api;
 
@@ -641,4 +641,77 @@ fn transfer_control_tool_call_converts_to_action_message() {
             panic!("Expected transfer-control tool call to produce a client action")
         }
     }
+}
+
+#[test]
+fn run_agents_remote_computer_use_enabled_is_forced_to_false() {
+    // Construct a RunAgents tool-call message where the LLM set
+    // computer_use_enabled = true in the Remote execution mode.
+    let task_id = TaskId::new("task-id".to_string());
+    let message = api::Message {
+        id: "message-id".to_string(),
+        task_id: "task-id".to_string(),
+        server_message_data: String::new(),
+        citations: vec![],
+        message: Some(api::message::Message::ToolCall(api::message::ToolCall {
+            tool_call_id: "tool-call-id".to_string(),
+            tool: Some(api::message::tool_call::Tool::RunAgents(api::RunAgents {
+                summary: "multi-agent task".to_string(),
+                base_prompt: "do the thing".to_string(),
+                skills: vec![],
+                model_id: "auto".to_string(),
+                harness: None,
+                agent_run_configs: vec![api::run_agents::AgentRunConfig {
+                    name: "worker".to_string(),
+                    prompt: "work".to_string(),
+                    title: "Worker".to_string(),
+                }],
+                execution_mode: Some(api::run_agents::ExecutionMode::Remote(
+                    api::run_agents::Remote {
+                        environment_id: "env-42".to_string(),
+                        worker_host: "warp".to_string(),
+                        // LLM-supplied true — must be rejected by conversion.
+                        computer_use_enabled: true,
+                    },
+                )),
+            })),
+        })),
+        request_id: "request-id".to_string(),
+        timestamp: None,
+    };
+
+    let output = message
+        .to_client_output_message(ConversionParams {
+            task_id: &task_id,
+            current_todo_list: None,
+            active_code_review: None,
+        })
+        .expect("conversion should succeed");
+
+    let action = match output {
+        MaybeAIAgentOutputMessage::Message(msg) => match msg.message {
+            AIAgentOutputMessageType::Action(a) => a,
+            other => panic!("expected Action, got {other:?}"),
+        },
+        MaybeAIAgentOutputMessage::NoClientRepresentation => {
+            panic!("expected a client message, got NoClientRepresentation")
+        }
+    };
+
+    let AIAgentActionType::RunAgents(request) = action.action else {
+        panic!("expected RunAgents action");
+    };
+
+    let RunAgentsExecutionMode::Remote {
+        computer_use_enabled,
+        ..
+    } = request.execution_mode
+    else {
+        panic!("expected Remote execution mode");
+    };
+
+    assert!(
+        !computer_use_enabled,
+        "computer_use_enabled must be false for Remote RunAgents regardless of what the LLM requested"
+    );
 }
