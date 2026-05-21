@@ -634,12 +634,12 @@ impl TerminalView {
         let token_usage = conversation.token_usage();
         let primary_model_id = token_usage
             .iter()
-            .max_by_key(|m| m.warp_tokens + m.byok_tokens)
+            .max_by_key(|m| u64::from(m.warp_tokens) + u64::from(m.byok_tokens))
             .map(|m| m.model_id.as_str())
             .unwrap_or("—");
-        let total_tokens: u32 = token_usage
+        let total_tokens: u64 = token_usage
             .iter()
-            .map(|m| m.warp_tokens + m.byok_tokens)
+            .map(|m| u64::from(m.warp_tokens) + u64::from(m.byok_tokens))
             .sum();
         let tokens_label = format_compact_tokens(total_tokens);
         let credits_label = crate::ai::blocklist::format_credits(conversation.credits_spent());
@@ -674,13 +674,13 @@ impl TerminalView {
     }
 }
 
-fn format_compact_tokens(n: u32) -> String {
+fn format_compact_tokens(n: u64) -> String {
     if n >= 1_000_000 {
-        format!("{:.1}M tokens", n as f32 / 1_000_000.0)
+        format!("{:.1}M tokens", n as f64 / 1_000_000.0)
     } else if n >= 10_000 {
         format!("{}K tokens", n / 1_000)
     } else if n >= 1_000 {
-        format!("{:.1}K tokens", n as f32 / 1_000.0)
+        format!("{:.1}K tokens", n as f64 / 1_000.0)
     } else {
         format!("{n} tokens")
     }
