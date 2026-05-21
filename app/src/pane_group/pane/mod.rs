@@ -685,6 +685,18 @@ pub trait PaneContent: 'static {
     fn pane_configuration(&self) -> ModelHandle<PaneConfiguration>;
 
     fn is_pane_being_dragged(&self, ctx: &AppContext) -> bool;
+
+    /// Minimum horizontal pixel width below which this pane is no longer
+    /// legible. Used by the splitter clamp so an adjacent pane (e.g. an
+    /// embedded browser, code-review panel, or chat panel) cannot be dragged
+    /// wide enough to squeeze this pane below a usable size. Defaults to the
+    /// shared [`crate::pane_group::MINIMUM_PANE_SIZE`]; pane types whose
+    /// effective content density scales with pixel width (most notably the
+    /// terminal, whose column count is `pane_width / cell_width`) should
+    /// override.
+    fn min_pane_width(&self, _ctx: &AppContext) -> f32 {
+        crate::pane_group::MINIMUM_PANE_SIZE
+    }
 }
 
 /// Trait for untyped pane contents. This is a workaround for trait upcasting being
