@@ -5,6 +5,14 @@
 //! Save. The modal calls `write_imported` to write YAML(s) to disk, then
 //! dispatches a theme-reload+select event so the new theme is immediately
 //! active.
+//!
+//! ## Drag-and-drop
+//! The modal body is wrapped in a `FileDropZone` element (inner module) that
+//! intercepts `Event::DragAndDropFiles` from the OS and dispatches a
+//! `ImportThemeBodyAction::FileDropped` action.  Only `.css` files are
+//! accepted; anything else is rejected with an inline error.
+
+use std::any::Any;
 
 use crate::appearance::Appearance;
 use crate::editor::{EditorOptions, EditorView, Event as EditorEvent, SingleLineEditorOptions};
@@ -17,13 +25,89 @@ use warpui::elements::{
     Container, CornerRadius, CrossAxisAlignment, Fill, Flex, MainAxisSize, ParentElement, Radius,
     Shrinkable, Text,
 };
+use warpui::event::DispatchedEvent;
 use warpui::fonts::Weight;
 use warpui::presenter::ChildView;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent as _, UiComponentStyles};
 use warpui::ui_components::text_input::TextInput;
 use warpui::ViewHandle;
-use warpui::{AppContext, Element, Entity, SingletonEntity as _, TypedActionView, View, ViewContext};
+use warpui::{
+    AfterLayoutContext, AppContext, Element, Entity, Event, EventContext, LayoutContext,
+    PaintContext, SingletonEntity as _, SizeConstraint, TypedActionView, View, ViewContext,
+};
+use warpui::geometry::vector::Vector2F;
+use warpui::elements::Point;
+
+// ─── FileDropZone ─────────────────────────────────────────────────────────────
+//
+// A transparent element wrapper that sits over any child and intercepts OS-level
+// DragAndDropFiles events, forwarding them as a typed action to the view.
+
+struct FileDropZone {
+    child: Box<dyn Element>,
+}
+
+impl FileDropZone {
+    fn new(child: Box<dyn Element>) -> Self {
+        Self { child }
+    }
+}
+
+impl Element for FileDropZone {
+    fn layout(
+        &mut self,
+        constraint: SizeConstraint,
+        ctx: &mut LayoutContext,
+        app: &AppContext,
+    ) -> Vector2F {
+        self.child.layout(constraint, ctx, app)
+    }
+
+    fn after_layout(&mut self, ctx: &mut AfterLayoutContext, app: &AppContext) {
+        self.child.after_layout(ctx, app);
+    }
+
+    fn paint(&mut self, origin: Vector2F, ctx: &mut PaintContext, app: &AppContext) {
+        self.child.paint(origin, ctx, app);
+    }
+
+    fn size(&self) -> Option<Vector2F> {
+        self.child.size()
+    }
+
+    fn origin(&self) -> Option<Point> {
+        self.child.origin()
+    }
+
+    fn parent_data(&self) -> Option<&dyn Any> {
+        self.child.parent_data()
+    }
+
+    fn dispatch_event(
+        &mut self,
+        event: &DispatchedEvent,
+        ctx: &mut EventContext,
+        app: &AppContext,
+    ) -> bool {
+        let handled_by_child = self.child.dispatch_event(event, ctx, app);
+
+        if !handled_by_child {
+            if let Some(z_index) = self.z_index() {
+                if let Some(inner) = event.at_z_index(z_index, ctx) {
+                    if let Event::DragAndDropFiles { paths, location } = inner {
+                        if self.bounds().map_or(false, |b| b.contains_point(*location)) && !paths.is_empty() {
+                            let paths: Vec<String> = paths.iter().map(ToOwned::to_owned).collect();
+                            ctx.dispatch_typed_action(ImportThemeBodyAction::FileDropped(paths));
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        handled_by_child
+    }
+}
 
 const MODAL_HEADER: &str = "Import theme from tweakcn";
 const MODAL_WIDTH: f32 = 560.;
@@ -53,6 +137,9 @@ pub enum ImportThemeBodyAction {
     Save,
     Cancel,
     ToggleClamp,
+    /// OS-level file-drop: the vec contains the absolute path strings of the
+    /// dropped items (may be multiple; only the first `.css` one is used).
+    FileDropped(Vec<String>),
 }
 
 pub enum ImportThemeBodyEvent {
@@ -215,6 +302,66 @@ impl ImportThemeBody {
 
     pub fn cancel(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.emit(ImportThemeBodyEvent::Close);
+    }
+
+    /// Handle a file dropped onto the modal (OS DragAndDropFiles event).
+    ///
+    /// Accepts the first `.css` file found in `paths`.  Non-`.css` files (or
+    /// an empty list) show an inline error and leave the paste box untouched.
+    ///
+    /// Gated on `local_fs` because the fallback (web) has no filesystem access
+    /// and the event is not reachable there anyway.
+    #[cfg(feature = "local_fs")]
+    pub fn on_file_dropped(&mut self, paths: Vec<String>, ctx: &mut ViewContext<Self>) {
+        use std::path::Path;
+
+        let css_path = paths
+            .iter()
+            .map(Path::new)
+            .find(|p| p.extension().and_then(|e| e.to_str()) == Some("css"));
+
+        let path = match css_path {
+            Some(p) => p,
+            None => {
+                self.show_error = Some("Only .css files are supported.".to_string());
+                ctx.notify();
+                return;
+            }
+        };
+
+        match std::fs::read_to_string(path) {
+            Ok(contents) => {
+                // Use the filename stem as a default slug if the modal name is empty.
+                if self.name.is_empty() {
+                    let stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("imported-theme")
+                        .to_string();
+                    self.name = stem.clone();
+                    self.name_editor.update(ctx, |editor, ctx| {
+                        editor.set_buffer_text(&stem, ctx);
+                    });
+                }
+                // Populate the CSS editor buffer so the user can see what was loaded.
+                let contents_clone = contents.clone();
+                self.css_editor.update(ctx, |editor, ctx| {
+                    editor.set_buffer_text(&contents_clone, ctx);
+                });
+                self.on_css_changed(contents, ctx);
+            }
+            Err(e) => {
+                self.show_error = Some(format!("Read failed: {e}"));
+                ctx.notify();
+            }
+        }
+    }
+
+    #[cfg(not(feature = "local_fs"))]
+    pub fn on_file_dropped(&mut self, _paths: Vec<String>, ctx: &mut ViewContext<Self>) {
+        self.show_error =
+            Some("File drop requires a local filesystem, not available in web mode.".to_string());
+        ctx.notify();
     }
 
     pub fn toggle_clamp(&mut self, ctx: &mut ViewContext<Self>) {
@@ -469,7 +616,9 @@ impl View for ImportThemeBody {
         // Button row
         layout.add_child(button_row);
 
-        layout.finish()
+        // Wrap the whole layout in a FileDropZone so OS-level .css file drops
+        // are captured and dispatched as ImportThemeBodyAction::FileDropped.
+        Box::new(FileDropZone::new(layout.finish()))
     }
 }
 
@@ -481,6 +630,9 @@ impl TypedActionView for ImportThemeBody {
             ImportThemeBodyAction::Save => self.save(ctx),
             ImportThemeBodyAction::Cancel => self.cancel(ctx),
             ImportThemeBodyAction::ToggleClamp => self.toggle_clamp(ctx),
+            ImportThemeBodyAction::FileDropped(paths) => {
+                self.on_file_dropped(paths.clone(), ctx);
+            }
         }
     }
 }
