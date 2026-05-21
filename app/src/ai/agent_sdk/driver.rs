@@ -2361,7 +2361,7 @@ impl AgentDriver {
     /// Perform cleanup after the agent has finished running.
     async fn cleanup(spawner: ModelSpawner<Self>) {
         if let Err(err) = crate::ai::agent_sdk::driver::git_credentials::clear_git_credentials() {
-            report_error!(anyhow!(err).context("Unable to remove git credential files"));
+            report_error!(err.context("Unable to remove git credential files"));
         }
 
         let Ok(providers) = spawner
