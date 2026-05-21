@@ -212,7 +212,6 @@ jobs:
           target_os: macos
           is_self_hosted: false
           install_release_deps: true
-          use_cache: false
 
       - name: Ensure rust target is installed
         run: rustup target add aarch64-apple-darwin
