@@ -6,6 +6,7 @@ pub mod theme_creator_body;
 pub mod theme_creator_modal;
 pub mod theme_deletion_body;
 pub mod theme_deletion_modal;
+pub mod tweakcn_import;
 
 use warp_core::ui::theme::WarpTheme;
 
