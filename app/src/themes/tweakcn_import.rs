@@ -45,6 +45,114 @@ pub(crate) fn oklch_to_srgb_u8(l: f64, c: f64, h_deg: f64) -> Result<ColorU, Col
     if in_gamut { Ok(color) } else { Err(color) }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ImportError {
+    NoColorBlocksFound,
+    InvalidOklch { var: String, raw: String },
+    OutOfSrgbGamut { var: String, srgb: ColorU },
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub struct ParsedBlocks {
+    pub light: std::collections::HashMap<String, (f64, f64, f64)>, // var → (L, C, H_deg)
+    pub dark: std::collections::HashMap<String, (f64, f64, f64)>,
+    pub name_comment: Option<String>,
+}
+
+/// Pull `:root { ... }` and `.dark { ... }` blocks out of a tweakcn CSS
+/// export. Parses each `--var: oklch(L C H);` line into a (L,C,H) triple.
+/// `oklch()` is the only color function supported — anything else is
+/// silently skipped (tweakcn occasionally emits raw hex for transparency
+/// values like shadow color).
+pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
+    let mut blocks = ParsedBlocks::default();
+
+    // Strip CSS comments first; capture the first inline comment as a name hint.
+    let mut name_hint = None;
+    let mut cleaned = String::with_capacity(css.len());
+    let mut i = 0;
+    let bytes = css.as_bytes();
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            // Find closing */
+            let start = i + 2;
+            let end = css[start..].find("*/").map(|j| start + j).unwrap_or(bytes.len());
+            let comment = css[start..end].trim();
+            if name_hint.is_none() {
+                // Look for "tweakcn theme: <slug>" or just take the comment if it's a single word.
+                if let Some(rest) = comment.strip_prefix("tweakcn theme:") {
+                    name_hint = Some(rest.trim().to_string());
+                } else if !comment.contains(' ') && !comment.is_empty() {
+                    name_hint = Some(comment.to_string());
+                }
+            }
+            i = if end < bytes.len() { end + 2 } else { bytes.len() };
+        } else {
+            cleaned.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    blocks.name_comment = name_hint;
+
+    fn extract_block<'a>(haystack: &'a str, selector: &str) -> Option<&'a str> {
+        let needle = format!("{}", selector);
+        let start = haystack.find(&needle)?;
+        let body_start = haystack[start + needle.len()..].find('{')? + start + needle.len() + 1;
+        let mut depth = 1;
+        let mut end = body_start;
+        for (idx, ch) in haystack[body_start..].char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = body_start + idx;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Some(&haystack[body_start..end])
+    }
+
+    let parse_decls = |body: &str, target: &mut std::collections::HashMap<String, (f64, f64, f64)>| {
+        for decl in body.split(';') {
+            let decl = decl.trim();
+            if !decl.starts_with("--") { continue; }
+            let Some((name, value)) = decl.split_once(':') else { continue };
+            let name = name.trim().trim_start_matches("--").to_string();
+            let value = value.trim();
+            // Only `oklch(L C H[ / a])` is supported; anything else is silently skipped.
+            let Some(args) = value.strip_prefix("oklch(").and_then(|s| s.strip_suffix(')')) else {
+                continue;
+            };
+            let triple: Vec<&str> = args.split_whitespace().take(3).collect();
+            if triple.len() < 3 { continue; }
+            let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
+            // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
+            let l = if triple[0].ends_with('%') { l / 100.0 } else { l };
+            let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
+            let h: f64 = triple[2].trim_end_matches("deg").parse().unwrap_or(f64::NAN);
+            if l.is_finite() && c.is_finite() && h.is_finite() {
+                target.insert(name, (l, c, h));
+            }
+        }
+    };
+
+    if let Some(body) = extract_block(&cleaned, ":root") {
+        parse_decls(body, &mut blocks.light);
+    }
+    if let Some(body) = extract_block(&cleaned, ".dark") {
+        parse_decls(body, &mut blocks.dark);
+    }
+
+    if blocks.light.is_empty() && blocks.dark.is_empty() {
+        return Err(ImportError::NoColorBlocksFound);
+    }
+    Ok(blocks)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,5 +196,59 @@ mod tests {
         let clamped = result.unwrap_err();
         // All channels clamped into [0, 255].
         let _ = clamped; // representable, no further assertion
+    }
+}
+
+#[cfg(test)]
+mod parse_block_tests {
+    use super::*;
+
+    const SAMPLE: &str = r#"
+/* tweakcn theme: midnight-ember */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+}
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+}
+"#;
+
+    #[test]
+    fn extracts_both_blocks() {
+        let blocks = parse_blocks(SAMPLE).unwrap();
+        assert_eq!(blocks.light.len(), 2);
+        assert_eq!(blocks.dark.len(), 3);
+    }
+
+    #[test]
+    fn block_values_are_parsed() {
+        let blocks = parse_blocks(SAMPLE).unwrap();
+        let (l, c, h) = blocks.dark["card"];
+        assert!((l - 0.205).abs() < 1e-9);
+        assert_eq!(c, 0.0);
+        assert_eq!(h, 0.0);
+    }
+
+    #[test]
+    fn name_comment_extracted() {
+        let blocks = parse_blocks(SAMPLE).unwrap();
+        assert_eq!(blocks.name_comment.as_deref(), Some("midnight-ember"));
+    }
+
+    #[test]
+    fn no_blocks_errors() {
+        let result = parse_blocks("body { color: red; }");
+        assert!(matches!(result, Err(ImportError::NoColorBlocksFound)));
+    }
+
+    #[test]
+    fn only_dark_block_ok() {
+        let css = ".dark { --background: oklch(0 0 0); }";
+        let blocks = parse_blocks(css).unwrap();
+        assert!(blocks.light.is_empty());
+        assert_eq!(blocks.dark.len(), 1);
     }
 }
