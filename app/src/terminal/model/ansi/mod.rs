@@ -963,7 +963,9 @@ where
 
                 let clipboard = params[1].first().unwrap_or(&b'c');
                 match params[2] {
-                    b"?" => self.handler.clipboard_load(*clipboard, terminator),
+                    // Ignore clipboard read requests to avoid exposing local clipboard
+                    // content to untrusted terminal output (e.g. OSC 52 ; ?).
+                    b"?" => {}
                     base64 => self.handler.clipboard_store(*clipboard, base64),
                 }
             }
