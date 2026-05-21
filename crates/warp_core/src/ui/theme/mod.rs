@@ -21,6 +21,41 @@ use dirs::home_dir;
 use serde::{Deserialize, Serialize};
 use warpui::{assets::asset_cache::AssetSource, color::ColorU, geometry::vector::vec2f};
 
+mod opt_hex_color {
+    use super::ColorU;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &Option<ColorU>, s: S) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(c) => {
+                let hex = format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b);
+                hex.serialize(s)
+            }
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<ColorU>, D::Error> {
+        let opt: Option<String> = Option::deserialize(d)?;
+        match opt {
+            None => Ok(None),
+            Some(s) => {
+                let s = s.trim_start_matches('#');
+                if s.len() != 6 {
+                    return Err(serde::de::Error::custom(format!(
+                        "expected 6-digit hex, got '{}'",
+                        s
+                    )));
+                }
+                let r = u8::from_str_radix(&s[0..2], 16).map_err(serde::de::Error::custom)?;
+                let g = u8::from_str_radix(&s[2..4], 16).map_err(serde::de::Error::custom)?;
+                let b = u8::from_str_radix(&s[4..6], 16).map_err(serde::de::Error::custom)?;
+                Ok(Some(ColorU { r, g, b, a: 255 }))
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Image {
     pub source: AssetSource,
@@ -583,6 +618,45 @@ impl TerminalColors {
     pub fn new(normal: AnsiColors, bright: AnsiColors) -> Self {
         TerminalColors { normal, bright }
     }
+}
+
+/// Optional, tweakcn-aligned semantic UI tokens. Every field is optional;
+/// missing fields fall back to today's derived values in `color.rs`.
+/// Field names mirror tweakcn (`--card`, `--card-foreground`, etc.) snake_cased.
+#[derive(Serialize, Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct UiTokens {
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub card: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub card_foreground: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub popover: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub popover_foreground: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub primary: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub primary_foreground: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub secondary: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub secondary_foreground: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub muted: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub muted_foreground: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub destructive: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub border: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub input: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub ring: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub sidebar: Option<ColorU>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "opt_hex_color")]
+    pub sidebar_foreground: Option<ColorU>,
 }
 
 #[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]

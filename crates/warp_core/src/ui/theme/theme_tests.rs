@@ -339,3 +339,36 @@ fn infer_from_foreground_color_test() {
         ColorScheme::DarkOnLight
     );
 }
+
+#[test]
+fn ui_tokens_default_all_none() {
+    let tokens = UiTokens::default();
+    assert!(tokens.card.is_none());
+    assert!(tokens.card_foreground.is_none());
+    assert!(tokens.muted_foreground.is_none());
+    assert!(tokens.border.is_none());
+    assert!(tokens.sidebar.is_none());
+}
+
+#[test]
+fn ui_tokens_deserialize_partial() {
+    let yaml = r#"
+card: '#0f0905'
+muted_foreground: '#5a5a65'
+"#;
+    let tokens: UiTokens = serde_yaml::from_str(yaml).unwrap();
+    assert_eq!(tokens.card.unwrap(), ColorU::from_u32(0x0f0905ff));
+    assert_eq!(tokens.muted_foreground.unwrap(), ColorU::from_u32(0x5a5a65ff));
+    assert!(tokens.popover.is_none());
+}
+
+#[test]
+fn ui_tokens_serialize_skips_none() {
+    let tokens = UiTokens {
+        card: Some(ColorU::from_u32(0x0f0905ff)),
+        ..Default::default()
+    };
+    let out = serde_yaml::to_string(&tokens).unwrap();
+    assert!(out.contains("card"));
+    assert!(!out.contains("popover"));
+}
