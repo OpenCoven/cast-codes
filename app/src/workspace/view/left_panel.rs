@@ -1148,7 +1148,8 @@ impl View for LeftPanelView {
             }
         };
 
-        let panel_content = Container::new({
+        let theme = appearance.theme();
+        let mut panel_content = Container::new({
             let column = Flex::column();
 
             let header_left = if let Some(row) = toolbelt_button_row {
@@ -1179,9 +1180,11 @@ impl View for LeftPanelView {
                 .with_child(Shrinkable::new(1.0, content_area).finish())
                 .with_main_axis_size(MainAxisSize::Max)
                 .finish()
-        })
-        .with_background(appearance.theme().sidebar_bg())
-        .finish();
+        });
+        if let Some(bg) = theme.ui_sidebar_override() {
+            panel_content = panel_content.with_background(bg);
+        }
+        let panel_content = panel_content.finish();
 
         if warpui::platform::is_mobile_device() {
             return panel_content;

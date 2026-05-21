@@ -66,6 +66,22 @@ fn ring_uses_ui_override_when_set() {
 }
 
 #[test]
+fn ui_sidebar_override_returns_none_without_ui() {
+    let theme = test_theme_without_ui();
+    assert!(theme.ui_sidebar_override().is_none());
+}
+
+#[test]
+fn ui_sidebar_override_returns_some_when_ui_sidebar_set() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        sidebar: Some(ColorU::from_u32(0x0a0604ff)),
+        ..Default::default()
+    });
+    assert_eq!(theme.ui_sidebar_override(), Some(Fill::Solid(ColorU::from_u32(0x0a0604ff))));
+}
+
+#[test]
 fn serialize_test() {
     let theme = WarpTheme::new(
         Fill::Solid(ColorU::from_u32(0x20A5BAFF)),

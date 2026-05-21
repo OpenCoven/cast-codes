@@ -166,6 +166,14 @@ impl WarpTheme {
             .unwrap_or_else(|| self.accent())
     }
 
+    /// Returns `Some(Fill::Solid(c))` only when `ui.sidebar` is explicitly set;
+    /// returns `None` otherwise (callers should leave the surface transparent).
+    /// Distinct from `sidebar_bg()` which has a `surface_1()` fallback for
+    /// callers that need an unconditional sidebar color.
+    pub fn ui_sidebar_override(&self) -> Option<Fill> {
+        self.ui.as_ref().and_then(|u| u.sidebar).map(Fill::Solid)
+    }
+
     pub fn ui_warning_color(&self) -> ColorU {
         ColorU::new(194, 128, 0, 255)
     }
