@@ -23,7 +23,7 @@ use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{elements::Element, AppContext, Entity, TypedActionView, View, ViewContext};
 use warpui::{FocusContext, ModelHandle, SingletonEntity, ViewHandle};
 
-use crate::ai::coven_brand::{OPENCOVEN_MUTED, OPENCOVEN_SUCCESS, OPENCOVEN_WARNING};
+use crate::ai::coven_brand::{OPENCOVEN_SUCCESS, OPENCOVEN_WARNING};
 use crate::appearance::Appearance;
 use crate::editor::{
     EditorOptions, EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, TextOptions,
@@ -1058,7 +1058,7 @@ impl AIAssistantPanelView {
         let ui_font = appearance.ui_font_family();
 
         let make_entry = |label: String, body_text: String, dim: bool| -> Box<dyn Element> {
-            let body_color = if dim { OPENCOVEN_MUTED } else { primary };
+            let body_color = if dim { theme.muted_foreground() } else { primary };
             let header = Container::new(
                 ui_builder
                     .wrappable_text(label, false)
@@ -1066,7 +1066,7 @@ impl AIAssistantPanelView {
                         font_family_id: Some(ui_font),
                         font_size: Some(SECTION_HEADER_FONT_SIZE),
                         font_weight: Some(warpui::fonts::Weight::Semibold),
-                        font_color: Some(OPENCOVEN_MUTED),
+                        font_color: Some(theme.muted_foreground()),
                         ..Default::default()
                     })
                     .build()
@@ -1208,7 +1208,7 @@ impl AIAssistantPanelView {
                             font_family_id: Some(ui_font),
                             font_size: Some(SECTION_HEADER_FONT_SIZE),
                             font_weight: Some(warpui::fonts::Weight::Semibold),
-                            font_color: Some(OPENCOVEN_MUTED),
+                            font_color: Some(theme.muted_foreground()),
                             ..Default::default()
                         })
                         .build()
@@ -1222,7 +1222,7 @@ impl AIAssistantPanelView {
             let dot_color = match session.status {
                 ::ai::cast_agent::SessionStatus::Active => OPENCOVEN_SUCCESS,
                 ::ai::cast_agent::SessionStatus::Idle => OPENCOVEN_WARNING,
-                ::ai::cast_agent::SessionStatus::Closed => OPENCOVEN_MUTED,
+                ::ai::cast_agent::SessionStatus::Closed => theme.muted_foreground(),
             };
             let mut row = Flex::row()
                 .with_cross_axis_alignment(CrossAxisAlignment::Center)
@@ -1264,7 +1264,7 @@ impl AIAssistantPanelView {
                         .with_style(UiComponentStyles {
                             font_family_id: Some(ui_font),
                             font_size: Some(ROW_FONT_SIZE),
-                            font_color: Some(OPENCOVEN_MUTED),
+                            font_color: Some(theme.muted_foreground()),
                             ..Default::default()
                         })
                         .build()
