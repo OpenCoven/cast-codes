@@ -50,6 +50,7 @@ pub enum ImportError {
     NoColorBlocksFound,
     InvalidOklch { var: String, raw: String },
     OutOfSrgbGamut { var: String, srgb: ColorU },
+    Io(String),
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -249,6 +250,73 @@ pub fn to_warp_theme(
     Ok(theme.with_ui(ui, "tweakcn", now))
 }
 
+use std::path::{Path, PathBuf};
+
+/// Write a tweakcn-imported theme to disk.
+///
+/// `slug` is sanitized into a filesystem-safe name.  The dark block (if any)
+/// is written to `<themes_dir>/<slug>.yaml`; the light block (if any) to
+/// `<themes_dir>/<slug>-light.yaml`.  Returns the list of paths actually
+/// written.
+pub fn write_imported(
+    blocks: &ParsedBlocks,
+    slug: &str,
+    inherit_terminal_from: &WarpTheme,
+    policy: GamutPolicy,
+    themes_dir: &Path,
+) -> Result<Vec<PathBuf>, ImportError> {
+    let mut written = Vec::new();
+    let slug = sanitize_slug(slug);
+    let primary_path = themes_dir.join(format!("{}.yaml", slug));
+    let light_path = themes_dir.join(format!("{}-light.yaml", slug));
+
+    if !blocks.dark.is_empty() {
+        let theme = to_warp_theme(blocks, ThemeMode::Dark, inherit_terminal_from, policy)?;
+        let yaml = serde_yaml::to_string(&theme).expect("serialize theme");
+        std::fs::write(&primary_path, yaml).map_err(io_to_import)?;
+        written.push(primary_path);
+    }
+    if !blocks.light.is_empty() {
+        let theme = to_warp_theme(blocks, ThemeMode::Light, inherit_terminal_from, policy)?;
+        let yaml = serde_yaml::to_string(&theme).expect("serialize theme");
+        std::fs::write(&light_path, yaml).map_err(io_to_import)?;
+        written.push(light_path);
+    }
+    Ok(written)
+}
+
+fn sanitize_slug(s: &str) -> String {
+    let cleaned: String = s
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    // Collapse runs of '-' and trim leading/trailing.
+    let mut out = String::new();
+    let mut prev_dash = true;
+    for c in cleaned.chars() {
+        if c == '-' {
+            if !prev_dash {
+                out.push(c);
+            }
+            prev_dash = true;
+        } else {
+            out.push(c);
+            prev_dash = false;
+        }
+    }
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() {
+        "imported-theme".to_string()
+    } else {
+        out
+    }
+}
+
+fn io_to_import(e: std::io::Error) -> ImportError {
+    ImportError::Io(e.to_string())
+}
+
 fn tweakcn_ui_mapping() -> &'static [(&'static str, fn(&mut UiTokens, ColorU))] {
     &[
         ("card",                 |u, c| u.card = Some(c)),
@@ -434,5 +502,41 @@ mod parse_block_tests {
         let blocks = parse_blocks(css).unwrap();
         assert!(blocks.light.is_empty());
         assert_eq!(blocks.dark.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod writer_tests {
+    use super::*;
+
+    #[test]
+    fn writes_dark_only_when_no_light_block() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().to_path_buf();
+        let css = ".dark { --background: oklch(0.145 0 0); --card: oklch(0.2 0 0); }";
+        let blocks = parse_blocks(css).unwrap();
+        let base = warp_core::ui::theme::mock_warp_theme();
+        let written = write_imported(&blocks, "my-theme", &base, GamutPolicy::Clamp, &dir).unwrap();
+        assert_eq!(written.len(), 1);
+        assert!(written[0].ends_with("my-theme.yaml"));
+        assert!(std::fs::read_to_string(&written[0]).unwrap().contains("ui:"));
+    }
+
+    #[test]
+    fn writes_both_when_both_blocks_present() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().to_path_buf();
+        let css =
+            ":root { --background: oklch(1 0 0); } .dark { --background: oklch(0 0 0); }";
+        let blocks = parse_blocks(css).unwrap();
+        let base = warp_core::ui::theme::mock_warp_theme();
+        let written =
+            write_imported(&blocks, "duo", &base, GamutPolicy::Clamp, &dir).unwrap();
+        let names: Vec<String> = written
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(names.contains(&"duo.yaml".to_string()));
+        assert!(names.contains(&"duo-light.yaml".to_string()));
     }
 }
