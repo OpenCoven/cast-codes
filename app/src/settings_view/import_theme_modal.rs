@@ -1,7 +1,7 @@
-//! Import-theme modal for tweakcn CSS exports.
+//! Import-theme modal for tweakcn CSS and registry JSON exports.
 //!
 //! Opens when the user presses "Import theme…" in Appearance settings.
-//! The user pastes tweakcn CSS, optionally edits the theme name, and clicks
+//! The user pastes tweakcn CSS or registry JSON, optionally edits the theme name, and clicks
 //! Save. The modal calls `write_imported` to write YAML(s) to disk, then
 //! dispatches a theme-reload+select event so the new theme is immediately
 //! active.
@@ -9,7 +9,7 @@
 //! ## Drag-and-drop
 //! The modal body is wrapped in a `FileDropZone` element (inner module) that
 //! intercepts `Event::DragAndDropFiles` from the OS and dispatches a
-//! `ImportThemeBodyAction::FileDropped` action.  Only `.css` files are
+//! `ImportThemeBodyAction::FileDropped` action.  Only `.css` and `.json` files are
 //! accepted; anything else is rejected with an inline error.
 
 use std::any::Any;
@@ -19,7 +19,9 @@ use crate::appearance::Appearance;
 use crate::editor::{EditorOptions, EditorView, Event as EditorEvent, SingleLineEditorOptions};
 use crate::modal::Modal;
 use crate::themes::theme::{CustomTheme, ThemeKind};
-use crate::themes::tweakcn_import::{parse_blocks, write_imported, GamutPolicy, ParsedBlocks};
+use crate::themes::tweakcn_import::{
+    parse_blocks_or_json, write_imported, GamutPolicy, ParsedBlocks,
+};
 #[cfg(feature = "local_fs")]
 use crate::user_config;
 use warpui::elements::Point;
@@ -243,7 +245,7 @@ impl ImportThemeBody {
             return;
         }
 
-        match parse_blocks(&self.css_text) {
+        match parse_blocks_or_json(&self.css_text) {
             Ok(blocks) => {
                 // Auto-fill name from CSS comment hint if the name field is still empty.
                 if self.name.is_empty() {
@@ -339,7 +341,8 @@ impl ImportThemeBody {
 
     /// Handle a file dropped onto the modal (OS DragAndDropFiles event).
     ///
-    /// Accepts the first `.css` file found in `paths`.  Non-`.css` files (or
+    /// Accepts the first `.css` or `.json` file found in `paths`. Unsupported
+    /// files (or
     /// an empty list) show an inline error and leave the paste box untouched.
     ///
     /// Gated on `local_fs` because the fallback (web) has no filesystem access
@@ -348,15 +351,17 @@ impl ImportThemeBody {
     pub fn on_file_dropped(&mut self, paths: Vec<String>, ctx: &mut ViewContext<Self>) {
         use std::path::Path;
 
-        let css_path = paths
-            .iter()
-            .map(Path::new)
-            .find(|p| p.extension().and_then(|e| e.to_str()) == Some("css"));
+        let import_path = paths.iter().map(Path::new).find(|p| {
+            matches!(
+                p.extension().and_then(|e| e.to_str()),
+                Some("css") | Some("json")
+            )
+        });
 
-        let path = match css_path {
+        let path = match import_path {
             Some(p) => p,
             None => {
-                self.show_error = Some("Only .css files are supported.".to_string());
+                self.show_error = Some("Only .css and .json files are supported.".to_string());
                 ctx.notify();
                 return;
             }
@@ -622,9 +627,13 @@ impl View for ImportThemeBody {
 
         // CSS paste label + field
         layout.add_child(
-            Text::new_inline("Paste tweakcn CSS", appearance.ui_font_family(), 12.)
-                .with_color(theme.active_ui_text_color().into())
-                .finish(),
+            Text::new_inline(
+                "Paste tweakcn CSS or registry JSON",
+                appearance.ui_font_family(),
+                12.,
+            )
+            .with_color(theme.active_ui_text_color().into())
+            .finish(),
         );
         layout.add_child(css_input);
 
@@ -654,7 +663,7 @@ impl View for ImportThemeBody {
         // Button row
         layout.add_child(button_row);
 
-        // Wrap the whole layout in a FileDropZone so OS-level .css file drops
+        // Wrap the whole layout in a FileDropZone so OS-level import file drops
         // are captured and dispatched as ImportThemeBodyAction::FileDropped.
         Box::new(FileDropZone::new(layout.finish()))
     }

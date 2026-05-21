@@ -1,8 +1,11 @@
-//! Convert tweakcn CSS exports (OKLCH colors in shadcn token format) into
-//! CastCodes `WarpTheme` YAMLs. No new crates — Ottosson's OKLCH → linear
-//! sRGB formulas are short enough to vendor.
+//! Convert tweakcn CSS exports and shadcn registry JSON themes into CastCodes
+//! `WarpTheme` YAMLs. No new crates — Ottosson's OKLCH → linear sRGB formulas
+//! are short enough to vendor.
+
+use std::collections::HashMap;
 
 use pathfinder_color::ColorU;
+use serde_json::Value;
 
 /// Convert OKLCH (L: 0..1, C: 0..0.4 typical, H: 0..360 degrees) to
 /// 8-bit sRGB. Returns `Err((r, g, b))` if any channel was out of the
@@ -63,9 +66,115 @@ pub enum ImportError {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct ParsedBlocks {
-    pub light: std::collections::HashMap<String, (f64, f64, f64)>, // var → (L, C, H_deg)
-    pub dark: std::collections::HashMap<String, (f64, f64, f64)>,
+    pub light: HashMap<String, (f64, f64, f64)>, // var → (L, C, H_deg)
+    pub dark: HashMap<String, (f64, f64, f64)>,
     pub name_comment: Option<String>,
+}
+
+pub fn parse_blocks_or_json(input: &str) -> Result<ParsedBlocks, ImportError> {
+    if input.trim_start().starts_with('{') {
+        parse_registry_json(input)
+    } else {
+        parse_blocks(input)
+    }
+}
+
+pub fn parse_registry_json(input: &str) -> Result<ParsedBlocks, ImportError> {
+    let value: Value =
+        serde_json::from_str(input).map_err(|e| ImportError::Io(format!("invalid JSON: {e}")))?;
+    let css_vars = value
+        .get("cssVars")
+        .and_then(Value::as_object)
+        .ok_or(ImportError::NoColorBlocksFound)?;
+
+    let mut blocks = ParsedBlocks {
+        name_comment: value
+            .get("name")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        ..Default::default()
+    };
+
+    for (key, target) in [("light", &mut blocks.light), ("dark", &mut blocks.dark)] {
+        let Some(vars) = css_vars.get(key).and_then(Value::as_object) else {
+            continue;
+        };
+
+        for (name, value) in vars {
+            let Some(value) = value.as_str() else {
+                continue;
+            };
+            if let Some(triple) = parse_oklch_value(name, value)? {
+                target.insert(name.clone(), triple);
+            }
+        }
+    }
+
+    if blocks.light.is_empty() && blocks.dark.is_empty() {
+        return Err(ImportError::NoColorBlocksFound);
+    }
+
+    Ok(blocks)
+}
+
+fn parse_oklch_value(var: &str, value: &str) -> Result<Option<(f64, f64, f64)>, ImportError> {
+    let Some(args) = value
+        .trim()
+        .strip_prefix("oklch(")
+        .and_then(|s| s.strip_suffix(')'))
+    else {
+        return Ok(None);
+    };
+
+    let triple: Vec<&str> = args.split_whitespace().take(3).collect();
+    if triple.len() < 3 {
+        return Err(ImportError::InvalidOklch {
+            var: var.to_string(),
+            raw: value.to_string(),
+        });
+    }
+
+    let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
+    // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
+    let l = if triple[0].ends_with('%') {
+        l / 100.0
+    } else {
+        l
+    };
+    let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
+    let h: f64 = triple[2]
+        .trim_end_matches("deg")
+        .parse()
+        .unwrap_or(f64::NAN);
+
+    if l.is_finite() && c.is_finite() && h.is_finite() {
+        Ok(Some((l, c, h)))
+    } else {
+        Err(ImportError::InvalidOklch {
+            var: var.to_string(),
+            raw: value.to_string(),
+        })
+    }
+}
+
+fn parse_css_decls(
+    body: &str,
+    target: &mut HashMap<String, (f64, f64, f64)>,
+) -> Result<(), ImportError> {
+    for decl in body.split(';') {
+        let decl = decl.trim();
+        if !decl.starts_with("--") {
+            continue;
+        }
+        let Some((name, value)) = decl.split_once(':') else {
+            continue;
+        };
+        let name = name.trim().trim_start_matches("--").to_string();
+        if let Some(triple) = parse_oklch_value(&name, value)? {
+            target.insert(name, triple);
+        }
+    }
+    Ok(())
 }
 
 /// Pull `:root { ... }` and `.dark { ... }` blocks out of a tweakcn CSS
@@ -132,62 +241,11 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
         Some(&haystack[body_start..end])
     }
 
-    let parse_decls = |body: &str,
-                       target: &mut std::collections::HashMap<String, (f64, f64, f64)>|
-     -> Result<(), ImportError> {
-        for decl in body.split(';') {
-            let decl = decl.trim();
-            if !decl.starts_with("--") {
-                continue;
-            }
-            let Some((name, value)) = decl.split_once(':') else {
-                continue;
-            };
-            let name = name.trim().trim_start_matches("--").to_string();
-            let value = value.trim();
-            // Only `oklch(L C H[ / a])` is supported; anything else is silently skipped.
-            let Some(args) = value
-                .strip_prefix("oklch(")
-                .and_then(|s| s.strip_suffix(')'))
-            else {
-                continue;
-            };
-            let triple: Vec<&str> = args.split_whitespace().take(3).collect();
-            if triple.len() < 3 {
-                return Err(ImportError::InvalidOklch {
-                    var: name,
-                    raw: value.to_string(),
-                });
-            }
-            let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
-            // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
-            let l = if triple[0].ends_with('%') {
-                l / 100.0
-            } else {
-                l
-            };
-            let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
-            let h: f64 = triple[2]
-                .trim_end_matches("deg")
-                .parse()
-                .unwrap_or(f64::NAN);
-            if l.is_finite() && c.is_finite() && h.is_finite() {
-                target.insert(name, (l, c, h));
-            } else {
-                return Err(ImportError::InvalidOklch {
-                    var: name,
-                    raw: value.to_string(),
-                });
-            }
-        }
-        Ok(())
-    };
-
     if let Some(body) = extract_block(&cleaned, ":root") {
-        parse_decls(body, &mut blocks.light)?;
+        parse_css_decls(body, &mut blocks.light)?;
     }
     if let Some(body) = extract_block(&cleaned, ".dark") {
-        parse_decls(body, &mut blocks.dark)?;
+        parse_css_decls(body, &mut blocks.dark)?;
     }
 
     if blocks.light.is_empty() && blocks.dark.is_empty() {
@@ -578,6 +636,53 @@ mod parse_block_tests {
         let blocks = parse_blocks(css).unwrap();
         assert!(blocks.light.is_empty());
         assert_eq!(blocks.dark.len(), 1);
+    }
+
+    #[test]
+    fn registry_json_extracts_light_and_dark_blocks() {
+        let json = r##"{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "vercel",
+  "type": "registry:style",
+  "cssVars": {
+    "theme": { "font-sans": "Geist, sans-serif" },
+    "light": {
+      "background": "oklch(0.99 0 0)",
+      "foreground": "oklch(0 0 0)",
+      "shadow-color": "#000000"
+    },
+    "dark": {
+      "background": "oklch(0 0 0)",
+      "foreground": "oklch(1 0 0)",
+      "border": "oklch(1 0 0 / 10%)"
+    }
+  }
+}"##;
+
+        let blocks = parse_blocks_or_json(json).unwrap();
+
+        assert_eq!(blocks.name_comment.as_deref(), Some("vercel"));
+        assert_eq!(blocks.light.len(), 2);
+        assert_eq!(blocks.dark.len(), 3);
+        assert_eq!(blocks.dark["foreground"], (1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn registry_json_invalid_oklch_reports_the_variable() {
+        let json = r#"{
+  "cssVars": {
+    "light": {
+      "background": "oklch(nope 0 0)"
+    }
+  }
+}"#;
+
+        let result = parse_blocks_or_json(json);
+
+        assert!(matches!(
+            result,
+            Err(ImportError::InvalidOklch { var, .. }) if var == "background"
+        ));
     }
 }
 
