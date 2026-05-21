@@ -69,6 +69,12 @@ use super::{
 
 pub type TerminalPaneView = PaneView<TerminalView>;
 
+/// Splitter-drag floor for terminal panes. At default monospace metrics
+/// (~12 px cell width plus padding) this leaves the terminal at roughly
+/// 20 usable columns. Smaller widths wrap diff/log output per character
+/// because the PTY's column count is derived from `pane_width / cell_width`.
+const TERMINAL_MIN_PANE_WIDTH: f32 = 240.0;
+
 /// Data kept for terminal panes.
 pub struct TerminalPane {
     model_event_sender: Option<SyncSender<ModelEvent>>,
@@ -257,6 +263,14 @@ impl TerminalPane {
 impl PaneContent for TerminalPane {
     fn id(&self) -> PaneId {
         PaneId::from_terminal_pane_view(&self.view)
+    }
+
+    fn min_pane_width(&self, _ctx: &AppContext) -> f32 {
+        // Terminal column count is `pane_width / cell_width`; at the shared
+        // 50 px MINIMUM_PANE_SIZE that lands around 4 columns at default
+        // monospace metrics, which wraps text per-character. Hold the
+        // splitter at ~20 cols of legibility.
+        TERMINAL_MIN_PANE_WIDTH
     }
 
     fn attach(
