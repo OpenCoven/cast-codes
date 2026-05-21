@@ -863,10 +863,10 @@ impl RemoteServerManager {
         }
 
         // Phase 2: Initialize handshake.
-        let auth_token = auth_context.get_auth_token().await;
+        let _auth_token = auth_context.get_auth_token().await;
         let resp = client
             .initialize(
-                auth_token.as_deref(),
+                None,
                 InitializeParams {
                     user_id: auth_context.user_id().to_owned(),
                     user_email: auth_context.user_email().to_owned(),
@@ -1038,30 +1038,9 @@ impl RemoteServerManager {
     /// Within the matching identity, a daemon may have multiple client
     /// connections. The credential is stored daemon-wide, so sending one
     /// notification per connected host is sufficient.
-    pub fn rotate_auth_token(&self, token: String) {
-        let Some(ref auth_context) = self.auth_context else {
-            log::warn!("Remote server rotate_auth_token: no auth_context available, skipping");
-            return;
-        };
-        let current_identity_key = auth_context.remote_server_identity_key();
-        let mut authenticated_hosts = HashSet::new();
-        for state in self.sessions.values() {
-            let RemoteSessionState::Connected {
-                client,
-                host_id,
-                identity_key,
-                ..
-            } = state
-            else {
-                continue;
-            };
-            if identity_key != &current_identity_key {
-                continue;
-            }
-            if authenticated_hosts.insert(host_id.clone()) {
-                client.authenticate(&token);
-            }
-        }
+    pub fn rotate_auth_token(&self, _token: String) {
+        // Intentionally no-op in CastCodes: never forward local cloud auth
+        // credentials to SSH-side remote-server daemons.
     }
 
     /// Returns the connection state for this session.
