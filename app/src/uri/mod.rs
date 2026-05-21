@@ -1079,9 +1079,6 @@ fn classify_open_file_action(path: &Path) -> OpenFileAction {
         return OpenFileAction::Notebook;
     }
     if path.is_file() {
-        if is_runnable_shell_script(path) {
-            return OpenFileAction::ExecuteInSession;
-        }
         // Anything we can show in the editor opens there. The second branch catches
         // shebang scripts that `is_file_openable_in_warp` rejects on extension alone
         // (e.g. an extensionless `#!/bin/sh` file without the user-execute bit) so
