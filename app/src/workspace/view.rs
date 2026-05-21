@@ -21282,6 +21282,10 @@ impl TypedActionView for Workspace {
             } => self.show_settings_with_search(search_query, *section, ctx),
             ShowThemeChooser(mode) => self.show_theme_chooser(Some(*mode), ctx),
             ShowThemeChooserForActiveTheme => self.show_theme_chooser_for_active_theme(ctx),
+            ShowImportThemeModal => {
+                // TODO(Task 15): mount the import-theme modal.
+                tracing::info!("import theme modal — not yet implemented");
+            }
             IncreaseFontSize => self.increase_font_size(ctx),
             DecreaseFontSize => self.decrease_font_size(ctx),
             ResetFontSize => self.reset_font_size(ctx),
