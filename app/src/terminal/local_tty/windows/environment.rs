@@ -334,6 +334,20 @@ fn environment_block(env: impl Iterator<Item = (OsString, EnvEntry)>) -> Vec<u16
             );
             continue;
         }
+        if contains_nul(&entry.preferred_key) {
+            log::warn!(
+                "Environment variable {:?} had an embedded NUL in key. Not adding to shell process environment block",
+                entry.preferred_key
+            );
+            continue;
+        }
+        if contains_nul(&entry.value) {
+            log::warn!(
+                "Environment variable {:?} had an embedded NUL value. Not adding to shell process environment block",
+                entry.preferred_key
+            );
+            continue;
+        }
         block.extend(entry.preferred_key.encode_wide());
         block.push(b'=' as u16);
         block.extend(entry.value.encode_wide());
@@ -344,4 +358,8 @@ fn environment_block(env: impl Iterator<Item = (OsString, EnvEntry)>) -> Vec<u16
     block.push(0);
 
     block
+}
+
+fn contains_nul(value: &OsString) -> bool {
+    value.encode_wide().any(|ch| ch == 0)
 }

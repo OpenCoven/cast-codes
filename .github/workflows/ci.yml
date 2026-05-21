@@ -1,6 +1,7 @@
 on:
   pull_request:
     branches:
+      - 'main'
       - 'master'
       - '*_release/*'
     types:
@@ -571,7 +572,7 @@ jobs:
         shell: pwsh
 
       - name: Validate repo-sync markers
-        uses: warpdotdev/repo-sync/actions/validate-markers@main
+        uses: warpdotdev/repo-sync/actions/validate-markers@63e2c5e82dcd51e3fcd27554a096ba0fcc3d5d86
 
       - name: Check for incorrectly named test files
         run: |

@@ -1,17 +1,17 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use warp_core::ui::theme::color::internal_colors;
+use pathfinder_color::ColorU;
 use warp_core::{send_telemetry_from_ctx, ui::Icon};
 use warp_util::path::LineAndColumnArg;
 use warpui::{
     elements::{
         resizable_state_handle, ChildView, ConstrainedBox, Container, CrossAxisAlignment,
-        DragBarSide, Element, Empty, Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle,
+        DragBarSide, Element, Empty, Fill, Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle,
         ParentElement, Resizable, ResizableStateHandle, Shrinkable,
     },
     platform::Cursor,
-    ui_components::components::{Coords, UiComponent, UiComponentStyles},
+    ui_components::components::{BorderStyle, Coords, UiComponent, UiComponentStyles},
     AppContext, Entity, FocusContext, ModelHandle, SingletonEntity, TypedActionView, View,
     ViewContext, ViewHandle, WeakViewHandle,
 };
@@ -886,14 +886,19 @@ impl LeftPanelView {
             height: Some(24.),
             width: Some(24.),
             padding: Some(Coords::uniform(4.)),
+            border_width: Some(1.0),
+            border_color: Some(Fill::from(ColorU::transparent_black())),
+            border_style: Some(BorderStyle::Solid),
             ..Default::default()
         })
         .with_active_styles(UiComponentStyles {
             font_color: Some(icon_color),
             height: Some(24.),
             width: Some(24.),
-            padding: Some(Coords::uniform(4.)),
-            background: Some(internal_colors::fg_overlay_3(appearance.theme()).into()),
+            padding: Some(Coords::uniform(3.)),
+            border_width: Some(1.0),
+            border_color: Some(appearance.theme().outline().into()),
+            border_style: Some(BorderStyle::Solid),
             ..Default::default()
         })
         .build()
