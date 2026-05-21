@@ -37,22 +37,11 @@ mod opt_hex_color {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<ColorU>, D::Error> {
         let opt: Option<String> = Option::deserialize(d)?;
-        match opt {
-            None => Ok(None),
-            Some(s) => {
-                let s = s.trim_start_matches('#');
-                if s.len() != 6 {
-                    return Err(serde::de::Error::custom(format!(
-                        "expected 6-digit hex, got '{}'",
-                        s
-                    )));
-                }
-                let r = u8::from_str_radix(&s[0..2], 16).map_err(serde::de::Error::custom)?;
-                let g = u8::from_str_radix(&s[2..4], 16).map_err(serde::de::Error::custom)?;
-                let b = u8::from_str_radix(&s[4..6], 16).map_err(serde::de::Error::custom)?;
-                Ok(Some(ColorU { r, g, b, a: 255 }))
-            }
-        }
+        opt.map(|s| {
+            super::hex_color::coloru_from_hex_string(&s)
+                .map_err(serde::de::Error::custom)
+        })
+        .transpose()
     }
 }
 

@@ -372,3 +372,10 @@ fn ui_tokens_serialize_skips_none() {
     assert!(out.contains("card"));
     assert!(!out.contains("popover"));
 }
+
+#[test]
+fn ui_tokens_accepts_3_char_hex() {
+    let yaml = "card: '#fff'\n";
+    let tokens: UiTokens = serde_yaml::from_str(yaml).unwrap();
+    assert_eq!(tokens.card.unwrap(), ColorU::from_u32(0xffffffff));
+}
