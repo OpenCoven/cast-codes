@@ -80,15 +80,15 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
     let mut name_hint = None;
     let mut cleaned = String::with_capacity(css.len());
     let mut i = 0;
-    let bytes = css.as_bytes();
-    while i < bytes.len() {
-        if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+    while i < css.len() {
+        let rest = &css[i..];
+        if rest.starts_with("/*") {
             // Find closing */
             let start = i + 2;
             let end = css[start..]
                 .find("*/")
                 .map(|j| start + j)
-                .unwrap_or(bytes.len());
+                .unwrap_or(css.len());
             let comment = css[start..end].trim();
             if name_hint.is_none() {
                 // Look for "tweakcn theme: <slug>" or just take the comment if it's a single word.
@@ -98,14 +98,14 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
                     name_hint = Some(comment.to_string());
                 }
             }
-            i = if end < bytes.len() {
-                end + 2
-            } else {
-                bytes.len()
-            };
+            i = if end < css.len() { end + 2 } else { css.len() };
         } else {
-            cleaned.push(bytes[i] as char);
-            i += 1;
+            let ch = rest
+                .chars()
+                .next()
+                .expect("non-empty string slice has a char");
+            cleaned.push(ch);
+            i += ch.len_utf8();
         }
     }
     blocks.name_comment = name_hint;
@@ -132,52 +132,62 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
         Some(&haystack[body_start..end])
     }
 
-    let parse_decls =
-        |body: &str, target: &mut std::collections::HashMap<String, (f64, f64, f64)>| {
-            for decl in body.split(';') {
-                let decl = decl.trim();
-                if !decl.starts_with("--") {
-                    continue;
-                }
-                let Some((name, value)) = decl.split_once(':') else {
-                    continue;
-                };
-                let name = name.trim().trim_start_matches("--").to_string();
-                let value = value.trim();
-                // Only `oklch(L C H[ / a])` is supported; anything else is silently skipped.
-                let Some(args) = value
-                    .strip_prefix("oklch(")
-                    .and_then(|s| s.strip_suffix(')'))
-                else {
-                    continue;
-                };
-                let triple: Vec<&str> = args.split_whitespace().take(3).collect();
-                if triple.len() < 3 {
-                    continue;
-                }
-                let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
-                // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
-                let l = if triple[0].ends_with('%') {
-                    l / 100.0
-                } else {
-                    l
-                };
-                let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
-                let h: f64 = triple[2]
-                    .trim_end_matches("deg")
-                    .parse()
-                    .unwrap_or(f64::NAN);
-                if l.is_finite() && c.is_finite() && h.is_finite() {
-                    target.insert(name, (l, c, h));
-                }
+    let parse_decls = |body: &str,
+                       target: &mut std::collections::HashMap<String, (f64, f64, f64)>|
+     -> Result<(), ImportError> {
+        for decl in body.split(';') {
+            let decl = decl.trim();
+            if !decl.starts_with("--") {
+                continue;
             }
-        };
+            let Some((name, value)) = decl.split_once(':') else {
+                continue;
+            };
+            let name = name.trim().trim_start_matches("--").to_string();
+            let value = value.trim();
+            // Only `oklch(L C H[ / a])` is supported; anything else is silently skipped.
+            let Some(args) = value
+                .strip_prefix("oklch(")
+                .and_then(|s| s.strip_suffix(')'))
+            else {
+                continue;
+            };
+            let triple: Vec<&str> = args.split_whitespace().take(3).collect();
+            if triple.len() < 3 {
+                return Err(ImportError::InvalidOklch {
+                    var: name,
+                    raw: value.to_string(),
+                });
+            }
+            let l: f64 = triple[0].trim_end_matches('%').parse().unwrap_or(f64::NAN);
+            // tweakcn emits L as 0..1 (no `%`), but tolerate `%` style:
+            let l = if triple[0].ends_with('%') {
+                l / 100.0
+            } else {
+                l
+            };
+            let c: f64 = triple[1].parse().unwrap_or(f64::NAN);
+            let h: f64 = triple[2]
+                .trim_end_matches("deg")
+                .parse()
+                .unwrap_or(f64::NAN);
+            if l.is_finite() && c.is_finite() && h.is_finite() {
+                target.insert(name, (l, c, h));
+            } else {
+                return Err(ImportError::InvalidOklch {
+                    var: name,
+                    raw: value.to_string(),
+                });
+            }
+        }
+        Ok(())
+    };
 
     if let Some(body) = extract_block(&cleaned, ":root") {
-        parse_decls(body, &mut blocks.light);
+        parse_decls(body, &mut blocks.light)?;
     }
     if let Some(body) = extract_block(&cleaned, ".dark") {
-        parse_decls(body, &mut blocks.dark);
+        parse_decls(body, &mut blocks.dark)?;
     }
 
     if blocks.light.is_empty() && blocks.dark.is_empty() {
@@ -304,15 +314,15 @@ pub fn write_imported(
 
     if !blocks.dark.is_empty() {
         let theme = to_warp_theme(blocks, ThemeMode::Dark, inherit_terminal_from, policy)?;
-        let yaml = serde_yaml::to_string(&theme)
-            .map_err(|e| io_to_import(std::io::Error::other(e)))?;
+        let yaml =
+            serde_yaml::to_string(&theme).map_err(|e| io_to_import(std::io::Error::other(e)))?;
         std::fs::write(&primary_path, yaml).map_err(io_to_import)?;
         written.push(primary_path);
     }
     if !blocks.light.is_empty() {
         let theme = to_warp_theme(blocks, ThemeMode::Light, inherit_terminal_from, policy)?;
-        let yaml = serde_yaml::to_string(&theme)
-            .map_err(|e| io_to_import(std::io::Error::other(e)))?;
+        let yaml =
+            serde_yaml::to_string(&theme).map_err(|e| io_to_import(std::io::Error::other(e)))?;
         std::fs::write(&light_path, yaml).map_err(io_to_import)?;
         written.push(light_path);
     }
@@ -530,6 +540,30 @@ mod parse_block_tests {
     fn name_comment_extracted() {
         let blocks = parse_blocks(SAMPLE).unwrap();
         assert_eq!(blocks.name_comment.as_deref(), Some("midnight-ember"));
+    }
+
+    #[test]
+    fn non_ascii_css_is_preserved_while_stripping_comments() {
+        let css = r#"
+/* tweakcn theme: café */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+}
+"#;
+        let blocks = parse_blocks(css).unwrap();
+        assert_eq!(blocks.name_comment.as_deref(), Some("café"));
+        assert_eq!(blocks.light.len(), 2);
+    }
+
+    #[test]
+    fn invalid_oklch_declaration_reports_the_variable() {
+        let css = ":root { --background: oklch(not-a-number 0 0); }";
+        let result = parse_blocks(css);
+        assert!(matches!(
+            result,
+            Err(ImportError::InvalidOklch { var, .. }) if var == "background"
+        ));
     }
 
     #[test]

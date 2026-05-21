@@ -13,6 +13,7 @@
 //! accepted; anything else is rejected with an inline error.
 
 use std::any::Any;
+use std::time::Duration;
 
 use crate::appearance::Appearance;
 use crate::editor::{EditorOptions, EditorView, Event as EditorEvent, SingleLineEditorOptions};
@@ -23,13 +24,14 @@ use crate::themes::tweakcn_import::{parse_blocks, write_imported, GamutPolicy, P
 use crate::user_config;
 use warpui::elements::Point;
 use warpui::elements::{
-    Container, CornerRadius, CrossAxisAlignment, Fill, Flex, MainAxisSize, ParentElement, Radius,
-    Shrinkable, Text,
+    ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Fill, Flex, MainAxisSize,
+    ParentElement, Radius, Shrinkable, Text,
 };
 use warpui::event::DispatchedEvent;
 use warpui::fonts::Weight;
 use warpui::geometry::vector::Vector2F;
 use warpui::presenter::ChildView;
+use warpui::r#async::Timer;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent as _, UiComponentStyles};
 use warpui::ui_components::text_input::TextInput;
@@ -90,30 +92,29 @@ impl Element for FileDropZone {
         ctx: &mut EventContext,
         app: &AppContext,
     ) -> bool {
-        let handled_by_child = self.child.dispatch_event(event, ctx, app);
-
-        if !handled_by_child {
-            if let Some(z_index) = self.z_index() {
-                if let Some(inner) = event.at_z_index(z_index, ctx) {
-                    if let Event::DragAndDropFiles { paths, location } = inner {
-                        if self.bounds().map_or(false, |b| b.contains_point(*location))
-                            && !paths.is_empty()
-                        {
-                            let paths: Vec<String> = paths.iter().map(ToOwned::to_owned).collect();
-                            ctx.dispatch_typed_action(ImportThemeBodyAction::FileDropped(paths));
-                            return true;
-                        }
+        if let Some(z_index) = self.z_index() {
+            if let Some(inner) = event.at_z_index(z_index, ctx) {
+                if let Event::DragAndDropFiles { paths, location } = inner {
+                    if self.bounds().map_or(false, |b| b.contains_point(*location))
+                        && !paths.is_empty()
+                    {
+                        let paths: Vec<String> = paths.iter().map(ToOwned::to_owned).collect();
+                        ctx.dispatch_typed_action(ImportThemeBodyAction::FileDropped(paths));
+                        return true;
                     }
                 }
             }
         }
-        handled_by_child
+
+        self.child.dispatch_event(event, ctx, app)
     }
 }
 
 const MODAL_HEADER: &str = "Import theme from tweakcn";
 const MODAL_WIDTH: f32 = 560.;
 const MODAL_HEIGHT: f32 = 520.;
+const CSS_EDITOR_MAX_HEIGHT: f32 = 240.;
+const PARSE_DEBOUNCE: Duration = Duration::from_millis(200);
 
 // ─── ImportThemeBody ─────────────────────────────────────────────────────────
 
@@ -132,6 +133,7 @@ pub struct ImportThemeBody {
     clamp_out_of_gamut: bool,
     /// Last save/write error to display in the UI.
     pub(crate) show_error: Option<String>,
+    pending_parse_token: u64,
 }
 
 #[derive(Debug)]
@@ -186,6 +188,7 @@ impl ImportThemeBody {
             parse_result: None,
             clamp_out_of_gamut: true,
             show_error: None,
+            pending_parse_token: 0,
         }
     }
 
@@ -214,25 +217,48 @@ impl ImportThemeBody {
 
         if self.css_text.trim().is_empty() {
             self.parse_result = None;
-        } else {
-            let result = parse_blocks(&self.css_text);
-            match result {
-                Ok(blocks) => {
-                    // Auto-fill name from CSS comment hint if the name field is still empty.
-                    if self.name.is_empty() {
-                        if let Some(hint) = blocks.name_comment.as_deref() {
-                            self.name = hint.to_string();
-                            let name_clone = self.name.clone();
-                            self.name_editor.update(ctx, |editor, ctx| {
-                                editor.set_buffer_text(&name_clone, ctx);
-                            });
-                        }
+            self.pending_parse_token = self.pending_parse_token.wrapping_add(1);
+            ctx.notify();
+            return;
+        }
+
+        self.pending_parse_token = self.pending_parse_token.wrapping_add(1);
+        let token = self.pending_parse_token;
+        let _ = ctx.spawn(
+            Timer::after(PARSE_DEBOUNCE),
+            move |me: &mut Self, _, ctx| {
+                if me.pending_parse_token == token {
+                    me.run_parse(ctx);
+                }
+            },
+        );
+
+        ctx.notify();
+    }
+
+    fn run_parse(&mut self, ctx: &mut ViewContext<Self>) {
+        if self.css_text.trim().is_empty() {
+            self.parse_result = None;
+            ctx.notify();
+            return;
+        }
+
+        match parse_blocks(&self.css_text) {
+            Ok(blocks) => {
+                // Auto-fill name from CSS comment hint if the name field is still empty.
+                if self.name.is_empty() {
+                    if let Some(hint) = blocks.name_comment.as_deref() {
+                        self.name = hint.to_string();
+                        let name_clone = self.name.clone();
+                        self.name_editor.update(ctx, |editor, ctx| {
+                            editor.set_buffer_text(&name_clone, ctx);
+                        });
                     }
-                    self.parse_result = Some(Ok(blocks));
                 }
-                Err(e) => {
-                    self.parse_result = Some(Err(format!("{e:?}")));
-                }
+                self.parse_result = Some(Ok(blocks));
+            }
+            Err(e) => {
+                self.parse_result = Some(Err(format!("{e:?}")));
             }
         }
         ctx.notify();
@@ -355,7 +381,9 @@ impl ImportThemeBody {
                 self.css_editor.update(ctx, |editor, ctx| {
                     editor.set_buffer_text(&contents_clone, ctx);
                 });
-                self.on_css_changed(contents, ctx);
+                self.css_text = contents;
+                self.pending_parse_token = self.pending_parse_token.wrapping_add(1);
+                self.run_parse(ctx);
             }
             Err(e) => {
                 self.show_error = Some(format!("Read failed: {e}"));
@@ -487,9 +515,13 @@ impl View for ImportThemeBody {
 
         // ── CSS editor ────────────────────────────────────────────────────
         let css_input = Container::new(
-            TextInput::new(self.css_editor.clone(), input_style)
-                .build()
-                .finish(),
+            ConstrainedBox::new(
+                TextInput::new(self.css_editor.clone(), input_style)
+                    .build()
+                    .finish(),
+            )
+            .with_max_height(CSS_EDITOR_MAX_HEIGHT)
+            .finish(),
         )
         .with_margin_top(6.)
         .finish();

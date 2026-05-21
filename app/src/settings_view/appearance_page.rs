@@ -1243,11 +1243,19 @@ impl AppearanceSettingsPageView {
                 .collect(),
             directory_tab_color_delete_buttons: build_directory_delete_buttons(ctx),
             import_theme_button: ctx.add_typed_action_view(|_| {
-                ActionButton::new("Import theme\u{2026}", NakedTheme)
-                    .with_size(ButtonSize::Small)
-                    .on_click(|ctx| {
+                let mut button = ActionButton::new("Import theme\u{2026}", NakedTheme)
+                    .with_size(ButtonSize::Small);
+                #[cfg(feature = "local_fs")]
+                {
+                    button = button.on_click(|ctx| {
                         ctx.dispatch_typed_action(AppearancePageAction::ShowImportThemeModal);
-                    })
+                    });
+                }
+                #[cfg(not(feature = "local_fs"))]
+                {
+                    button = button.disabled();
+                }
+                button
             }),
             header_toolbar_inline_editor,
             alt_screen_padding_editor,
