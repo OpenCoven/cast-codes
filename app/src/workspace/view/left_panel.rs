@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use pathfinder_color::ColorU;
 use warp_core::{send_telemetry_from_ctx, ui::Icon};
 use warp_util::path::LineAndColumnArg;
 use warpui::{
     elements::{
         resizable_state_handle, ChildView, ConstrainedBox, Container, CrossAxisAlignment,
-        DragBarSide, Element, Empty, Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle,
+        DragBarSide, Element, Empty, Fill, Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle,
         ParentElement, Resizable, ResizableStateHandle, Shrinkable,
     },
     platform::Cursor,
@@ -885,13 +886,16 @@ impl LeftPanelView {
             height: Some(24.),
             width: Some(24.),
             padding: Some(Coords::uniform(4.)),
+            border_width: Some(1.0),
+            border_color: Some(Fill::from(ColorU::transparent_black())),
+            border_style: Some(BorderStyle::Solid),
             ..Default::default()
         })
         .with_active_styles(UiComponentStyles {
             font_color: Some(icon_color),
             height: Some(24.),
             width: Some(24.),
-            padding: Some(Coords::uniform(4.)),
+            padding: Some(Coords::uniform(3.)),
             border_width: Some(1.0),
             border_color: Some(appearance.theme().outline().into()),
             border_style: Some(BorderStyle::Solid),
