@@ -379,3 +379,43 @@ fn ui_tokens_accepts_3_char_hex() {
     let tokens: UiTokens = serde_yaml::from_str(yaml).unwrap();
     assert_eq!(tokens.card.unwrap(), ColorU::from_u32(0xffffffff));
 }
+
+#[test]
+fn warp_theme_with_ui_block() {
+    let yaml = r#"
+accent: '#01a0e4'
+background: '#090300'
+foreground: '#a5a2a2'
+details: darker
+terminal_colors:
+  normal: { black: '#000000', red: '#db2d20', green: '#01a252', yellow: '#fded02', blue: '#01a0e4', magenta: '#a16a94', cyan: '#b5e4f4', white: '#a5a2a2' }
+  bright: { black: '#5c5855', red: '#e8bbd0', green: '#3a3432', yellow: '#4a4543', blue: '#807d7c', magenta: '#d6d5d4', cyan: '#cdab53', white: '#f7f7f7' }
+ui:
+  card: '#0f0905'
+  card_foreground: '#e8e6e3'
+  muted_foreground: '#5a5a65'
+source: tweakcn
+source_imported_at: '2026-05-20T12:00:00Z'
+"#;
+    let theme: WarpTheme = serde_yaml::from_str(yaml).unwrap();
+    let ui = theme.ui.as_ref().expect("ui block present");
+    assert_eq!(ui.card.unwrap(), ColorU::from_u32(0x0f0905ff));
+    assert_eq!(ui.muted_foreground.unwrap(), ColorU::from_u32(0x5a5a65ff));
+    assert_eq!(theme.source.as_deref(), Some("tweakcn"));
+}
+
+#[test]
+fn warp_theme_without_ui_block_still_parses() {
+    let yaml = r#"
+accent: '#01a0e4'
+background: '#090300'
+foreground: '#a5a2a2'
+details: darker
+terminal_colors:
+  normal: { black: '#000000', red: '#db2d20', green: '#01a252', yellow: '#fded02', blue: '#01a0e4', magenta: '#a16a94', cyan: '#b5e4f4', white: '#a5a2a2' }
+  bright: { black: '#5c5855', red: '#e8bbd0', green: '#3a3432', yellow: '#4a4543', blue: '#807d7c', magenta: '#d6d5d4', cyan: '#cdab53', white: '#f7f7f7' }
+"#;
+    let theme: WarpTheme = serde_yaml::from_str(yaml).unwrap();
+    assert!(theme.ui.is_none());
+    assert!(theme.source.is_none());
+}

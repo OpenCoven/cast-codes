@@ -665,6 +665,19 @@ pub struct WarpTheme {
     terminal_colors: TerminalColors,
     // If name is None, we construct the name by processing the theme .yaml file name
     name: Option<String>,
+
+    /// Optional tweakcn-aligned UI tokens. See `UiTokens` for the schema.
+    /// When absent, all accessors fall back to today's derived values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) ui: Option<UiTokens>,
+
+    /// Provenance — set by the import flow; ignored at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<String>,
+
+    /// Provenance — set by the import flow; ignored at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source_imported_at: Option<String>,
 }
 
 impl WarpTheme {
@@ -688,6 +701,9 @@ impl WarpTheme {
             terminal_colors,
             background_image,
             name,
+            ui: None,
+            source: None,
+            source_imported_at: None,
         }
     }
 
@@ -697,6 +713,13 @@ impl WarpTheme {
 
     pub fn set_name(&mut self, name: String) {
         self.name = Some(name);
+    }
+
+    pub fn with_ui(mut self, ui: UiTokens, source: impl Into<String>, imported_at: impl Into<String>) -> Self {
+        self.ui = Some(ui);
+        self.source = Some(source.into());
+        self.source_imported_at = Some(imported_at.into());
+        self
     }
 
     pub fn details(&self) -> CustomDetails {
