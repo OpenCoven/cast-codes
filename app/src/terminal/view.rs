@@ -26594,7 +26594,7 @@ impl View for TerminalView {
             && self.is_conversation_details_panel_open
             && self.can_show_conversation_details_ui_from_model(&model, app);
 
-        if should_show_panel {
+        let body = if should_show_panel {
             // Wrap panel with agent view background for visual consistency
             let panel_with_background =
                 Container::new(ChildView::new(&self.conversation_details_panel).finish())
@@ -26613,6 +26613,22 @@ impl View for TerminalView {
             .finish()
         } else {
             final_element
+        };
+
+        // Pane-anchored agent footer (subagent identity strip). Renders below
+        // the terminal body whenever this pane is hosting an active agent.
+        if let Some(footer) = self.render_agent_pane_footer(app) {
+            Container::new(
+                Flex::column()
+                    .with_main_axis_size(warpui::elements::MainAxisSize::Max)
+                    .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .with_child(Shrinkable::new(1., body).finish())
+                    .with_child(footer)
+                    .finish(),
+            )
+            .finish()
+        } else {
+            body
         }
     }
 

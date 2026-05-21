@@ -41,7 +41,7 @@ use settings::Setting as _;
 use warp_core::context_flag::ContextFlag;
 use warpui::elements::{
     ConstrainedBox, CrossAxisAlignment, Empty, Flex, MainAxisAlignment, MainAxisSize,
-    ParentElement, Shrinkable,
+    ParentElement, Shrinkable, Text,
 };
 use warpui::prelude::{ChildView, Container};
 use warpui::text_layout::ClipConfig;
@@ -605,6 +605,84 @@ impl TerminalView {
         } else {
             header
         }
+    }
+
+    /// Pane-anchored identity strip for the active agent. Returns `None` when
+    /// no agent is running in this pane. Reads from the controller's active
+    /// conversation; re-renders whenever TerminalView re-renders (which
+    /// happens on the same signals that already drive the global agent UI).
+    pub(super) fn render_agent_pane_footer(&self, app: &AppContext) -> Option<Box<dyn Element>> {
+        let agent_view_controller = self.agent_view_controller.as_ref(app);
+        if !agent_view_controller.is_active() {
+            return None;
+        }
+
+        let conversation_id = agent_view_controller
+            .agent_view_state()
+            .active_conversation_id()?;
+        let conversation = BlocklistAIHistoryModel::as_ref(app).conversation(&conversation_id)?;
+
+        let title = conversation.title().unwrap_or_else(|| "Agent".to_string());
+        const TITLE_MAX_LEN: usize = 40;
+        let title = if title.chars().count() > TITLE_MAX_LEN {
+            let truncated: String = title.chars().take(TITLE_MAX_LEN).collect();
+            format!("{truncated}…")
+        } else {
+            title
+        };
+
+        let token_usage = conversation.token_usage();
+        let primary_model_id = token_usage
+            .iter()
+            .max_by_key(|m| m.warp_tokens + m.byok_tokens)
+            .map(|m| m.model_id.as_str())
+            .unwrap_or("—");
+        let total_tokens: u32 = token_usage
+            .iter()
+            .map(|m| m.warp_tokens + m.byok_tokens)
+            .sum();
+        let tokens_label = format_compact_tokens(total_tokens);
+        let credits_label = crate::ai::blocklist::format_credits(conversation.credits_spent());
+
+        let strip_text =
+            format!("{title}  ·  {primary_model_id}  ·  {tokens_label}  ·  {credits_label}");
+
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+
+        let label = Text::new(
+            strip_text,
+            appearance.ui_font_family(),
+            appearance.monospace_font_size() - 2.,
+        )
+        .with_selectable(false)
+        .finish();
+
+        let row = Flex::row()
+            .with_main_axis_size(MainAxisSize::Max)
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(label)
+            .finish();
+
+        Some(
+            Container::new(row)
+                .with_horizontal_padding(12.)
+                .with_vertical_padding(4.)
+                .with_background(theme.surface_1())
+                .finish(),
+        )
+    }
+}
+
+fn format_compact_tokens(n: u32) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M tokens", n as f32 / 1_000_000.0)
+    } else if n >= 10_000 {
+        format!("{}K tokens", n / 1_000)
+    } else if n >= 1_000 {
+        format!("{:.1}K tokens", n as f32 / 1_000.0)
+    } else {
+        format!("{n} tokens")
     }
 }
 
