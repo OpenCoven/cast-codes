@@ -173,31 +173,14 @@ impl LspServerConfig {
 
     /// Creates the command and init params for the LSP server.
     ///
-    /// TypeScript resolution order is user-configured, workspace-local,
-    /// CastCodes-managed, then PATH. Other servers preserve the existing
-    /// PATH-before-managed behavior so existing toolchain choices keep winning.
+    /// Resolution order is user-configured, then PATH, then CastCodes-managed.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) async fn command_and_params(self) -> Result<ResolvedLspCommand> {
         let executor = crate::CommandBuilder::new(self.path_env_var.clone());
 
         let custom_binary_config = self.custom_binary_config.clone();
-        let use_typescript_resolution = self.server_type == LSPServerType::TypeScriptLanguageServer;
-        let workspace_local_config = if custom_binary_config.is_none() && use_typescript_resolution
-        {
-            self.server_type
-                .find_workspace_binary_config(
-                    &self.initial_workspace,
-                    executor.path_env_var(),
-                    &executor,
-                )
-                .await
-        } else {
-            None
-        };
-        let path_config = if custom_binary_config.is_none()
-            && workspace_local_config.is_none()
-            && !use_typescript_resolution
-        {
+        let workspace_local_config = None;
+        let path_config = if custom_binary_config.is_none() && workspace_local_config.is_none() {
             self.server_type
                 .is_working_on_path(&executor, self.client.clone())
                 .await
@@ -212,19 +195,7 @@ impl LspServerConfig {
             } else {
                 None
             };
-        let is_working_on_path = if path_config {
-            true
-        } else if custom_binary_config.is_none()
-            && workspace_local_config.is_none()
-            && managed_config.is_none()
-            && use_typescript_resolution
-        {
-            self.server_type
-                .is_working_on_path(&executor, self.client.clone())
-                .await
-        } else {
-            false
-        };
+        let is_working_on_path = path_config;
 
         let resolved_binary_config = resolve_lsp_binary_config(
             self.server_type,
