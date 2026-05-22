@@ -41,16 +41,16 @@ pub fn run_daemon(_identity_key: String) -> anyhow::Result<()> {
     anyhow::bail!("remote-server-daemon is not supported on this platform")
 }
 
-/// Forwards app auth-token rotation and privacy preference change events
-/// to the remote-server manager.
+/// Wires app auth-token rotation and privacy preference change events to the
+/// remote-server manager.
 #[cfg(not(target_family = "wasm"))]
 pub fn wire_auth_token_rotation(ctx: &mut warpui::AppContext) {
     let server_api = ServerApiProvider::handle(ctx);
     let manager = RemoteServerManager::handle(ctx);
     ctx.subscribe_to_model(&server_api, move |_, event, ctx| {
-        if let ServerApiEvent::AccessTokenRefreshed { token } = event {
+        if let ServerApiEvent::AccessTokenRefreshed { .. } = event {
             manager.update(ctx, |manager, _| {
-                manager.rotate_auth_token(token.clone());
+                manager.rotate_auth_token();
             });
         }
     });

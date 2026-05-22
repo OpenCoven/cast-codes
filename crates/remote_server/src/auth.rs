@@ -5,7 +5,7 @@ type RemoteServerIdentityKeyFn = dyn Fn() -> String + Send + Sync;
 /// App-supplied authentication and preference context for transport-agnostic
 /// remote-server code.
 ///
-/// Bearer tokens are delivered only through protocol messages. Identity keys
+/// Local bearer/API tokens are not delivered to remote daemons. Identity keys
 /// are non-secret stable partition keys used to select the remote daemon's
 /// socket/PID directory.
 ///
@@ -14,7 +14,7 @@ type RemoteServerIdentityKeyFn = dyn Fn() -> String + Send + Sync;
 ///
 /// This keeps the `remote_server` crate decoupled from app-side auth/server API
 /// types while still allowing initial connect and reconnect handshakes to fetch
-/// the current app credential and preferences.
+/// the current identity metadata and preferences.
 #[derive(Clone)]
 pub struct RemoteServerAuthContext {
     get_auth_token: Arc<GetAuthTokenFn>,
