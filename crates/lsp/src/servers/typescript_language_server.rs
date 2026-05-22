@@ -367,31 +367,40 @@ mod smoke_tests {
     }
 
     #[test]
-    fn smoke_workspace_local_typescript_lsp_from_env() {
+    fn smoke_typescript_lsp_from_path_or_managed_env() {
         install_crypto_provider();
 
-        let workspace_root = PathBuf::from(
-            std::env::var("CASTCODES_TS_LSP_SMOKE_REPO")
-                .expect("CASTCODES_TS_LSP_SMOKE_REPO is required"),
-        );
+        let workspace_root = match std::env::var("CASTCODES_TS_LSP_SMOKE_REPO") {
+            Ok(value) => PathBuf::from(value),
+            Err(_) => {
+                eprintln!(
+                    "skipping smoke_typescript_lsp_from_path_or_managed_env: \
+CASTCODES_TS_LSP_SMOKE_REPO is not set"
+                );
+                return;
+            }
+        };
         let path_env = std::env::var("PATH").ok();
         let executor = Arc::new(Background::default());
 
         warpui::r#async::block_on(async move {
             let command_executor = crate::CommandBuilder::new(path_env.clone());
-            let workspace_config = TypeScriptLanguageServerCandidate::find_workspace_binary_config(
-                &workspace_root,
-                path_env.as_deref(),
-                &command_executor,
-            )
-            .await
-            .expect("workspace-local typescript-language-server should be discovered");
-
-            assert_eq!(
-                workspace_config.binary_path,
-                workspace_root.join(TypeScriptLanguageServerCandidate::LOCAL_BIN_PATH)
-            );
-            assert!(workspace_config.prepend_args.is_empty());
+            let candidate =
+                TypeScriptLanguageServerCandidate::new(Arc::new(http_client::Client::new()));
+            let path_available = candidate.is_installed_on_path(&command_executor).await;
+            let managed_available =
+                TypeScriptLanguageServerCandidate::find_installed_binary_config(
+                    path_env.as_deref(),
+                )
+                .await
+                .is_some();
+            if !path_available && !managed_available {
+                eprintln!(
+                    "skipping smoke_typescript_lsp_from_path_or_managed_env: \
+typescript-language-server is unavailable on PATH and no managed install is present"
+                );
+                return Ok(());
+            }
 
             let config = LspServerConfig::new(
                 LSPServerType::TypeScriptLanguageServer,
