@@ -14,7 +14,10 @@ use lsp_types::{
 
 use crate::supported_servers::LSPServerType;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::supported_servers::{resolve_lsp_binary_config, CustomBinaryConfig};
+use crate::supported_servers::{
+    resolve_binary_on_path, resolve_lsp_binary_config, CustomBinaryConfig, LspBinarySource,
+    LspStartupError,
+};
 
 /// Result of resolving an LSP server command, including the command and init params.
 #[cfg(not(target_arch = "wasm32"))]
@@ -205,9 +208,20 @@ impl LspServerConfig {
             is_working_on_path,
         )?;
 
+        let mut custom_config = resolved_binary_config.custom_config.clone();
+        if resolved_binary_config.source == LspBinarySource::Path && custom_config.is_none() {
+            let binary_path =
+                resolve_binary_on_path(self.server_type.binary_name(), executor.path_env_var())
+                    .ok_or_else(|| LspStartupError::missing_binary(self.server_type))?;
+            custom_config = Some(CustomBinaryConfig {
+                binary_path,
+                prepend_args: vec![],
+            });
+        }
+
         let mut command = self
             .server_type
-            .create_command(resolved_binary_config.custom_config.clone(), &executor);
+            .create_command(custom_config.clone(), &executor);
 
         // Set the working directory to the workspace root. This is required for
         // LSP servers like rust-analyzer to properly discover the project structure.
@@ -217,7 +231,7 @@ impl LspServerConfig {
             "LSP {} starting with binary source {:?} and custom_binary_config: {:?}",
             self.server_type.binary_name(),
             resolved_binary_config.source,
-            resolved_binary_config.custom_config
+            custom_config
         );
 
         let params = default_init_params(&self.initial_workspace, self.client_name)?;
