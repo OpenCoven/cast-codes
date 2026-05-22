@@ -580,7 +580,7 @@ fn test_parse_tab_path_bare_tilde() {
 
 #[test]
 #[cfg(unix)]
-fn test_open_file_executable_sh_routes_to_execute() {
+fn test_open_file_executable_sh_routes_to_editor() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("run.sh");
