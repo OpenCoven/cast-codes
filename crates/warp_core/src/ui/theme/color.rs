@@ -21,6 +21,15 @@ use warpui::color::ColorU;
 
 const BLOCK_SELECTION_OPACITY: Opacity = 10;
 
+/// Fallback for `WarpTheme::muted_foreground()` when no `ui.muted_foreground` is set.
+/// Matches `OPENCOVEN_MUTED` (#5A5A65) in `app/src/ai/coven_brand.rs` — keep in sync.
+const MUTED_FOREGROUND_FALLBACK: ColorU = ColorU {
+    r: 90,
+    g: 90,
+    b: 101,
+    a: 255,
+};
+
 #[derive(Serialize, Copy, Clone, Debug, Deserialize, Getters, PartialEq, Eq)]
 #[get = "pub"]
 // TODO handle optional fields (so users can specify some and not all)
@@ -120,7 +129,11 @@ impl WarpTheme {
     /// Doesn't allow gradients because these surfaces will often be too small
     /// for the gradients to look appealing.
     pub fn surface_2(&self) -> Fill {
-        Fill::Solid(neutral_2(self))
+        self.ui
+            .as_ref()
+            .and_then(|u| u.card)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| Fill::Solid(neutral_2(self)))
     }
 
     /// Background color for UI elements that need to stand out from the main
@@ -133,6 +146,37 @@ impl WarpTheme {
 
     pub fn cursor(&self) -> Fill {
         self.cursor.unwrap_or(self.accent())
+    }
+
+    pub fn muted_foreground(&self) -> ColorU {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.muted_foreground)
+            .unwrap_or(MUTED_FOREGROUND_FALLBACK)
+    }
+
+    pub fn sidebar_bg(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.sidebar)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.surface_1())
+    }
+
+    pub fn ring(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.ring)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.accent())
+    }
+
+    /// Returns `Some(Fill::Solid(c))` only when `ui.sidebar` is explicitly set;
+    /// returns `None` otherwise (callers should leave the surface transparent).
+    /// Distinct from `sidebar_bg()` which has a `surface_1()` fallback for
+    /// callers that need an unconditional sidebar color.
+    pub fn ui_sidebar_override(&self) -> Option<Fill> {
+        self.ui.as_ref().and_then(|u| u.sidebar).map(Fill::Solid)
     }
 
     pub fn ui_warning_color(&self) -> ColorU {
@@ -152,7 +196,11 @@ impl WarpTheme {
     }
 
     pub fn outline(&self) -> Fill {
-        fg_overlay_2(self)
+        self.ui
+            .as_ref()
+            .and_then(|u| u.border)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| fg_overlay_2(self))
     }
 
     // text colors
@@ -184,7 +232,11 @@ impl WarpTheme {
     }
 
     pub fn active_ui_text_color(&self) -> Fill {
-        self.main_text_color(self.surface_2())
+        self.ui
+            .as_ref()
+            .and_then(|u| u.card_foreground)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.main_text_color(self.surface_2()))
     }
 
     pub fn nonactive_ui_text_color(&self) -> Fill {

@@ -31,6 +31,14 @@ fn home_dir() -> Result<PathBuf> {
     dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))
 }
 
+fn cleanup_secret_file(path: &std::path::Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| format!("Failed to remove {}", path.display())),
+    }
+}
+
 /// Write `content` to `path` using owner-only (0600) permissions.
 ///
 /// On Unix the file is created with mode 0600 so no other user can read the
@@ -151,6 +159,15 @@ pub(crate) fn write_git_credentials(credentials: &[GitCredential]) -> Result<()>
     Ok(())
 }
 
+pub(crate) fn clear_git_credentials() -> Result<()> {
+    let home = home_dir()?;
+    cleanup_secret_file(&home.join(".git-credentials"))?;
+    cleanup_secret_file(&home.join(".git-credentials.tmp"))?;
+    cleanup_secret_file(&home.join(".config").join("gh").join("hosts.yaml"))?;
+    cleanup_secret_file(&home.join(".config").join("gh").join("hosts.yaml.tmp"))?;
+    Ok(())
+}
+
 /// Run a git config command, logging a warning on failure rather than
 /// propagating the error (git may not be installed in all sandboxes).
 fn run_git_config(key: &str, value: &str) {
@@ -252,7 +269,10 @@ async fn try_refresh(task_id: &str, ai_client: &Arc<dyn AIClient>) -> Result<()>
         .context("Failed to fetch git credentials from server")?;
 
     if credentials.is_empty() {
-        log::debug!("No git credentials returned during refresh; skipping file write");
+        if let Err(e) = clear_git_credentials() {
+            log::warn!("Failed to clear git credentials after empty refresh response: {e:#}");
+        }
+        log::debug!("No git credentials returned during refresh; removed credential files");
         return Ok(());
     }
 

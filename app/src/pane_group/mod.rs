@@ -213,7 +213,7 @@ lazy_static! {
     static ref FALLBACK_INITIAL_WINDOW_SIZE: Vector2F = Vector2F::new(1024., 768.);
 }
 
-const MINIMUM_PANE_SIZE: f32 = 50.;
+pub(crate) const MINIMUM_PANE_SIZE: f32 = 50.;
 const MINIMUM_PANE_SIZE_UDI: f32 = 190.;
 const KEYBOARD_RESIZE_DELTA: f32 = 10.;
 
@@ -5569,17 +5569,37 @@ impl PaneGroup {
     }
 
     fn resize_pane(&mut self, position: Vector2F, ctx: &mut ViewContext<Self>) {
-        if let Some(border) = &mut self.dragged_border {
-            let delta = match border.direction {
-                SplitDirection::Horizontal => position.x() - border.previous_mouse_location.x(),
-                SplitDirection::Vertical => position.y() - border.previous_mouse_location.y(),
-            };
+        let Some(border) = self.dragged_border.as_mut() else {
+            return;
+        };
+        let delta = match border.direction {
+            SplitDirection::Horizontal => position.x() - border.previous_mouse_location.x(),
+            SplitDirection::Vertical => position.y() - border.previous_mouse_location.y(),
+        };
+        let border_id = border.border_id;
+        border.previous_mouse_location = position;
 
-            self.panes.adjust_pane_size(border.border_id, delta, ctx);
+        let pane_min_widths = self.snapshot_pane_min_widths(ctx);
+        let pane_min_width = |pane_id: PaneId| {
+            pane_min_widths
+                .get(&pane_id)
+                .copied()
+                .unwrap_or(MINIMUM_PANE_SIZE)
+        };
+        self.panes
+            .adjust_pane_size(border_id, delta, &pane_min_width, ctx);
 
-            border.previous_mouse_location = position;
-            ctx.notify();
-        }
+        ctx.notify();
+    }
+
+    /// Snapshot each leaf pane's content-specific minimum horizontal width.
+    /// Pre-computed before invoking the tree resize so the splitter clamp can
+    /// look up the value without re-borrowing `self`.
+    fn snapshot_pane_min_widths(&self, ctx: &AppContext) -> HashMap<PaneId, f32> {
+        self.pane_contents
+            .iter()
+            .map(|(id, content)| (*id, content.as_pane().min_pane_width(ctx)))
+            .collect()
     }
 
     pub fn start_resizing(&mut self, info: DraggedBorder, ctx: &mut ViewContext<Self>) {
@@ -5594,10 +5614,19 @@ impl PaneGroup {
     }
 
     pub fn resize_left(&mut self, ctx: &mut ViewContext<Self>) {
+        let focused = self.focused_pane_id(ctx);
+        let pane_min_widths = self.snapshot_pane_min_widths(ctx);
+        let pane_min_width = |id: PaneId| {
+            pane_min_widths
+                .get(&id)
+                .copied()
+                .unwrap_or(MINIMUM_PANE_SIZE)
+        };
         self.panes.adjust_pane_size_by_id(
-            self.focused_pane_id(ctx),
+            focused,
             SplitDirection::Horizontal,
             -KEYBOARD_RESIZE_DELTA,
+            &pane_min_width,
             ctx,
         );
         ctx.notify();
@@ -5605,10 +5634,19 @@ impl PaneGroup {
     }
 
     pub fn resize_right(&mut self, ctx: &mut ViewContext<Self>) {
+        let focused = self.focused_pane_id(ctx);
+        let pane_min_widths = self.snapshot_pane_min_widths(ctx);
+        let pane_min_width = |id: PaneId| {
+            pane_min_widths
+                .get(&id)
+                .copied()
+                .unwrap_or(MINIMUM_PANE_SIZE)
+        };
         self.panes.adjust_pane_size_by_id(
-            self.focused_pane_id(ctx),
+            focused,
             SplitDirection::Horizontal,
             KEYBOARD_RESIZE_DELTA,
+            &pane_min_width,
             ctx,
         );
         ctx.notify();
@@ -5616,10 +5654,19 @@ impl PaneGroup {
     }
 
     pub fn resize_up(&mut self, ctx: &mut ViewContext<Self>) {
+        let focused = self.focused_pane_id(ctx);
+        let pane_min_widths = self.snapshot_pane_min_widths(ctx);
+        let pane_min_width = |id: PaneId| {
+            pane_min_widths
+                .get(&id)
+                .copied()
+                .unwrap_or(MINIMUM_PANE_SIZE)
+        };
         self.panes.adjust_pane_size_by_id(
-            self.focused_pane_id(ctx),
+            focused,
             SplitDirection::Vertical,
             -KEYBOARD_RESIZE_DELTA,
+            &pane_min_width,
             ctx,
         );
         ctx.notify();
@@ -5627,10 +5674,19 @@ impl PaneGroup {
     }
 
     pub fn resize_down(&mut self, ctx: &mut ViewContext<Self>) {
+        let focused = self.focused_pane_id(ctx);
+        let pane_min_widths = self.snapshot_pane_min_widths(ctx);
+        let pane_min_width = |id: PaneId| {
+            pane_min_widths
+                .get(&id)
+                .copied()
+                .unwrap_or(MINIMUM_PANE_SIZE)
+        };
         self.panes.adjust_pane_size_by_id(
-            self.focused_pane_id(ctx),
+            focused,
             SplitDirection::Vertical,
             KEYBOARD_RESIZE_DELTA,
+            &pane_min_width,
             ctx,
         );
         ctx.notify();

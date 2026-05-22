@@ -598,9 +598,9 @@ lazy_static! {
     /// Show the jump to bottom of block button if more than this height of the block is in view.
     static ref JUMP_TO_BOTTOM_OVERHANG_THRESHOLD_PX: Pixels = (70.).into_pixels();
 
-    static ref JUMP_TO_BOTTOM_OF_BLOCK_ICON_SIZE_PX: Pixels = (20.).into_pixels();
-    static ref JUMP_TO_BOTTOM_OF_BLOCK_BUTTON_PADDING_PX: Pixels = (4.).into_pixels();
-    static ref JUMP_TO_BOTTOM_OF_BLOCK_CORNER_RADIUS_PX: Pixels = (4.).into_pixels();
+    static ref JUMP_TO_BOTTOM_OF_BLOCK_ICON_SIZE_PX: Pixels = (16.).into_pixels();
+    static ref JUMP_TO_BOTTOM_OF_BLOCK_BUTTON_PADDING_PX: Pixels = (7.).into_pixels();
+    static ref JUMP_TO_BOTTOM_OF_BLOCK_CORNER_RADIUS_PX: Pixels = (15.).into_pixels();
     static ref JUMP_TO_BOTTOM_OF_BLOCK_TOOLTIP_OFFSET_Y_PX: Pixels = (-5.).into_pixels();
 
 
@@ -22058,7 +22058,7 @@ impl TerminalView {
             self.mouse_states.jump_to_bottom_of_block_button.clone(),
             move |state| {
                 let icon_color: ColorU = theme.sub_text_color(theme.surface_2()).into();
-                let icon_path = "bundled/svg/vertical_align_bottom.svg";
+                let icon_path = "bundled/svg/chevron-down.svg";
 
                 let container = Container::new(
                     ConstrainedBox::new(Icon::new(icon_path, icon_color).finish())
@@ -22069,12 +22069,13 @@ impl TerminalView {
                 .with_uniform_padding(JUMP_TO_BOTTOM_OF_BLOCK_BUTTON_PADDING_PX.as_f32())
                 .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
                     JUMP_TO_BOTTOM_OF_BLOCK_CORNER_RADIUS_PX.as_f32(),
-                )));
+                )))
+                .with_border(Border::all(1.0).with_border_fill(theme.outline()));
 
                 let container = if state.is_hovered() || state.is_clicked() {
                     container.with_background(theme.surface_2())
                 } else {
-                    container
+                    container.with_background(theme.surface_1())
                 };
 
                 let mut stack = Stack::new().with_child(container.finish());
@@ -26593,7 +26594,7 @@ impl View for TerminalView {
             && self.is_conversation_details_panel_open
             && self.can_show_conversation_details_ui_from_model(&model, app);
 
-        if should_show_panel {
+        let body = if should_show_panel {
             // Wrap panel with agent view background for visual consistency
             let panel_with_background =
                 Container::new(ChildView::new(&self.conversation_details_panel).finish())
@@ -26612,6 +26613,22 @@ impl View for TerminalView {
             .finish()
         } else {
             final_element
+        };
+
+        // Pane-anchored agent footer (subagent identity strip). Renders below
+        // the terminal body whenever this pane is hosting an active agent.
+        if let Some(footer) = self.render_agent_pane_footer(app) {
+            Container::new(
+                Flex::column()
+                    .with_main_axis_size(warpui::elements::MainAxisSize::Max)
+                    .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .with_child(Shrinkable::new(1., body).finish())
+                    .with_child(footer)
+                    .finish(),
+            )
+            .finish()
+        } else {
+            body
         }
     }
 

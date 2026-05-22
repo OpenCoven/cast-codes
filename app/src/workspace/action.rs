@@ -184,6 +184,7 @@ pub enum WorkspaceAction {
     },
     ShowThemeChooser(ThemeChooserMode),
     ShowThemeChooserForActiveTheme,
+    ShowImportThemeModal,
     IncreaseFontSize,
     DecreaseFontSize,
     ResetFontSize,
@@ -839,6 +840,7 @@ impl WorkspaceAction {
             | ShowSettingsPageWithSearch { .. }
             | ShowThemeChooser(_)
             | ShowThemeChooserForActiveTheme
+            | ShowImportThemeModal
             | IncreaseFontSize
             | DecreaseFontSize
             | ResetFontSize

@@ -19,6 +19,8 @@ struct MockHandler {
     identity_reported: bool,
     d_proto_hooks: Vec<DProtoHook>,
     pluggable_notifications: Vec<(Option<String>, String)>,
+    clipboard_stores: Vec<(u8, Vec<u8>)>,
+    clipboard_loads: Vec<(u8, String)>,
 }
 
 impl Handler for MockHandler {
@@ -147,9 +149,14 @@ impl Handler for MockHandler {
 
     fn reset_color(&mut self, _: usize) {}
 
-    fn clipboard_store(&mut self, _: u8, _: &[u8]) {}
+    fn clipboard_store(&mut self, clipboard: u8, data: &[u8]) {
+        self.clipboard_stores.push((clipboard, data.to_vec()));
+    }
 
-    fn clipboard_load(&mut self, _: u8, _: &str) {}
+    fn clipboard_load(&mut self, clipboard: u8, terminator: &str) {
+        self.clipboard_loads
+            .push((clipboard, terminator.to_string()));
+    }
 
     fn decaln(&mut self) {}
 
@@ -244,6 +251,8 @@ impl Default for MockHandler {
             identity_reported: false,
             d_proto_hooks: Vec::new(),
             pluggable_notifications: Vec::new(),
+            clipboard_stores: Vec::new(),
+            clipboard_loads: Vec::new(),
         }
     }
 }
@@ -308,6 +317,27 @@ fn parse_terminal_identity_esc() {
 
     assert!(!handler.identity_reported);
     handler.reset_state();
+}
+
+#[test]
+fn parse_osc52_clipboard_query_is_ignored() {
+    let mut parser = Processor::new();
+    let mut handler = MockHandler::default();
+    let mut writer = Vec::new();
+
+    parser.parse_bytes(&mut handler, b"\x1b]52;c;?\x07", &mut writer);
+
+    assert!(handler.clipboard_loads.is_empty());
+    assert!(handler.clipboard_stores.is_empty());
+    assert!(writer.is_empty());
+}
+
+#[test]
+fn parse_osc52_clipboard_store_is_preserved() {
+    let (_, handler) = parse_bytes(b"\x1b]52;c;aGVsbG8=\x07");
+
+    assert_eq!(handler.clipboard_stores, vec![(b'c', b"aGVsbG8=".to_vec())]);
+    assert!(handler.clipboard_loads.is_empty());
 }
 
 #[test]

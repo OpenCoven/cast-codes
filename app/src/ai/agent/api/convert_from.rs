@@ -118,7 +118,9 @@ fn convert_run_agents_execution_mode(
         Some(api::run_agents::ExecutionMode::Remote(remote)) => RunAgentsExecutionMode::Remote {
             environment_id: remote.environment_id,
             worker_host: remote.worker_host,
-            computer_use_enabled: remote.computer_use_enabled,
+            // Computer use must be requested through the dedicated permission flow.
+            // Do not trust tool-call supplied flags for RunAgents.
+            computer_use_enabled: false,
         },
         Some(api::run_agents::ExecutionMode::Local(_)) | None => RunAgentsExecutionMode::Local,
     }

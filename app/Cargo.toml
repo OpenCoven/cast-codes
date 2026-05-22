@@ -1,13 +1,13 @@
 [package]
-authors.workspace = true
+authors = ["CastCodes Maintainers"]
 default-run = "cast-codes"
 description = "The open-source agentic terminal and code workspace"
 edition = "2021"
 autobins = false
 name = "warp-app"
 version = "0.1.0"
-publish.workspace = true
-license.workspace = true
+publish = false
+license = "AGPL-3.0-only"
 
 [lib]
 name = "warp"
@@ -618,7 +618,7 @@ grep_tool = []
 gui = ["voice_input"]
 # Mirror of the `cast-agent` feature on `crates/ai`. Lets app/src code use
 # `#[cfg(feature = "cast-agent")]` without inspecting the dep graph.
-# Bundled into `gui` so the pill ships with graphical CastCodes builds.
+# Native bundle scripts pass this explicitly; web and standalone CLI builds leave it off.
 cast-agent = ["ai/cast-agent"]
 msys2_shells = []
 file_retrieval_tools = []

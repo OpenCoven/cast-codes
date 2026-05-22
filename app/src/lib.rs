@@ -1654,6 +1654,7 @@ pub(crate) fn initialize_app(
     drive::index::init(ctx);
     drive::sharing::dialog::init(ctx);
     ai_assistant::panel::init(ctx);
+    settings_view::import_theme_modal::init(ctx);
     settings_view::update_environment_form::init(ctx);
     env_vars::env_var_collection_block::init(ctx);
     terminal::ssh::install_tmux::init(ctx);

@@ -480,6 +480,7 @@ pub enum AppearancePageAction {
     RemoveDefaultDirectoryTabColor {
         path: PathBuf,
     },
+    ShowImportThemeModal,
 }
 
 pub struct AppearanceSettingsPageView {
@@ -513,6 +514,7 @@ pub struct AppearanceSettingsPageView {
     alt_screen_padding_editor: ViewHandle<EditorView>,
     color_picker_dot_states: Vec<Vec<MouseStateHandle>>,
     directory_tab_color_delete_buttons: Vec<ViewHandle<ActionButton>>,
+    import_theme_button: ViewHandle<ActionButton>,
     header_toolbar_inline_editor: ViewHandle<HeaderToolbarInlineEditor>,
 
     /// The context chip renderers based on the most recently
@@ -678,6 +680,9 @@ impl TypedActionView for AppearanceSettingsPageView {
                     let _ = settings.directory_tab_colors.set_value(new_value, ctx);
                 });
                 ctx.notify();
+            }
+            ShowImportThemeModal => {
+                ctx.dispatch_typed_action(&WorkspaceAction::ShowImportThemeModal);
             }
         }
     }
@@ -1237,6 +1242,21 @@ impl AppearanceSettingsPageView {
                 })
                 .collect(),
             directory_tab_color_delete_buttons: build_directory_delete_buttons(ctx),
+            import_theme_button: ctx.add_typed_action_view(|_| {
+                let mut button = ActionButton::new("Import theme\u{2026}", NakedTheme)
+                    .with_size(ButtonSize::Small);
+                #[cfg(feature = "local_fs")]
+                {
+                    button = button.on_click(|ctx| {
+                        ctx.dispatch_typed_action(AppearancePageAction::ShowImportThemeModal);
+                    });
+                }
+                #[cfg(not(feature = "local_fs"))]
+                {
+                    button = button.disabled();
+                }
+                button
+            }),
             header_toolbar_inline_editor,
             alt_screen_padding_editor,
             context_chips,
@@ -2798,7 +2818,12 @@ impl SettingsWidget for ThemeSelectWidget {
             )
             .with_child(
                 Container::new(theme_picker)
-                    .with_margin_bottom(25.)
+                    .with_margin_bottom(10.)
+                    .finish(),
+            )
+            .with_child(
+                Container::new(ChildView::new(&view.import_theme_button).finish())
+                    .with_margin_bottom(15.)
                     .finish(),
             )
             .finish()

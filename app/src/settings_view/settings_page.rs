@@ -174,23 +174,20 @@ impl SettingsPage {
         match_data: MatchData,
         clicked: bool,
     ) -> Hoverable {
+        let mut style = UiComponentStyles::default()
+            .set_border_width(1.0)
+            .set_border_color(warpui::elements::Fill::Solid(ColorU::transparent_black()))
+            .set_margin(Coords::default().left(NAV_ITEM_LEFT_MARGIN))
+            .set_padding(Coords::uniform(8.));
+        if clicked {
+            style = style.set_border_color(appearance.theme().outline().into());
+        }
+
         appearance
             .ui_builder()
-            .button(
-                if clicked {
-                    ButtonVariant::Accent
-                } else {
-                    ButtonVariant::Text
-                },
-                self.button_state_handle.clone(),
-            )
+            .button(ButtonVariant::Text, self.button_state_handle.clone())
             .with_text_label(self.section.to_string() + &match_data.to_string())
-            .with_style(
-                UiComponentStyles::default()
-                    .set_border_width(0.)
-                    .set_margin(Coords::default().left(NAV_ITEM_LEFT_MARGIN))
-                    .set_padding(Coords::uniform(8.)),
-            )
+            .with_style(style)
             .build()
     }
 }

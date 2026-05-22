@@ -385,6 +385,19 @@ rm -R "$OUT_DIR/$FINAL_DMG_NAME" || echo "No old dmg to remove"
 ###########################
 
 if [[ "$ARTIFACT" == "app" ]]; then
+  SAVED_WARP_DEVELOPER_ID_CERT="${WARP_DEVELOPER_ID_CERT-}"
+  SAVED_WARP_DEVELOPER_ID_CERT_PASSWORD="${WARP_DEVELOPER_ID_CERT_PASSWORD-}"
+  SAVED_WARP_CODESIGN_KEYCHAIN_PASSWORD="${WARP_CODESIGN_KEYCHAIN_PASSWORD-}"
+  SAVED_WARP_NOTARIZATION_APPLE_ID="${WARP_NOTARIZATION_APPLE_ID-}"
+  SAVED_WARP_NOTARIZATION_PASSWORD="${WARP_NOTARIZATION_PASSWORD-}"
+
+  # Keep release signing secrets out of cargo build-script environments.
+  unset WARP_DEVELOPER_ID_CERT
+  unset WARP_DEVELOPER_ID_CERT_PASSWORD
+  unset WARP_CODESIGN_KEYCHAIN_PASSWORD
+  unset WARP_NOTARIZATION_APPLE_ID
+  unset WARP_NOTARIZATION_PASSWORD
+
   if [[ $BUILD_BINARY != true ]]; then
     echo "Skipping binary build due to --skip-build flag"
     export CARGO_BUNDLE_SKIP_BUILD=1
@@ -394,6 +407,27 @@ if [[ "$ARTIFACT" == "app" ]]; then
   echo "Building and bundling $DEFAULT_TARGET for channel $RELEASE_CHANNEL and bundle id $BUNDLE_ID with profile $CARGO_PROFILE"
   cargo bundle --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --target "$DEFAULT_TARGET" --features "$FEATURES"
   popd > /dev/null
+
+  if [[ -n "$SAVED_WARP_DEVELOPER_ID_CERT" ]]; then
+    WARP_DEVELOPER_ID_CERT="$SAVED_WARP_DEVELOPER_ID_CERT"
+    unset SAVED_WARP_DEVELOPER_ID_CERT
+  fi
+  if [[ -n "$SAVED_WARP_DEVELOPER_ID_CERT_PASSWORD" ]]; then
+    WARP_DEVELOPER_ID_CERT_PASSWORD="$SAVED_WARP_DEVELOPER_ID_CERT_PASSWORD"
+    unset SAVED_WARP_DEVELOPER_ID_CERT_PASSWORD
+  fi
+  if [[ -n "$SAVED_WARP_CODESIGN_KEYCHAIN_PASSWORD" ]]; then
+    WARP_CODESIGN_KEYCHAIN_PASSWORD="$SAVED_WARP_CODESIGN_KEYCHAIN_PASSWORD"
+    unset SAVED_WARP_CODESIGN_KEYCHAIN_PASSWORD
+  fi
+  if [[ -n "$SAVED_WARP_NOTARIZATION_APPLE_ID" ]]; then
+    WARP_NOTARIZATION_APPLE_ID="$SAVED_WARP_NOTARIZATION_APPLE_ID"
+    unset SAVED_WARP_NOTARIZATION_APPLE_ID
+  fi
+  if [[ -n "$SAVED_WARP_NOTARIZATION_PASSWORD" ]]; then
+    WARP_NOTARIZATION_PASSWORD="$SAVED_WARP_NOTARIZATION_PASSWORD"
+    unset SAVED_WARP_NOTARIZATION_PASSWORD
+  fi
 
   echo "Adding rpath to support mac frameworks (e.g. Sentry)"
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$BUNDLE_DIR/$WARP_APP_NAME.app/Contents/MacOS/$WARP_BIN"

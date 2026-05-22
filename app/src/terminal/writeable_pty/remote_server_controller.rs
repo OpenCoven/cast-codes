@@ -273,21 +273,6 @@ impl<T: EventLoopSender> RemoteServerController<T> {
                 };
                 self.connect_session_for_current_identity(session_id, socket_path, ctx);
             }
-            Ok(false) if has_old_binary => {
-                // Auto-update: a prior install exists, so skip the modal
-                // and reinstall.
-                self.did_install = true;
-                self.state = SshInitState::AwaitingInstall {
-                    session_id,
-                    session_info,
-                    transport: transport.clone(),
-                    setup_start,
-                    for_update: true,
-                };
-                RemoteServerManager::handle(ctx).update(ctx, |mgr, ctx| {
-                    mgr.install_binary(session_id, transport, true, ctx);
-                });
-            }
             Ok(false) => {
                 let install_mode = *WarpifySettings::as_ref(ctx)
                     .ssh_extension_install_mode
@@ -310,10 +295,10 @@ impl<T: EventLoopSender> RemoteServerController<T> {
                             session_info,
                             transport: transport.clone(),
                             setup_start,
-                            for_update: false,
+                            for_update: has_old_binary,
                         };
                         RemoteServerManager::handle(ctx).update(ctx, |mgr, ctx| {
-                            mgr.install_binary(session_id, transport, false, ctx);
+                            mgr.install_binary(session_id, transport, has_old_binary, ctx);
                         });
                     }
                     SshExtensionInstallMode::NeverInstall => {

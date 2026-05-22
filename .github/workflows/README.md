@@ -2,7 +2,7 @@
 
 This README file documents the format of the `release_configurations.json` file located in this directory. The file defines CastCodes release channels and provides values used by the `create_release.yml` GitHub workflow.
 
-The public OSS release lane is GitHub-only. It should not depend on upstream Warp release services, Sentry, Slack, Azure signing, private channel configuration, or repository secrets beyond `GITHUB_TOKEN`.
+The public OSS release lane is GitHub-only. It should not depend on upstream Warp release services, Sentry, Slack, Azure signing, or private channel configuration. Publishing a Gatekeeper-valid macOS DMG also requires the Apple Developer ID signing and notarization secrets consumed by `create_release.yml`; dry runs and non-macOS release assets require only `GITHUB_TOKEN`.
 
 The standard OSS release asset set is intentionally small: macOS arm64 DMG and CLI tarball, Linux x86_64 app and CLI packages, Windows x64 installer, and web bundle. Intel macOS, universal macOS, Linux ARM64, and Windows ARM64 assets are excluded from the default release lane.
 

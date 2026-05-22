@@ -343,6 +343,11 @@ impl ActionButton {
         self
     }
 
+    pub fn disabled(mut self) -> Self {
+        self.disabled = true;
+        self
+    }
+
     pub fn set_on_click<F>(&mut self, handler: F, ctx: &mut ViewContext<Self>)
     where
         F: 'static + Fn(&mut EventContext),

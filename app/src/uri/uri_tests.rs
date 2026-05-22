@@ -574,22 +574,19 @@ fn test_parse_tab_path_bare_tilde() {
     assert_eq!(parse_tab_path(&url), Some(home));
 }
 
-// Regression coverage for issue #9005: shell scripts opened via `file://` should run,
-// not open in the editor. Exercised through the pure routing helper to avoid standing
-// up a full `AppContext`.
+// Security regression coverage: shell scripts opened via `file://` should open in
+// the editor, not execute automatically. Exercised through the pure routing helper
+// to avoid standing up a full `AppContext`.
 
 #[test]
 #[cfg(unix)]
-fn test_open_file_executable_sh_routes_to_execute() {
+fn test_open_file_executable_sh_routes_to_editor() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("run.sh");
     std::fs::write(&p, b"#!/bin/sh\n:\n").unwrap();
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
-    assert_eq!(
-        classify_open_file_action(&p),
-        OpenFileAction::ExecuteInSession
-    );
+    assert_eq!(classify_open_file_action(&p), OpenFileAction::Editor);
 }
 
 #[test]
@@ -605,7 +602,7 @@ fn test_open_file_non_executable_sh_routes_to_editor() {
 
 #[test]
 #[cfg(unix)]
-fn test_open_file_executable_bash_zsh_fish_route_to_execute() {
+fn test_open_file_executable_bash_zsh_fish_route_to_editor() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     for name in ["run.bash", "run.zsh", "run.fish"] {
@@ -614,8 +611,8 @@ fn test_open_file_executable_bash_zsh_fish_route_to_execute() {
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
         assert_eq!(
             classify_open_file_action(&p),
-            OpenFileAction::ExecuteInSession,
-            "{name} should route to ExecuteInSession",
+            OpenFileAction::Editor,
+            "{name} should route to Editor",
         );
     }
 }
