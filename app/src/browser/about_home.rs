@@ -33,8 +33,14 @@ mod tests {
         // one channel unit from the actual CastCodes tokens. The page now
         // declares the correct dark tokens as CSS variables; this test
         // guards against re-introducing the drift values.
-        assert!(!ABOUT_HOME_HTML.contains("#0e0e10"), "drift bg snuck back in");
-        assert!(!ABOUT_HOME_HTML.contains("#e8e8ea"), "drift fg snuck back in");
+        assert!(
+            !ABOUT_HOME_HTML.contains("#0e0e10"),
+            "drift bg snuck back in"
+        );
+        assert!(
+            !ABOUT_HOME_HTML.contains("#e8e8ea"),
+            "drift fg snuck back in"
+        );
         assert!(ABOUT_HOME_HTML.contains("#0f0f12"), "dark bg token missing");
         assert!(ABOUT_HOME_HTML.contains("#e8e8ed"), "dark fg token missing");
     }
