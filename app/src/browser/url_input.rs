@@ -124,10 +124,13 @@ pub fn resolve_with_engine(raw: &str, engine: SearchEngine) -> Resolved {
 fn is_javascript_scheme(input: &str) -> bool {
     // Case-insensitive match on `javascript:` prefix, after trimming. Matches
     // browser behavior (RFC 3986 schemes are case-insensitive).
-    if input.len() < "javascript:".len() {
+    let prefix_len = "javascript:".len();
+    if input.len() < prefix_len {
         return false;
     }
-    input[.."javascript:".len()].eq_ignore_ascii_case("javascript:")
+    input
+        .get(..prefix_len)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
 }
 
 fn is_loopback_host(input: &str) -> bool {
