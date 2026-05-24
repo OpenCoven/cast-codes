@@ -84,9 +84,7 @@ fn classify_security(url: &str) -> SecurityState {
             .unwrap_or(rest)
             .split_once(':')
             .map(|(h, _)| h)
-            .unwrap_or_else(|| {
-                rest.split_once('/').map(|(h, _)| h).unwrap_or(rest)
-            });
+            .unwrap_or_else(|| rest.split_once('/').map(|(h, _)| h).unwrap_or(rest));
         if matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0") {
             return SecurityState::Secure;
         }
@@ -669,9 +667,7 @@ impl BrowserView {
             SecurityState::Secure => Some(
                 ConstrainedBox::new(
                     Icon::LockClosed
-                        .to_warpui_icon(
-                            blended_colors::text_main(theme, theme.surface_1()).into(),
-                        )
+                        .to_warpui_icon(blended_colors::text_main(theme, theme.surface_1()).into())
                         .finish(),
                 )
                 .with_width(SECURITY_ICON_SIZE)
@@ -679,14 +675,10 @@ impl BrowserView {
                 .finish(),
             ),
             SecurityState::Insecure => Some(
-                ConstrainedBox::new(
-                    Icon::AlertTriangle
-                        .to_warpui_icon(theme.accent())
-                        .finish(),
-                )
-                .with_width(SECURITY_ICON_SIZE)
-                .with_height(SECURITY_ICON_SIZE)
-                .finish(),
+                ConstrainedBox::new(Icon::AlertTriangle.to_warpui_icon(theme.accent()).finish())
+                    .with_width(SECURITY_ICON_SIZE)
+                    .with_height(SECURITY_ICON_SIZE)
+                    .finish(),
             ),
             SecurityState::Neutral => None,
         };
@@ -695,11 +687,7 @@ impl BrowserView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Max);
         if let Some(indicator) = security_indicator {
-            url_row.add_child(
-                Container::new(indicator)
-                    .with_margin_right(6.0)
-                    .finish(),
-            );
+            url_row.add_child(Container::new(indicator).with_margin_right(6.0).finish());
         }
         url_row.add_child(
             Expanded::new(
@@ -846,7 +834,12 @@ impl BrowserView {
             close_mouse,
             chip_text_color.into(),
         )
-        .with_tooltip(move || ui_builder.tool_tip("Close tab".to_string()).build().finish())
+        .with_tooltip(move || {
+            ui_builder
+                .tool_tip("Close tab".to_string())
+                .build()
+                .finish()
+        })
         .build()
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
@@ -889,6 +882,7 @@ impl BrowserView {
             }
             container.finish()
         })
+        .with_defer_events_to_children()
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx)))
         .finish();
 

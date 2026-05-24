@@ -235,9 +235,9 @@ pub fn close_button(appearance: &Appearance, mouse_state_handle: MouseStateHandl
 /// icon-button frame, this preserves the supplied `size` across all four
 /// interactive states so hover/press don't reflow the parent.
 ///
-/// Background colors follow the same scheme as the standard icon button
-/// (`surface_2` on hover, app background on press), so it composes with
-/// the rest of the UI without needing per-callsite theme wiring.
+/// This keeps the standard icon-button hover/press backgrounds, while using
+/// chip-scale padding and radius so compact callsites do not need per-state
+/// sizing overrides.
 pub fn small_icon_button_with_color(
     appearance: &Appearance,
     icon: Icon,
