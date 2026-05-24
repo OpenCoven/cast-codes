@@ -9,6 +9,8 @@ use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
 #[cfg(not(target_family = "wasm"))]
+use super::castcodes_protocol;
+#[cfg(not(target_family = "wasm"))]
 use super::dialogs;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
@@ -245,6 +247,13 @@ impl NativeBrowserWebView {
                 // API on macOS, so pages that call these can otherwise
                 // hang. See `dialogs.rs` for the full reasoning.
                 .with_initialization_script(dialogs::INIT_SCRIPT)
+                // Make the `castcodes://` scheme actually load something
+                // instead of erroring out as "scheme not supported". Our
+                // URL normalizer already passes it through to the
+                // webview; the handler here defines the route table.
+                .with_custom_protocol("castcodes".to_string(), |request| {
+                    castcodes_protocol::handle(&request)
+                })
                 .with_document_title_changed_handler(move |title| {
                     let _ = title_tx.try_send(NativeWebViewEvent::TitleChanged(tab_id, title));
                 })

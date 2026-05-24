@@ -2,6 +2,8 @@ pub(crate) mod about_home;
 pub(crate) mod browser_model;
 mod browser_view;
 #[cfg(not(target_family = "wasm"))]
+pub(crate) mod castcodes_protocol;
+#[cfg(not(target_family = "wasm"))]
 pub(crate) mod data_dir;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod dialogs;
