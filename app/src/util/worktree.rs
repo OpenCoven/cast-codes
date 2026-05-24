@@ -5,9 +5,6 @@
 //! only contains pure-function helpers; async git wrappers land in
 //! subsequent tasks.
 
-// Path and PathBuf are unused now but will be consumed by subsequent tasks
-// that add async git-worktree wrappers.
-#[allow(unused_imports)]
 use std::path::{Path, PathBuf};
 
 /// Convert a branch name to a filesystem-safe slug.
@@ -41,6 +38,44 @@ pub fn slugify_branch(branch: &str) -> String {
         "worktree".to_string()
     } else {
         out
+    }
+}
+
+/// Resolve the on-disk path a new worktree will be created at.
+///
+/// `override_tmpl` supports `<repo-root>` and `<branch-slug>` placeholders,
+/// absolute or relative. `None` / empty falls back to the default
+/// `<repo>/.castcodes/worktrees/<slug>`.
+pub fn default_staging_dir(repo_root: &Path, slug: &str, override_tmpl: Option<&str>) -> PathBuf {
+    let tmpl = override_tmpl.filter(|s| !s.is_empty());
+    let Some(t) = tmpl else {
+        return repo_root.join(".castcodes/worktrees").join(slug);
+    };
+    let resolved = t
+        .replace("<repo-root>", &repo_root.display().to_string())
+        .replace("<branch-slug>", slug);
+    let p = PathBuf::from(&resolved);
+    if p.is_absolute() {
+        p
+    } else {
+        repo_root.join(p)
+    }
+}
+
+/// Append `-2`, `-3`, … to `base` until the path does not exist.
+pub fn unique_path(base: &Path) -> PathBuf {
+    if !base.exists() {
+        return base.to_path_buf();
+    }
+    let parent = base.parent().unwrap_or_else(|| Path::new("."));
+    let stem = base.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let mut i: usize = 2;
+    loop {
+        let candidate = parent.join(format!("{stem}-{i}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+        i += 1;
     }
 }
 
