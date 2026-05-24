@@ -31,5 +31,5 @@ Core identity checks:
 
 ```bash
 cargo test -p warp_core --features local_fs
-cargo check -p warp --bin cast-codes --features gui
+cargo check -p warp-app --bin cast-codes --features gui
 ```
