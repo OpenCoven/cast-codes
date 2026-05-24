@@ -2782,7 +2782,10 @@ fn test_parse_block_html_strips_script() {
         .collect();
     assert!(texts.iter().any(|t| t == "before"));
     assert!(texts.iter().any(|t| t == "after"));
-    assert!(!texts.iter().any(|t| t.contains("alert")), "script body must be stripped: {texts:?}");
+    assert!(
+        !texts.iter().any(|t| t.contains("alert")),
+        "script body must be stripped: {texts:?}"
+    );
 }
 
 #[test]
@@ -2794,7 +2797,10 @@ fn test_parse_inline_html_kbd() {
         other => panic!("expected Line, got {other:?}"),
     };
     let cmd = line.iter().find(|f| f.text == "Cmd").expect("Cmd fragment");
-    assert!(cmd.styles.inline_code, "kbd should map to inline_code: {cmd:?}");
+    assert!(
+        cmd.styles.inline_code,
+        "kbd should map to inline_code: {cmd:?}"
+    );
 }
 
 #[test]

@@ -1662,7 +1662,10 @@ fn is_well_formed_html_span(raw: &str) -> bool {
     }
     // After the tag name there must be whitespace, `>`, or `/` (for self-closing).
     // Anything else (e.g. `)`, `(`) means this is not a real tag.
-    if !matches!(bytes.get(i), Some(b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') | None) {
+    if !matches!(
+        bytes.get(i),
+        Some(b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') | None
+    ) {
         return false;
     }
     // Self-closing tags are already complete.

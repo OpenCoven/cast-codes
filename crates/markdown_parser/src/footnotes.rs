@@ -112,10 +112,7 @@ fn rewrite_line(line: &mut FormattedTextLine, ctx: &mut FootnoteContext) {
     rewrite_fragments(fragments, ctx);
 }
 
-fn rewrite_fragments(
-    fragments: &mut Vec<FormattedTextFragment>,
-    ctx: &mut FootnoteContext,
-) {
+fn rewrite_fragments(fragments: &mut Vec<FormattedTextFragment>, ctx: &mut FootnoteContext) {
     let mut out: Vec<FormattedTextFragment> = Vec::with_capacity(fragments.len());
     for fragment in fragments.drain(..) {
         if !fragment.text.contains("[^") || fragment.styles.inline_code {
@@ -185,7 +182,8 @@ pub(crate) fn append_section(text: &mut FormattedText, ctx: &FootnoteContext) {
     for (index, def) in ctx.used.iter().enumerate() {
         let number = index + 1;
         let body_fragments = crate::parse_inline_markdown(&def.content);
-        let mut content_fragments: Vec<FormattedTextFragment> = body_fragments.into_iter().collect();
+        let mut content_fragments: Vec<FormattedTextFragment> =
+            body_fragments.into_iter().collect();
         content_fragments.push(FormattedTextFragment {
             text: " ↩".to_string(),
             styles: FormattedTextStyles {
@@ -193,14 +191,15 @@ pub(crate) fn append_section(text: &mut FormattedText, ctx: &FootnoteContext) {
                 ..Default::default()
             },
         });
-        text.lines
-            .push_back(FormattedTextLine::OrderedList(OrderedFormattedIndentTextInline {
+        text.lines.push_back(FormattedTextLine::OrderedList(
+            OrderedFormattedIndentTextInline {
                 number: Some(number),
                 indented_text: FormattedIndentTextInline {
                     indent_level: 0,
                     text: content_fragments,
                 },
-            }));
+            },
+        ));
     }
 }
 

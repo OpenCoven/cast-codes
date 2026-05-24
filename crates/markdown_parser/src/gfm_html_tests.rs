@@ -32,8 +32,7 @@ fn lex_attribute_with_gt_in_quote() {
 
 #[test]
 fn lex_nested_same_tag() {
-    let (span, rest) =
-        try_lex_html_span("<details><details>x</details></details>tail").unwrap();
+    let (span, rest) = try_lex_html_span("<details><details>x</details></details>tail").unwrap();
     assert_eq!(span.raw, "<details><details>x</details></details>");
     assert_eq!(rest, "tail");
 }
@@ -64,5 +63,9 @@ fn lex_classification() {
     assert_eq!(classify("details"), HtmlSpanKind::BlockSafe);
     assert_eq!(classify("script"), HtmlSpanKind::Stripped);
     assert_eq!(classify("foo"), HtmlSpanKind::Unknown);
-    assert_eq!(classify("DETAILS"), HtmlSpanKind::BlockSafe, "case-insensitive");
+    assert_eq!(
+        classify("DETAILS"),
+        HtmlSpanKind::BlockSafe,
+        "case-insensitive"
+    );
 }
