@@ -18,6 +18,7 @@ use crate::terminal::view::shared_session::test_utils::terminal_view_for_viewer;
 use crate::terminal::TerminalView;
 use crate::test_util::add_window_with_terminal;
 use crate::test_util::terminal::initialize_app_for_terminal_view;
+use crate::workspace::ToastStack;
 use crate::{assert_lines_approx_eq, FeatureFlag};
 
 use super::*;
@@ -778,11 +779,13 @@ fn test_try_submit_pending_cloud_followup_allows_repeat_submission_for_owned_tas
 }
 
 #[test]
-fn test_non_owned_tombstone_is_removed_for_followup_and_reinserted_after_completion() {
+fn test_non_owned_tombstone_cannot_start_cloud_followup() {
     let _handoff_flag = FeatureFlag::HandoffCloudCloud.override_enabled(true);
     let _setup_v2_flag = FeatureFlag::CloudModeSetupV2.override_enabled(true);
 
     App::test((), |mut app| async move {
+        app.add_singleton_model(|_| ToastStack);
+
         let terminal = cloud_mode_terminal_for_test(&mut app);
         let task = create_cloud_mode_task_for_user("another-user");
         let task_id = task.task_id;
@@ -818,20 +821,7 @@ fn test_non_owned_tombstone_is_removed_for_followup_and_reinserted_after_complet
             );
 
             view.start_cloud_followup_from_tombstone(task_id, ctx);
-            assert_eq!(view.pending_cloud_followup_task_id, Some(task_id));
-            assert!(view.conversation_ended_tombstone_view_id.is_none());
-            assert_eq!(
-                view.model.lock().block_list().block_heights().items().len(),
-                initial_block_height_items
-            );
-
-            view.handle_ambient_agent_event(
-                &crate::terminal::view::ambient_agent::AmbientAgentViewModelEvent::FollowupSessionReady {
-                    session_id: SessionId::new(),
-                },
-                ctx,
-            );
-            view.on_ambient_agent_execution_ended(ctx);
+            assert_eq!(view.pending_cloud_followup_task_id, None);
             assert!(view.conversation_ended_tombstone_view_id.is_some());
             assert_eq!(
                 view.model.lock().block_list().block_heights().items().len(),

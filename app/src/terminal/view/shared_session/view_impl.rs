@@ -851,7 +851,9 @@ impl TerminalView {
             return;
         };
 
-        if ambient_agent_view_model.as_ref(ctx).task_id() != Some(task_id) {
+        if ambient_agent_view_model.as_ref(ctx).task_id() != Some(task_id)
+            || self.owned_ambient_agent_task_id(ctx) != Some(task_id)
+        {
             self.show_error_toast("Couldn't continue this cloud task.".to_string(), ctx);
             return;
         }
