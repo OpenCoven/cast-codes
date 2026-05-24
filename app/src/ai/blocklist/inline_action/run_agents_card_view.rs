@@ -203,11 +203,45 @@ pub(crate) fn should_auto_launch(
     }
     match active_config {
         Some((config, status)) => {
-            let request = state.to_request();
-            status.is_approved() && matches_active_config(&request, config)
+            status.is_approved() && auto_launch_request(state, config).is_some()
         }
         None => false,
     }
+}
+
+fn auto_launch_request(
+    state: &RunAgentsEditState,
+    config: &OrchestrationConfig,
+) -> Option<RunAgentsRequest> {
+    let mut request = state.to_request();
+    if !matches_active_config(&request, config) {
+        return None;
+    }
+
+    request.model_id = config.model_id.clone();
+    request.harness_type = config.harness_type.clone();
+    match (&mut request.execution_mode, &config.execution_mode) {
+        (RunAgentsExecutionMode::Local, ai::agent::orchestration_config::OrchestrationExecutionMode::Local) => {}
+        (
+            RunAgentsExecutionMode::Remote {
+                environment_id,
+                worker_host,
+                computer_use_enabled,
+            },
+            ai::agent::orchestration_config::OrchestrationExecutionMode::Remote {
+                environment_id: cfg_env,
+                worker_host: cfg_host,
+            },
+        ) => {
+            if *computer_use_enabled {
+                return None;
+            }
+            *environment_id = cfg_env.clone();
+            *worker_host = cfg_host.clone();
+        }
+        _ => return None,
+    }
+    Some(request)
 }
 
 /// Computes the `is_denied` flag at construction time.
@@ -352,11 +386,16 @@ impl RunAgentsCardView {
             BlocklistAIActionEvent::ActionBlockedOnUserConfirmation(action_id)
                 if action_id == &action_id_for_action_events && me.auto_launched =>
             {
-                let request = me.state.to_request();
-                let action_id = me.action_id.clone();
-                me.action_model.update(ctx, |action_model, action_ctx| {
-                    action_model.execute_run_agents(&action_id, request, action_ctx);
-                });
+                if let Some((config, status)) = &me.active_config {
+                    if status.is_approved() {
+                        if let Some(request) = auto_launch_request(&me.state, config) {
+                            let action_id = me.action_id.clone();
+                            me.action_model.update(ctx, |action_model, action_ctx| {
+                                action_model.execute_run_agents(&action_id, request, action_ctx);
+                            });
+                        }
+                    }
+                }
             }
             BlocklistAIActionEvent::ActionBlockedOnUserConfirmation(action_id)
                 if action_id == &action_id_for_action_events =>

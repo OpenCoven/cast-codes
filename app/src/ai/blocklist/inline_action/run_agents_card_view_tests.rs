@@ -477,6 +477,30 @@ mod should_auto_launch_tests {
             "Empty model_id on request should inherit from config and match"
         );
     }
+
+    #[test]
+    fn returns_false_for_remote_when_computer_use_enabled() {
+        let state = RunAgentsEditState::from_request(&make_request(
+            "oz",
+            RunAgentsExecutionMode::Remote {
+                environment_id: "env-1".to_string(),
+                worker_host: "warp".to_string(),
+                computer_use_enabled: true,
+            },
+        ));
+        let config = Some((
+            OrchestrationConfig {
+                model_id: "auto".to_string(),
+                harness_type: "oz".to_string(),
+                execution_mode: OrchestrationExecutionMode::Remote {
+                    environment_id: "env-1".to_string(),
+                    worker_host: "warp".to_string(),
+                },
+            },
+            OrchestrationConfigStatus::Approved,
+        ));
+        assert!(!should_auto_launch(false, false, false, &state, &config));
+    }
 }
 
 mod compute_is_denied_tests {
