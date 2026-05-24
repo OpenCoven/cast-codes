@@ -76,17 +76,19 @@ fn classify_security(url: &str) -> SecurityState {
     if lower.starts_with("https://") {
         return SecurityState::Secure;
     }
-    if let Some(rest) = lower.strip_prefix("http://") {
-        // Treat localhost / loopback / private dev URLs as secure-enough.
-        let host = rest
-            .split_once('/')
-            .map(|(h, _)| h)
-            .unwrap_or(rest)
-            .split_once(':')
-            .map(|(h, _)| h)
-            .unwrap_or_else(|| rest.split_once('/').map(|(h, _)| h).unwrap_or(rest));
-        if matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0") {
-            return SecurityState::Secure;
+    if lower.starts_with("http://") {
+        if let Ok(parsed) = url::Url::parse(url) {
+            if let Some(host) = parsed.host_str() {
+                let host = host
+                    .strip_prefix('[')
+                    .and_then(|rest| rest.strip_suffix(']'))
+                    .unwrap_or(host);
+                if host.eq_ignore_ascii_case("localhost")
+                    || matches!(host, "127.0.0.1" | "::1" | "0.0.0.0")
+                {
+                    return SecurityState::Secure;
+                }
+            }
         }
         return SecurityState::Insecure;
     }
@@ -1082,6 +1084,9 @@ mod tests {
             "http://127.0.0.1",
             "http://127.0.0.1:8080/path",
             "http://0.0.0.0:9000",
+            "http://[::1]",
+            "http://[::1]:3000/path",
+            "http://user:pass@localhost:3000",
         ] {
             assert_eq!(
                 classify_security(url),
