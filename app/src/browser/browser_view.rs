@@ -34,9 +34,13 @@ use crate::{
 
 use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
+#[cfg(not(target_family = "wasm"))]
+use super::data_dir;
 use super::persistence;
 use super::url_input::{resolve_with_engine, Resolved};
-use super::webview_host::NativeBrowserWebView;
+#[cfg(not(target_family = "wasm"))]
+use super::webview_host::SharedWebContext;
+use super::webview_host::{NativeBrowserWebView, NativeWebViewEvent};
 use crate::terminal::general_settings::GeneralSettings;
 
 /// Map a model-side URL to the URL the webview should actually load.
@@ -48,6 +52,43 @@ fn webview_url_for(model_url: &str) -> String {
     } else {
         model_url.to_string()
     }
+}
+
+/// Classification of the active URL for the SSL/security indicator in the
+/// URL bar. Loopback http URLs are intentionally treated as `Secure` since
+/// they're served from the user's own machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SecurityState {
+    /// HTTPS or local/about/file/data — no warning needed.
+    Secure,
+    /// HTTP to a non-loopback host — show a warning.
+    Insecure,
+    /// Schemes for which a security indicator is irrelevant (no icon).
+    Neutral,
+}
+
+fn classify_security(url: &str) -> SecurityState {
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("https://") {
+        return SecurityState::Secure;
+    }
+    if let Some(rest) = lower.strip_prefix("http://") {
+        // Treat localhost / loopback / private dev URLs as secure-enough.
+        let host = rest
+            .split_once('/')
+            .map(|(h, _)| h)
+            .unwrap_or(rest)
+            .split_once(':')
+            .map(|(h, _)| h)
+            .unwrap_or_else(|| {
+                rest.split_once('/').map(|(h, _)| h).unwrap_or(rest)
+            });
+        if matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0") {
+            return SecurityState::Secure;
+        }
+        return SecurityState::Insecure;
+    }
+    SecurityState::Neutral
 }
 
 const URL_BAR_HEIGHT: f32 = 32.0;
@@ -68,6 +109,11 @@ const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
 const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
+/// Height of the page-load progress strip below the toolbar. Renders
+/// accent-colored when the active tab is loading; transparent otherwise.
+const LOADING_STRIP_HEIGHT: f32 = 2.0;
+/// Size of the SSL/security indicator rendered inside the URL bar.
+const SECURITY_ICON_SIZE: f32 = 14.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -172,8 +218,14 @@ pub struct BrowserView {
     focus_handle: Option<PaneFocusHandle>,
     /// Per-tab native webviews, aligned by index with `model.tabs()`.
     webviews: Vec<Rc<RefCell<NativeBrowserWebView>>>,
-    /// Channel for tab-tagged document title updates from all webviews.
-    title_tx: async_channel::Sender<(TabId, String)>,
+    /// Channel for tab-tagged events from all webviews (titles, page-load
+    /// lifecycle, popup requests, navigation redirects).
+    event_tx: async_channel::Sender<NativeWebViewEvent>,
+    /// Shared WebKit data store for every tab in this pane. Lifetime spans
+    /// the pane (and outlives every wry::WebView built from it — required
+    /// per wry's docs). `None` on wasm.
+    #[cfg(not(target_family = "wasm"))]
+    web_context: Option<SharedWebContext>,
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
@@ -198,13 +250,23 @@ impl BrowserView {
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
-        let (title_tx, title_rx) = async_channel::unbounded::<(TabId, String)>();
+        let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
+
+        #[cfg(not(target_family = "wasm"))]
+        let web_context: Option<SharedWebContext> = {
+            let dir = data_dir::browser_data_dir();
+            // Construct the WebContext even when dir is None — wry handles
+            // the missing-dir case internally with its platform default.
+            Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
+        };
 
         let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             initial_tab_id,
             webview_url_for(model.current_url()),
-            title_tx.clone(),
+            event_tx.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            web_context.clone(),
             true,
         )));
 
@@ -236,7 +298,7 @@ impl BrowserView {
                 view.navigate_to_editor_url(ctx);
             }
         });
-        ctx.spawn_stream_local(title_rx, Self::handle_document_title, |_, _| {});
+        ctx.spawn_stream_local(event_rx, Self::handle_webview_event, |_, _| {});
 
         Self {
             model,
@@ -245,7 +307,9 @@ impl BrowserView {
             pane_configuration,
             focus_handle: None,
             webviews: vec![native_webview],
-            title_tx,
+            event_tx,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
             tab_ui_states,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
@@ -333,16 +397,24 @@ impl BrowserView {
     }
 
     fn new_tab(&mut self, ctx: &mut ViewContext<Self>) {
+        self.open_tab(DEFAULT_BROWSER_URL.to_string(), ctx);
+    }
+
+    /// Open a new in-pane tab loading `url`, making it active. Shared by
+    /// the `NewTab` action and the popup handler (Action 5).
+    fn open_tab(&mut self, url: String, ctx: &mut ViewContext<Self>) {
         // Hide the currently active tab before adding the new one.
         if let Some(prev_active) = self.webviews.get(self.model.active_index()) {
             prev_active.borrow_mut().set_visibility(false);
         }
 
-        let (tab_id, _idx) = self.model.add_tab(DEFAULT_BROWSER_URL);
+        let (tab_id, _idx) = self.model.add_tab(&url);
         let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             tab_id,
-            webview_url_for(DEFAULT_BROWSER_URL),
-            self.title_tx.clone(),
+            webview_url_for(self.model.current_url()),
+            self.event_tx.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            self.web_context.clone(),
             true,
         )));
         self.webviews.push(webview);
@@ -377,7 +449,9 @@ impl BrowserView {
             let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
                 new_tab_id,
                 webview_url_for(DEFAULT_BROWSER_URL),
-                self.title_tx.clone(),
+                self.event_tx.clone(),
+                #[cfg(not(target_family = "wasm"))]
+                self.web_context.clone(),
                 true,
             )));
             self.webviews.push(webview);
@@ -446,14 +520,39 @@ impl BrowserView {
         });
     }
 
-    fn handle_document_title(&mut self, msg: (TabId, String), ctx: &mut ViewContext<Self>) {
-        let (tab_id, title) = msg;
-        if self.model.set_title_for(tab_id, title) {
-            // Only resync the pane title if the active tab's title changed.
-            if self.model.active_tab().id() == tab_id {
-                self.sync_pane_title(ctx);
+    fn handle_webview_event(&mut self, event: NativeWebViewEvent, ctx: &mut ViewContext<Self>) {
+        match event {
+            NativeWebViewEvent::TitleChanged(tab_id, title) => {
+                if self.model.set_title_for(tab_id, title) {
+                    if self.model.active_tab().id() == tab_id {
+                        self.sync_pane_title(ctx);
+                    }
+                    ctx.notify();
+                }
             }
-            ctx.notify();
+            NativeWebViewEvent::LoadingChanged(tab_id, loading) => {
+                if self.model.set_loading_for(tab_id, loading) {
+                    ctx.notify();
+                }
+            }
+            NativeWebViewEvent::NavigationStarted(tab_id, url) => {
+                // Catches HTTP redirects (the user-typed URL was already set
+                // optimistically by `navigate`; same URL → no-op). In-page
+                // `history.pushState` doesn't reach this handler.
+                if self.model.replace_current_url_for(tab_id, url) {
+                    if self.model.active_tab().id() == tab_id {
+                        self.sync_active_tab_into_editor(ctx);
+                        self.sync_pane_title(ctx);
+                    }
+                    ctx.notify();
+                }
+            }
+            NativeWebViewEvent::PopupOpenTab(url) => {
+                self.open_tab(url, ctx);
+            }
+            NativeWebViewEvent::PopupOpenExternal(url) => {
+                ctx.open_url(&url);
+            }
         }
     }
 
@@ -562,8 +661,52 @@ impl BrowserView {
             .finish(),
         );
 
+        let security_indicator = match classify_security(self.model.current_url()) {
+            SecurityState::Secure => Some(
+                ConstrainedBox::new(
+                    Icon::LockClosed
+                        .to_warpui_icon(
+                            blended_colors::text_main(theme, theme.surface_1()).into(),
+                        )
+                        .finish(),
+                )
+                .with_width(SECURITY_ICON_SIZE)
+                .with_height(SECURITY_ICON_SIZE)
+                .finish(),
+            ),
+            SecurityState::Insecure => Some(
+                ConstrainedBox::new(
+                    Icon::AlertTriangle
+                        .to_warpui_icon(theme.accent())
+                        .finish(),
+                )
+                .with_width(SECURITY_ICON_SIZE)
+                .with_height(SECURITY_ICON_SIZE)
+                .finish(),
+            ),
+            SecurityState::Neutral => None,
+        };
+
+        let mut url_row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_main_axis_size(MainAxisSize::Max);
+        if let Some(indicator) = security_indicator {
+            url_row.add_child(
+                Container::new(indicator)
+                    .with_margin_right(6.0)
+                    .finish(),
+            );
+        }
+        url_row.add_child(
+            Expanded::new(
+                1.0,
+                Clipped::new(ChildView::new(&self.url_editor).finish()).finish(),
+            )
+            .finish(),
+        );
+
         let editor = Container::new(
-            ConstrainedBox::new(Clipped::new(ChildView::new(&self.url_editor).finish()).finish())
+            ConstrainedBox::new(url_row.finish())
                 .with_height(URL_BAR_HEIGHT)
                 .with_min_width(URL_BAR_MIN_WIDTH)
                 .finish(),
@@ -608,6 +751,19 @@ impl BrowserView {
         )
         .with_height(TOOLBAR_HEIGHT)
         .finish()
+    }
+
+    fn render_loading_strip(&self, app: &AppContext) -> Box<dyn Element> {
+        let theme = Appearance::as_ref(app).theme();
+        // Always reserve the height so the webview area doesn't reflow when
+        // loading toggles. Background switches to accent while loading.
+        let mut container = Container::new(Flex::row().finish());
+        if self.model.is_loading() {
+            container = container.with_background(theme.accent());
+        }
+        ConstrainedBox::new(container.finish())
+            .with_height(LOADING_STRIP_HEIGHT)
+            .finish()
     }
 
     fn render_tab_strip(&self, app: &AppContext) -> Box<dyn Element> {
@@ -799,6 +955,7 @@ impl View for BrowserView {
             .with_main_axis_size(MainAxisSize::Max)
             .with_child(self.render_tab_strip(app))
             .with_child(self.render_toolbar(app))
+            .with_child(self.render_loading_strip(app))
             .with_child(Expanded::new(1.0, webview_element).finish())
             .finish()
     }
