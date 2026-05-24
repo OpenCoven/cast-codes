@@ -34,6 +34,10 @@ struct EditorMetadata {
 }
 
 impl EditorMetadata {
+    fn shell_quote(value: &str) -> String {
+        format!("'{}'", value.replace('\'', r"'\''"))
+    }
+
     /// Builds a new metadata from a given desktop file path
     ///
     /// Reads in the file at `desktop_file_path`, and Attempts
@@ -102,7 +106,7 @@ impl EditorMetadata {
     {
         let raw_exec = &self.exec;
 
-        let mut iter = raw_exec.chars();
+        let mut iter = raw_exec.chars().peekable();
         let mut processed_exec = String::new();
         while let Some(ch) = iter.next() {
             if ch != '%' {
@@ -112,7 +116,16 @@ impl EditorMetadata {
             let Some(next_char) = iter.next() else {
                 return Err(DesktopExecError::MalformedFieldCode);
             };
+            let strip_double_quotes = matches!(next_char, 'f' | 'F' | 'u' | 'U')
+                && processed_exec.ends_with('"')
+                && iter.peek() == Some(&'"');
+            if strip_double_quotes {
+                processed_exec.pop();
+            }
             field_code_processor(self, &mut processed_exec, next_char);
+            if strip_double_quotes {
+                iter.next();
+            }
         }
 
         let mut command = Command::new("sh");
@@ -134,7 +147,11 @@ impl EditorMetadata {
     fn process_field_code(&self, processed_exec: &mut String, field_code: char, file_path: &Path) {
         match field_code {
             // file path
-            'f' | 'F' => *processed_exec += file_path.to_str().unwrap_or_default(),
+            'f' | 'F' => {
+                if let Some(file_path) = file_path.to_str() {
+                    *processed_exec += &Self::shell_quote(file_path);
+                }
+            }
             // URI
             'u' | 'U' => {
                 // TODO(daprahamian): B/c we are using canonicalize, this will fail
@@ -146,7 +163,7 @@ impl EditorMetadata {
                 // See https://github.com/rust-lang/rust/issues/92750
                 if let Ok(absolute) = file_path.canonicalize() {
                     if let Ok(file_url) = url::Url::from_file_path(absolute) {
-                        *processed_exec += file_url.as_str();
+                        *processed_exec += &Self::shell_quote(file_url.as_str());
                     }
                 }
             }
@@ -206,7 +223,7 @@ impl EditorMetadata {
                             *acc += &format!("--column {column_num} ");
                         }
                     }
-                    *acc += file_path;
+                    *acc += &Self::shell_quote(file_path);
                 }
             }
             other => me.process_field_code(acc, other, file_path),
@@ -227,7 +244,7 @@ impl EditorMetadata {
         self.build_command(|me, acc, field_code| match field_code {
             'f' | 'F' | 'u' | 'U' => {
                 if let Some(file_path) = file_path.to_str() {
-                    *acc += file_path;
+                    *acc += &Self::shell_quote(file_path);
                     if let Some(line_column_number) = line_column_number {
                         *acc += &format!(":{}", line_column_number.line_num);
                         if let Some(column_num) = line_column_number.column_num {
