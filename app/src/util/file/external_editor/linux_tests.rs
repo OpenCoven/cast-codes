@@ -94,12 +94,13 @@ fn test_file_path_substitution() {
     with_files("test_file_path_substitution", data, |desktop, content| {
         let metadata = EditorMetadata::try_new(desktop)?;
         let file_name = content.display().to_string();
+        let quoted_file_name = EditorMetadata::shell_quote(&file_name);
         let result = metadata.build_default_command(&content);
 
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap().get_args().collect::<Vec<_>>(),
-            ["-c", format!("cat {file_name}").as_str()]
+            ["-c", format!("cat {quoted_file_name}").as_str()]
         );
         Ok(())
     });
@@ -113,15 +114,34 @@ fn test_file_path_substitution() {
     with_files("test_file_path_substitution", data, |desktop, content| {
         let metadata = EditorMetadata::try_new(desktop)?;
         let file_name = content.display().to_string();
+        let quoted_file_name = EditorMetadata::shell_quote(&file_name);
         let result = metadata.build_default_command(&content);
 
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap().get_args().collect::<Vec<_>>(),
-            ["-c", format!("cat {file_name}").as_str()]
+            ["-c", format!("cat {quoted_file_name}").as_str()]
         );
         Ok(())
     });
+}
+
+#[test]
+fn test_double_quoted_file_path_substitution_uses_shell_owned_quotes() {
+    let metadata = EditorMetadata {
+        desktop_file_path: PathBuf::from("/tmp/editor.desktop"),
+        exec: r#"cat "%f""#.to_string(),
+        localized_name: None,
+        icon: None,
+    };
+    let content = PathBuf::from("/tmp/$(touch pwn)' file.txt");
+    let result = metadata.build_default_command(&content);
+
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap().get_args().collect::<Vec<_>>(),
+        ["-c", r#"cat '/tmp/$(touch pwn)'\'' file.txt'"#]
+    );
 }
 
 #[test]
@@ -136,13 +156,14 @@ fn test_file_url_substitution() {
         let metadata = EditorMetadata::try_new(desktop)?;
         let file_name = content.display().to_string();
         let expected_file_uri = format!("file://{file_name}");
+        let quoted_file_uri = EditorMetadata::shell_quote(&expected_file_uri);
         let result = metadata.build_default_command(&content);
 
         assert!(result.is_ok());
 
         assert_eq!(
             result.unwrap().get_args().collect::<Vec<_>>(),
-            ["-c", &format!("open {expected_file_uri}")]
+            ["-c", &format!("open {quoted_file_uri}")]
         );
         Ok(())
     });
@@ -157,13 +178,14 @@ fn test_file_url_substitution() {
         let metadata = EditorMetadata::try_new(desktop)?;
         let file_name = content.display().to_string();
         let expected_file_uri = format!("file://{file_name}");
+        let quoted_file_uri = EditorMetadata::shell_quote(&expected_file_uri);
         let result = metadata.build_default_command(&content);
 
         assert!(result.is_ok());
 
         assert_eq!(
             result.unwrap().get_args().collect::<Vec<_>>(),
-            ["-c", &format!("open {expected_file_uri}")]
+            ["-c", &format!("open {quoted_file_uri}")]
         );
         Ok(())
     });
@@ -209,13 +231,14 @@ fn test_jetbrains_command_no_line_numbers() {
         |desktop, content| {
             let metadata = EditorMetadata::try_new(desktop)?;
             let file_path = content.display().to_string();
+            let quoted_file_path = EditorMetadata::shell_quote(&file_path);
             let result = metadata.build_jetbrains_command(&content, None);
 
             assert!(result.is_ok());
 
             assert_eq!(
                 result.unwrap().get_args().collect::<Vec<_>>(),
-                ["-c", &format!("/snap/bin/phpstorm {file_path}")]
+                ["-c", &format!("/snap/bin/phpstorm {quoted_file_path}")]
             );
             Ok(())
         },
@@ -237,6 +260,7 @@ fn test_jetbrains_command_line_numbers() {
         |desktop, content| {
             let metadata = EditorMetadata::try_new(desktop)?;
             let file_path = content.display().to_string();
+            let quoted_file_path = EditorMetadata::shell_quote(&file_path);
             let result = metadata.build_jetbrains_command(
                 &content,
                 Some(LineAndColumnArg {
@@ -249,7 +273,10 @@ fn test_jetbrains_command_line_numbers() {
 
             assert_eq!(
                 result.unwrap().get_args().collect::<Vec<_>>(),
-                ["-c", &format!("/snap/bin/phpstorm --line 42 {file_path}")]
+                [
+                    "-c",
+                    &format!("/snap/bin/phpstorm --line 42 {quoted_file_path}")
+                ]
             );
             Ok(())
         },
@@ -270,6 +297,7 @@ fn test_jetbrains_command_line_and_col_numbers() {
         |desktop, content| {
             let metadata = EditorMetadata::try_new(desktop)?;
             let file_path = content.display().to_string();
+            let quoted_file_path = EditorMetadata::shell_quote(&file_path);
             let result = metadata.build_jetbrains_command(
                 &content,
                 Some(LineAndColumnArg {
@@ -284,7 +312,7 @@ fn test_jetbrains_command_line_and_col_numbers() {
                 result.unwrap().get_args().collect::<Vec<_>>(),
                 [
                     "-c",
-                    &format!("/snap/bin/phpstorm --line 42 --column 25 {file_path}")
+                    &format!("/snap/bin/phpstorm --line 42 --column 25 {quoted_file_path}")
                 ]
             );
             Ok(())
@@ -306,6 +334,7 @@ fn test_sublime_command_no_line_numbers() {
         |desktop, content| {
             let metadata = EditorMetadata::try_new(desktop)?;
             let file_path = content.display().to_string();
+            let quoted_file_path = EditorMetadata::shell_quote(&file_path);
             let result: Result<command::blocking::Command, DesktopExecError> =
                 metadata.build_sublime_command(&content, None);
 
@@ -313,7 +342,7 @@ fn test_sublime_command_no_line_numbers() {
 
             assert_eq!(
                 result.unwrap().get_args().collect::<Vec<_>>(),
-                ["-c", &format!("/snap/bin/subl {file_path}")]
+                ["-c", &format!("/snap/bin/subl {quoted_file_path}")]
             );
             Ok(())
         },
@@ -334,6 +363,7 @@ fn test_sublime_command_line_numbers() {
         |desktop, content| {
             let metadata = EditorMetadata::try_new(desktop)?;
             let file_path = content.display().to_string();
+            let quoted_file_path = EditorMetadata::shell_quote(&file_path);
             let result = metadata.build_sublime_command(
                 &content,
                 Some(LineAndColumnArg {
@@ -346,7 +376,7 @@ fn test_sublime_command_line_numbers() {
 
             assert_eq!(
                 result.unwrap().get_args().collect::<Vec<_>>(),
-                ["-c", &format!("/snap/bin/subl {file_path}:42")]
+                ["-c", &format!("/snap/bin/subl {quoted_file_path}:42")]
             );
             Ok(())
         },
@@ -367,6 +397,7 @@ fn test_sublime_command_line_and_col_numbers() {
         |desktop, content| {
             let metadata = EditorMetadata::try_new(desktop)?;
             let file_path = content.display().to_string();
+            let quoted_file_path = EditorMetadata::shell_quote(&file_path);
             let result = metadata.build_sublime_command(
                 &content,
                 Some(LineAndColumnArg {
@@ -379,7 +410,7 @@ fn test_sublime_command_line_and_col_numbers() {
 
             assert_eq!(
                 result.unwrap().get_args().collect::<Vec<_>>(),
-                ["-c", &format!("/snap/bin/subl {file_path}:42:25")]
+                ["-c", &format!("/snap/bin/subl {quoted_file_path}:42:25")]
             );
             Ok(())
         },

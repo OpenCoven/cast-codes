@@ -106,7 +106,7 @@ impl EditorMetadata {
     {
         let raw_exec = &self.exec;
 
-        let mut iter = raw_exec.chars();
+        let mut iter = raw_exec.chars().peekable();
         let mut processed_exec = String::new();
         while let Some(ch) = iter.next() {
             if ch != '%' {
@@ -116,7 +116,16 @@ impl EditorMetadata {
             let Some(next_char) = iter.next() else {
                 return Err(DesktopExecError::MalformedFieldCode);
             };
+            let strip_double_quotes = matches!(next_char, 'f' | 'F' | 'u' | 'U')
+                && processed_exec.ends_with('"')
+                && iter.peek() == Some(&'"');
+            if strip_double_quotes {
+                processed_exec.pop();
+            }
             field_code_processor(self, &mut processed_exec, next_char);
+            if strip_double_quotes {
+                iter.next();
+            }
         }
 
         let mut command = Command::new("sh");
