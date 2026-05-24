@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::{cell::RefCell, rc::Rc};
 
+use pathfinder_color::ColorU;
 use pathfinder_geometry::{
     rect::RectF,
     vector::{vec2f, Vector2F},
@@ -109,6 +110,7 @@ const TAB_MIN_WIDTH: f32 = 80.0;
 const TAB_HEIGHT: f32 = 26.0;
 const TAB_CHIP_PADDING: f32 = 8.0;
 const TAB_CLOSE_BUTTON_SIZE: f32 = 16.0;
+const TAB_CLOSE_BUTTON_GAP: f32 = 4.0;
 const TOOLBAR_HORIZONTAL_PADDING: f32 = 10.0;
 const TOOLBAR_BUTTON_GAP: f32 = 6.0;
 const TAB_GAP: f32 = 2.0;
@@ -120,6 +122,90 @@ const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
 const LOADING_STRIP_HEIGHT: f32 = 2.0;
 /// Size of the SSL/security indicator rendered inside the URL bar.
 const SECURITY_ICON_SIZE: f32 = 14.0;
+
+/// Size of the per-tab icon (letter circle or globe) rendered in the
+/// left of the tab chip.
+const TAB_ICON_SIZE: f32 = 14.0;
+const TAB_ICON_GAP: f32 = 6.0;
+
+/// Palette for letter-circle tab icons. Hand-picked saturation +
+/// lightness so white text reads on every entry. Indexed by hashing
+/// the hostname, so the same site gets the same color across sessions.
+const TAB_ICON_PALETTE: &[ColorU] = &[
+    ColorU { r: 0xe5, g: 0x5a, b: 0x5a, a: 0xff }, // red
+    ColorU { r: 0xff, g: 0x9f, b: 0x40, a: 0xff }, // orange
+    ColorU { r: 0xe6, g: 0xb4, b: 0x3c, a: 0xff }, // amber
+    ColorU { r: 0x4e, g: 0xc9, b: 0x76, a: 0xff }, // green
+    ColorU { r: 0x37, g: 0xb3, b: 0xc3, a: 0xff }, // teal
+    ColorU { r: 0x49, g: 0x91, b: 0xe5, a: 0xff }, // blue
+    ColorU { r: 0x7c, g: 0x77, b: 0xe5, a: 0xff }, // indigo
+    ColorU { r: 0x9b, g: 0x59, b: 0xb6, a: 0xff }, // purple
+    ColorU { r: 0xd1, g: 0x6a, b: 0xa9, a: 0xff }, // pink
+    ColorU { r: 0x88, g: 0x8b, b: 0x9a, a: 0xff }, // slate
+];
+
+/// Per-tab icon decision: render a colored letter circle (for normal
+/// http(s) URLs) or fall back to the globe icon for special schemes
+/// and unparseable URLs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TabIcon {
+    /// Filled circle with `letter` centered, painted in `color`.
+    Letter { letter: char, color: ColorU },
+    /// Plain globe — same affordance as the pane header icon.
+    Globe,
+}
+
+fn tab_icon_for_url(raw_url: &str) -> TabIcon {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+        return TabIcon::Globe;
+    }
+    let parsed = match url::Url::parse(trimmed) {
+        Ok(u) => u,
+        Err(_) => return TabIcon::Globe,
+    };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return TabIcon::Globe;
+    }
+    let host = match parsed.host() {
+        Some(url::Host::Domain(host)) => host,
+        Some(url::Host::Ipv4(_) | url::Host::Ipv6(_)) | None => return TabIcon::Globe,
+    };
+    // Strip a leading `www.` so `www.example.com` and `example.com`
+    // render identically — the user perceives them as the same site.
+    let key = host.strip_prefix("www.").unwrap_or(host);
+    let Some(letter) = host_initial(key) else {
+        return TabIcon::Globe;
+    };
+    let idx = (fnv1a32(key) as usize) % TAB_ICON_PALETTE.len();
+    TabIcon::Letter {
+        letter,
+        color: TAB_ICON_PALETTE[idx],
+    }
+}
+
+/// First ASCII alphanumeric character of the first DNS label, uppercased.
+/// `news.ycombinator.com` → `N`. Returns `None` for hosts with no
+/// ASCII-alphanumeric content.
+fn host_initial(host_no_www: &str) -> Option<char> {
+    let label = host_no_www.split('.').next().unwrap_or(host_no_www);
+    label
+        .chars()
+        .find(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_uppercase())
+}
+
+/// FNV-1a 32-bit hash. Used to pick a stable color from
+/// `TAB_ICON_PALETTE` for a given hostname. Deterministic and tiny — no
+/// std::hash::DefaultHasher randomization to worry about.
+fn fnv1a32(input: &str) -> u32 {
+    let mut h: u32 = 0x811c9dc5;
+    for byte in input.bytes() {
+        h ^= byte as u32;
+        h = h.wrapping_mul(0x01000193);
+    }
+    h
+}
 
 /// Time constant for the indeterminate progress ramp. The fill follows
 /// `0.9 * (1 - exp(-elapsed / tau))`, so it reaches ~57% at one tau,
@@ -1183,10 +1269,11 @@ impl BrowserView {
             .with_main_axis_size(MainAxisSize::Max);
 
         for (idx, tab) in self.model.tabs().iter().enumerate() {
-            let title = tab.display_title().to_string();
+            let title = tab.display_title();
+            let url = tab.current_url();
             let tab_id = tab.id();
             let ui_state = self.tab_ui_states.get(&tab_id).cloned().unwrap_or_default();
-            let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
+            let chip = self.render_tab_chip(idx, tab_id, title, url, idx == active, ui_state, app);
             let chip_with_margin = if idx == 0 {
                 chip
             } else {
@@ -1218,6 +1305,7 @@ impl BrowserView {
         idx: usize,
         _tab_id: TabId,
         title: &str,
+        url: &str,
         is_active: bool,
         ui_state: TabUiState,
         app: &AppContext,
@@ -1259,20 +1347,68 @@ impl BrowserView {
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
 
+        // Tab icon: a colored letter circle for known http(s) hosts, or
+        // a globe glyph for special schemes / unparseable URLs. Real
+        // favicons (fetched via injected JS + image cache) are a
+        // follow-up — this gives visual variety without the network /
+        // image-decode complexity.
+        let icon_element: Box<dyn Element> = match tab_icon_for_url(url) {
+            TabIcon::Letter { letter, color } => {
+                let glyph = Container::new(
+                    Align::new(
+                        Text::new_inline(letter.to_string(), font_family.clone(), 9.0)
+                            .with_color(ColorU::new(255, 255, 255, 255))
+                            .finish(),
+                    )
+                    .finish(),
+                )
+                .with_background(color)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(TAB_ICON_SIZE / 2.0)))
+                .finish();
+                ConstrainedBox::new(glyph)
+                    .with_width(TAB_ICON_SIZE)
+                    .with_height(TAB_ICON_SIZE)
+                    .finish()
+            }
+            TabIcon::Globe => {
+                ConstrainedBox::new(Icon::Globe.to_warpui_icon(chip_text_color.into()).finish())
+                    .with_width(TAB_ICON_SIZE)
+                    .with_height(TAB_ICON_SIZE)
+                    .finish()
+            }
+        };
+
+        // Subtract the icon's footprint from the title's max width so
+        // the chip's MAX_WIDTH budget stays the same.
+        let title_max_width = TAB_MAX_WIDTH
+            - TAB_CLOSE_BUTTON_SIZE
+            - TAB_CHIP_PADDING * 2.0
+            - TAB_CLOSE_BUTTON_GAP
+            - TAB_ICON_SIZE
+            - TAB_ICON_GAP;
         let title_element = ConstrainedBox::new(
             Text::new_inline(title_text, font_family, 12.0)
                 .with_color(chip_text_color.into())
                 .with_clip(ClipConfig::end())
                 .finish(),
         )
-        .with_max_width(TAB_MAX_WIDTH - TAB_CLOSE_BUTTON_SIZE - TAB_CHIP_PADDING * 2.0 - 4.0)
+        .with_max_width(title_max_width.max(20.0))
         .finish();
 
         let row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Min)
-            .with_child(Expanded::new(1.0, title_element).finish())
-            .with_child(Container::new(close_button).with_margin_left(4.0).finish())
+            .with_child(icon_element)
+            .with_child(
+                Container::new(Expanded::new(1.0, title_element).finish())
+                    .with_margin_left(TAB_ICON_GAP)
+                    .finish(),
+            )
+            .with_child(
+                Container::new(close_button)
+                    .with_margin_left(TAB_CLOSE_BUTTON_GAP)
+                    .finish(),
+            )
             .finish();
 
         let chip_mouse = ui_state.chip_mouse.clone();
@@ -1482,7 +1618,10 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_security, LoadingStrip, LoadingStripPhase, SecurityState};
+    use super::{
+        classify_security, fnv1a32, host_initial, tab_icon_for_url, LoadingStrip,
+        LoadingStripPhase, SecurityState, TabIcon, TAB_ICON_PALETTE,
+    };
     use std::time::{Duration, Instant};
 
     #[test]
@@ -1550,6 +1689,121 @@ mod tests {
     #[test]
     fn empty_input_is_neutral() {
         assert_eq!(classify_security(""), SecurityState::Neutral);
+    }
+
+    #[test]
+    fn host_initial_strips_to_first_alphanumeric() {
+        assert_eq!(host_initial("github.com"), Some('G'));
+        assert_eq!(host_initial("YCombinator.com"), Some('Y'));
+        assert_eq!(host_initial("9to5mac"), Some('9'));
+        assert_eq!(host_initial("x"), Some('X'));
+        // Multi-label hosts use the FIRST label (www stripping is the
+        // caller's job).
+        assert_eq!(host_initial("api.openai.com"), Some('A'));
+    }
+
+    #[test]
+    fn host_initial_returns_none_when_no_ascii_alnum() {
+        assert_eq!(host_initial(""), None);
+        assert_eq!(host_initial("..."), None);
+        // IDN label with no ASCII letters anywhere → None (globe).
+        assert_eq!(host_initial("中文.com"), None);
+    }
+
+    #[test]
+    fn host_initial_skips_leading_non_ascii_to_find_letter() {
+        // `über` starts with `ü` (non-ASCII) but `b` is the first
+        // usable initial. Documents the "first ASCII alnum found"
+        // contract, not "first character if ASCII".
+        assert_eq!(host_initial("über"), Some('B'));
+    }
+
+    #[test]
+    fn fnv1a_is_deterministic() {
+        let a = fnv1a32("github.com");
+        let b = fnv1a32("github.com");
+        assert_eq!(a, b, "FNV-1a must be deterministic");
+        // Sanity check: different input → likely different hash.
+        assert_ne!(fnv1a32("github.com"), fnv1a32("gitlab.com"));
+    }
+
+    #[test]
+    fn tab_icon_for_url_special_schemes_are_globe() {
+        for u in [
+            "",
+            "about:home",
+            "ABOUT:home",
+            "about:blank",
+            "file:///tmp/x.html",
+            "FILE:///tmp/x.html",
+            "data:text/html,<h1>x</h1>",
+            "castcodes://about",
+            "CASTCODES://about",
+        ] {
+            assert_eq!(
+                tab_icon_for_url(u),
+                TabIcon::Globe,
+                "expected Globe for {u}"
+            );
+        }
+    }
+
+    #[test]
+    fn tab_icon_for_url_unparseable_falls_back_to_globe() {
+        // `:` without scheme content is not a valid URL.
+        assert_eq!(tab_icon_for_url("not a url"), TabIcon::Globe);
+        assert_eq!(tab_icon_for_url("http://"), TabIcon::Globe);
+    }
+
+    #[test]
+    fn tab_icon_for_url_https_returns_letter() {
+        let icon = tab_icon_for_url("https://news.ycombinator.com");
+        match icon {
+            TabIcon::Letter { letter, .. } => assert_eq!(letter, 'N'),
+            TabIcon::Globe => panic!("expected Letter, got Globe"),
+        }
+    }
+
+    #[test]
+    fn tab_icon_for_url_ip_hosts_are_globe() {
+        for u in ["http://127.0.0.1", "https://[::1]"] {
+            assert_eq!(
+                tab_icon_for_url(u),
+                TabIcon::Globe,
+                "expected Globe for {u}"
+            );
+        }
+    }
+
+    #[test]
+    fn tab_icon_for_url_strips_www_for_color_and_letter() {
+        // `github.com` and `www.github.com` should produce the same
+        // (letter, color) pair — same site from a user perspective.
+        let a = tab_icon_for_url("https://github.com");
+        let b = tab_icon_for_url("https://www.github.com");
+        assert_eq!(a, b, "www-stripping should be idempotent");
+    }
+
+    #[test]
+    fn tab_icon_for_url_color_is_in_palette() {
+        // Whatever color we pick must be one of the palette entries —
+        // catches an indexing bug that would produce off-palette colors.
+        match tab_icon_for_url("https://example.com") {
+            TabIcon::Letter { color, .. } => {
+                assert!(
+                    TAB_ICON_PALETTE.contains(&color),
+                    "color {color:?} not in palette"
+                );
+            }
+            TabIcon::Globe => panic!("expected Letter for https://example.com"),
+        }
+    }
+
+    #[test]
+    fn tab_icon_for_url_color_is_stable_across_calls() {
+        let a = tab_icon_for_url("https://example.com");
+        let b = tab_icon_for_url("https://example.com");
+        assert_eq!(a, b, "icon decision must be deterministic");
     }
 
     #[test]
