@@ -25,6 +25,8 @@ enum InlineToken {
         title: Option<String>,
         children: Vec<InlineToken>,
     },
+    // fields will be consumed when image rendering ships
+    #[allow(dead_code)]
     Image {
         alt: String,
         url: String,
@@ -147,6 +149,8 @@ fn parse_inline_tokens(text: &str) -> Vec<InlineToken> {
     tokens
 }
 
+// branches kept separate to mirror UTF-8 spec table structure for readability
+#[allow(clippy::if_same_then_else)]
 fn char_len_at(bytes: &[u8], i: usize) -> usize {
     let b = bytes[i];
     if b < 0x80 {
