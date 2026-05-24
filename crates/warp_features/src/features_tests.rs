@@ -1,7 +1,7 @@
 use super::*;
 
-#[test]
 #[cfg(feature = "test-util")]
+#[test]
 fn worktree_manager_flag_round_trip() {
     let flag = FeatureFlag::WorktreeManager;
     let _guard = flag.override_enabled(true);
