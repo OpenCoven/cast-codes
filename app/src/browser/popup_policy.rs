@@ -73,17 +73,13 @@ pub fn decide(raw_url: &str) -> Decision {
 }
 
 fn is_scheme_eq(input: &str, scheme: &str) -> bool {
-    let prefix_len = scheme.len() + 1; // include the trailing ':'
-    if input.len() < prefix_len {
+    let Some((head_scheme, _rest)) = input.split_once(':') else {
         return false;
-    }
-    let (head, rest) = input.split_at(prefix_len);
-    let (head_scheme, colon) = head.split_at(scheme.len());
-    colon == ":" && head_scheme.eq_ignore_ascii_case(scheme) && {
-        // Either scheme:// or scheme:foo — both fine.
-        let _ = rest;
-        true
-    }
+    };
+
+    // Either scheme:// or scheme:foo — both fine as long as the scheme
+    // prefix matches exactly, ignoring ASCII case.
+    head_scheme.eq_ignore_ascii_case(scheme)
 }
 
 fn has_scheme(input: &str) -> bool {
