@@ -1,0 +1,8 @@
+worktree /work/myrepo
+HEAD abcdef0123456789abcdef0123456789abcdef01
+branch refs/heads/main
+
+worktree /work/myrepo/.castcodes/worktrees/locked
+HEAD 1111111111111111111111111111111111111111
+branch refs/heads/locked-branch
+locked release branch

@@ -1,0 +1,7 @@
+worktree /work/myrepo
+HEAD abcdef0123456789abcdef0123456789abcdef01
+branch refs/heads/main
+
+worktree /work/myrepo/.castcodes/worktrees/detached
+HEAD 3333333333333333333333333333333333333333
+detached

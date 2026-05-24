@@ -221,7 +221,10 @@ fn auto_launch_request(
     request.model_id = config.model_id.clone();
     request.harness_type = config.harness_type.clone();
     match (&mut request.execution_mode, &config.execution_mode) {
-        (RunAgentsExecutionMode::Local, ai::agent::orchestration_config::OrchestrationExecutionMode::Local) => {}
+        (
+            RunAgentsExecutionMode::Local,
+            ai::agent::orchestration_config::OrchestrationExecutionMode::Local,
+        ) => {}
         (
             RunAgentsExecutionMode::Remote {
                 environment_id,

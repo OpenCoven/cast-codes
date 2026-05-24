@@ -157,10 +157,7 @@ impl Harness {
     pub fn parse_local_child_harness(value: &str) -> Option<Self> {
         match Self::parse_orchestration_harness(value) {
             Some(harness @ (Self::Claude | Self::OpenCode)) => Some(harness),
-            Some(Self::Oz)
-            | Some(Self::Gemini)
-            | Some(Self::Codex)
-            | Some(Self::Unknown)
+            Some(Self::Oz) | Some(Self::Gemini) | Some(Self::Codex) | Some(Self::Unknown)
             | None => None,
         }
     }

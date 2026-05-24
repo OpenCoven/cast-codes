@@ -76,6 +76,69 @@ pub async fn run_git_command_with_env(
     Err(anyhow!("Not supported on wasm"))
 }
 
+/// Detects the per-worktree git dir and the shared common dir for `cwd`.
+///
+/// Returns `(git_dir, common_dir)` where:
+/// - `git_dir`   is the worktree-specific `.git`-dir (e.g. `.git/worktrees/feature-a`)
+/// - `common_dir` is the main repo `.git`-dir (e.g. `.git`)
+///
+/// When `git_dir == common_dir` the CWD is in the main worktree.
+/// Returns `None` when `cwd` is not inside a git repository or `git` is unavailable.
+#[cfg(feature = "local_fs")]
+pub fn detect_git_dirs_sync(cwd: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let out = command::blocking::Command::new("git")
+        .args(["rev-parse", "--git-dir", "--git-common-dir"])
+        .current_dir(cwd)
+        .stdout(command::Stdio::piped())
+        .stderr(command::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    let mut lines = s.lines();
+    let git_dir = std::path::PathBuf::from(lines.next()?);
+    let common_dir = std::path::PathBuf::from(lines.next()?);
+    let resolve = |p: std::path::PathBuf| {
+        if p.is_absolute() {
+            p
+        } else {
+            cwd.join(p)
+        }
+    };
+    Some((resolve(git_dir), resolve(common_dir)))
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub fn detect_git_dirs_sync(_cwd: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    None
+}
+
+/// Resolve the absolute path of the git repository root containing `cwd`.
+/// Returns `None` if `cwd` is not inside any git repository.
+#[cfg(feature = "local_fs")]
+pub fn detect_repo_root_sync(cwd: &Path) -> Option<std::path::PathBuf> {
+    let out = command::blocking::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(cwd)
+        .stdout(command::Stdio::piped())
+        .stderr(command::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    let line = s.lines().find(|l| !l.trim().is_empty())?;
+    Some(std::path::PathBuf::from(line.trim()))
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub fn detect_repo_root_sync(_cwd: &Path) -> Option<std::path::PathBuf> {
+    None
+}
+
 /// Returns the set of local branch names for the repo at `repo_path`.
 /// Uses a synchronous subprocess call — suitable for call sites in
 /// synchronous view handlers where the result is needed immediately.

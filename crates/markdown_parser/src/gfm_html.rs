@@ -9,21 +9,44 @@
 //! `html_parser::parse_html_block_lines`, which both use `html5ever`.
 
 pub(crate) const PHRASING_SAFE_TAGS: &[&str] = &[
-    "a", "b", "br", "code", "del", "em", "i", "ins", "kbd",
-    "mark", "q", "s", "small", "span", "strong", "sub", "sup", "u",
+    "a", "b", "br", "code", "del", "em", "i", "ins", "kbd", "mark", "q", "s", "small", "span",
+    "strong", "sub", "sup", "u",
 ];
 
 pub(crate) const BLOCK_SAFE_TAGS: &[&str] = &[
-    "blockquote", "caption", "dd", "details", "div", "dl", "dt",
-    "h1", "h2", "h3", "h4", "h5", "h6",
-    "hr", "img", "li", "ol", "p", "pre", "summary",
-    "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+    "blockquote",
+    "caption",
+    "dd",
+    "details",
+    "div",
+    "dl",
+    "dt",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "img",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "summary",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "ul",
 ];
 
 pub(crate) const STRIPPED_TAGS: &[&str] = &[
-    "applet", "body", "button", "embed", "form", "frame", "frameset",
-    "head", "html", "iframe", "input", "link", "meta", "noscript",
-    "object", "script", "style", "title",
+    "applet", "body", "button", "embed", "form", "frame", "frameset", "head", "html", "iframe",
+    "input", "link", "meta", "noscript", "object", "script", "style", "title",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +92,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
             .map(|i| input.len() - after_open.len() + i + 3)
             .unwrap_or(input.len());
         return Some((
-            HtmlSpan { raw: &input[..end], tag: "", kind: HtmlSpanKind::Stripped },
+            HtmlSpan {
+                raw: &input[..end],
+                tag: "",
+                kind: HtmlSpanKind::Stripped,
+            },
             &input[end..],
         ));
     }
@@ -91,7 +118,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
         let close_offset = input[idx..].find('>')?;
         let after = idx + close_offset + 1;
         return Some((
-            HtmlSpan { raw: &input[..after], tag, kind: classify(tag) },
+            HtmlSpan {
+                raw: &input[..after],
+                tag,
+                kind: classify(tag),
+            },
             &input[after..],
         ));
     }
@@ -121,7 +152,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
     let void_tags = ["br", "hr", "img", "input", "meta", "link"];
     if self_closing || void_tags.iter().any(|t| tag.eq_ignore_ascii_case(t)) {
         return Some((
-            HtmlSpan { raw: &input[..idx], tag, kind: classify(tag) },
+            HtmlSpan {
+                raw: &input[..idx],
+                tag,
+                kind: classify(tag),
+            },
             &input[idx..],
         ));
     }
@@ -129,7 +164,9 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
     let mut depth = 1usize;
     let mut scan = idx;
     while scan < bytes.len() {
-        let Some(rel) = input[scan..].find('<') else { break };
+        let Some(rel) = input[scan..].find('<') else {
+            break;
+        };
         scan += rel;
         if input[scan..].starts_with("<!--") {
             scan = match input[scan + 4..].find("-->") {
@@ -157,7 +194,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
                 depth -= 1;
                 if depth == 0 {
                     return Some((
-                        HtmlSpan { raw: &input[..after_tag], tag, kind: classify(tag) },
+                        HtmlSpan {
+                            raw: &input[..after_tag],
+                            tag,
+                            kind: classify(tag),
+                        },
                         &input[after_tag..],
                     ));
                 }
@@ -169,7 +210,11 @@ pub(crate) fn try_lex_html_span(input: &str) -> Option<(HtmlSpan<'_>, &str)> {
     }
     // No matching close; treat the open tag alone as the span.
     Some((
-        HtmlSpan { raw: &input[..idx], tag, kind: classify(tag) },
+        HtmlSpan {
+            raw: &input[..idx],
+            tag,
+            kind: classify(tag),
+        },
         &input[idx..],
     ))
 }

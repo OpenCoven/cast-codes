@@ -2772,7 +2772,8 @@ fn build_vertical_tabs_summary_data(
                 if let (Some(repo_path), Some(branch_name)) = (
                     terminal_view.current_repo_path().cloned(),
                     terminal_view
-                        .current_git_branch(app)
+                        .current_git_label(app)
+                        .map(|l| l.render())
                         .and_then(|branch| normalize_summary_text(&branch)),
                 ) {
                     branch_entries.push(VerticalTabsSummaryBranchEntry {
@@ -3024,7 +3025,7 @@ fn terminal_pane_search_text_fragments(
     terminal_search_text_fragments(
         primary_text,
         working_directory,
-        terminal_view.current_git_branch(app),
+        terminal_view.current_git_label(app).map(|l| l.render()),
         terminal_kind_badge_label(agent_text.is_oz_agent, agent_text.cli_agent),
         pull_request_label,
         terminal_view.current_diff_line_changes(app),
@@ -3277,7 +3278,7 @@ fn render_terminal_row_content(
         .filter(|wd| !wd.trim().is_empty())
         .unwrap_or_else(|| title_text.clone());
 
-    let git_branch = terminal_view.current_git_branch(app);
+    let git_branch = terminal_view.current_git_label(app).map(|l| l.render());
 
     // Line 1 and line 2 depend on the "Pane title as" setting.
     // Line 3 (metadata) shows context data on the left + badges on the right.
@@ -5599,7 +5600,7 @@ fn render_terminal_detail_section(
     let theme = appearance.theme();
     let text_colors = detail_sidecar_text_colors(theme);
     let working_directory = terminal_view.display_working_directory(app);
-    let git_branch = terminal_view.current_git_branch(app);
+    let git_branch = terminal_view.current_git_label(app).map(|l| l.render());
     let cli_agent_session = CLIAgentSessionsModel::as_ref(app).session(terminal_view.id());
     let agent_text = terminal_agent_text(terminal_view, app);
     let (conversation_display_title, cli_agent_title) =
@@ -6061,7 +6062,7 @@ fn render_compact_pane_row(props: PaneProps<'_>, app: &AppContext) -> Box<dyn El
         if let TypedPane::Terminal(terminal_pane) = &props.typed {
             let terminal_view = terminal_pane.terminal_view(app).as_ref(app);
             let terminal_title = terminal_view.terminal_title_from_shell();
-            let git_branch = terminal_view.current_git_branch(app);
+            let git_branch = terminal_view.current_git_label(app).map(|l| l.render());
             let working_directory = terminal_view
                 .display_working_directory(app)
                 .filter(|wd| !wd.trim().is_empty());

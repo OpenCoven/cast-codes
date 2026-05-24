@@ -957,6 +957,34 @@ pub fn init(app: &mut AppContext) {
     .with_group(bindings::BindingGroup::Settings.as_str())
     .with_context_predicate(id!("Workspace"))]);
 
+    // Worktree Manager palette entries — only visible when the feature flag is on.
+    app.register_editable_bindings([
+        EditableBinding::new(
+            "workspace:open_new_worktree_modal",
+            "Open: New worktree\u{2026}",
+            WorkspaceAction::OpenNewWorktreeModal,
+        )
+        .with_enabled(|| FeatureFlag::WorktreeManager.is_enabled())
+        .with_group(bindings::BindingGroup::Settings.as_str())
+        .with_context_predicate(id!("Workspace")),
+        EditableBinding::new(
+            "workspace:open_worktree_picker",
+            "Open: Switch to worktree\u{2026}",
+            WorkspaceAction::OpenWorktreePicker,
+        )
+        .with_enabled(|| FeatureFlag::WorktreeManager.is_enabled())
+        .with_group(bindings::BindingGroup::Settings.as_str())
+        .with_context_predicate(id!("Workspace")),
+        EditableBinding::new(
+            "workspace:open_worktree_remove_stub",
+            "Worktree: Remove\u{2026} (coming soon)",
+            WorkspaceAction::OpenWorktreeRemoveStub,
+        )
+        .with_enabled(|| FeatureFlag::WorktreeManager.is_enabled())
+        .with_group(bindings::BindingGroup::Settings.as_str())
+        .with_context_predicate(id!("Workspace")),
+    ]);
+
     app.register_editable_bindings([
         EditableBinding::new(
             "workspace:terminate_app",

@@ -1,12 +1,16 @@
 use super::*;
-use crate::{parse_markdown};
+use crate::parse_markdown;
 
 #[test]
 fn rewrite_single_reference_appends_section() {
-    let parsed = parse_markdown("Some claim[^x].\n\n[^x]: Because reasons.\n")
-        .expect("parse");
+    let parsed = parse_markdown("Some claim[^x].\n\n[^x]: Because reasons.\n").expect("parse");
     // Structural assertions:
-    assert!(parsed.lines.iter().any(|l| matches!(l, FormattedTextLine::HorizontalRule)));
+    assert!(
+        parsed
+            .lines
+            .iter()
+            .any(|l| matches!(l, FormattedTextLine::HorizontalRule))
+    );
     let has_back_ref = parsed
         .lines
         .iter()
@@ -15,7 +19,10 @@ fn rewrite_single_reference_appends_section() {
             _ => None,
         })
         .flatten()
-        .any(|f| f.text == " ↩" && matches!(&f.styles.hyperlink, Some(Hyperlink::Url(u)) if u.contains("fnref")));
+        .any(|f| {
+            f.text == " ↩"
+                && matches!(&f.styles.hyperlink, Some(Hyperlink::Url(u)) if u.contains("fnref"))
+        });
     assert!(has_back_ref, "expected back-reference fragment");
     // The reference itself is now a hyperlink "1"
     let reference_hyperlink_present = parsed
@@ -26,14 +33,21 @@ fn rewrite_single_reference_appends_section() {
             _ => None,
         })
         .flatten()
-        .any(|f| f.text == "1" && matches!(&f.styles.hyperlink, Some(Hyperlink::Url(u)) if u == "#fn-x"));
+        .any(|f| {
+            f.text == "1" && matches!(&f.styles.hyperlink, Some(Hyperlink::Url(u)) if u == "#fn-x")
+        });
     assert!(reference_hyperlink_present, "expected #fn-x reference");
 }
 
 #[test]
 fn unused_definition_dropped() {
     let parsed = parse_markdown("Plain text.\n\n[^never]: Unused.\n").expect("parse");
-    assert!(parsed.lines.iter().all(|l| !matches!(l, FormattedTextLine::HorizontalRule)));
+    assert!(
+        parsed
+            .lines
+            .iter()
+            .all(|l| !matches!(l, FormattedTextLine::HorizontalRule))
+    );
 }
 
 #[test]
@@ -43,11 +57,16 @@ fn undefined_reference_passes_through() {
         .lines
         .iter()
         .filter_map(|line| match line {
-            FormattedTextLine::Line(frags) => Some(frags.iter().map(|f| f.text.clone()).collect::<String>()),
+            FormattedTextLine::Line(frags) => {
+                Some(frags.iter().map(|f| f.text.clone()).collect::<String>())
+            }
             _ => None,
         })
         .collect();
-    assert!(joined.contains("[^missing]"), "expected literal pass-through: {joined:?}");
+    assert!(
+        joined.contains("[^missing]"),
+        "expected literal pass-through: {joined:?}"
+    );
 }
 
 #[test]

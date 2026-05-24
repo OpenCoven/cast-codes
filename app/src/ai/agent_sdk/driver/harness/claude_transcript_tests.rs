@@ -166,7 +166,6 @@ fn write_envelope_round_trip() {
     assert_eq!(decoded, original);
 }
 
-
 #[test]
 fn write_envelope_rejects_path_traversal_in_todo_stem() {
     let tmp = TempDir::new().unwrap();
