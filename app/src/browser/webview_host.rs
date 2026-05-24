@@ -9,6 +9,8 @@ use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
 #[cfg(not(target_family = "wasm"))]
+use super::dialogs;
+#[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
 #[cfg(not(target_family = "wasm"))]
 use super::popup_policy::{self, Decision};
@@ -238,6 +240,11 @@ impl NativeBrowserWebView {
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
+                // Install the alert/confirm/prompt shim before any page
+                // script runs. wry 0.38 has no native JS-dialog handler
+                // API on macOS, so pages that call these can otherwise
+                // hang. See `dialogs.rs` for the full reasoning.
+                .with_initialization_script(dialogs::INIT_SCRIPT)
                 .with_document_title_changed_handler(move |title| {
                     let _ = title_tx.try_send(NativeWebViewEvent::TitleChanged(tab_id, title));
                 })
