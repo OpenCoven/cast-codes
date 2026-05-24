@@ -189,3 +189,48 @@ async fn list_worktrees_round_trip_on_temp_repo() {
     assert!(list[0].is_main);
     assert!(list.iter().any(|w| w.branch.as_deref() == Some("feature/a")));
 }
+
+#[cfg(feature = "local_fs")]
+#[tokio::test]
+async fn add_worktree_existing_branch() {
+    use std::process::Command;
+    let td = TempDir::new().unwrap();
+    let repo = td.path();
+    let run = |args: &[&str]| {
+        Command::new("git").args(args).current_dir(repo).status().unwrap();
+    };
+    run(&["init", "--initial-branch=main", "-q"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("a"), "a").unwrap();
+    run(&["add", "a"]);
+    run(&["commit", "-q", "-m", "init"]);
+    run(&["branch", "feature/a"]);
+
+    let target = repo.join(".castcodes/worktrees/feature-a");
+    super::add_worktree(repo, &target, "feature/a", false).await.unwrap();
+    assert!(target.join(".git").exists() || target.join(".git").is_file());
+}
+
+#[cfg(feature = "local_fs")]
+#[tokio::test]
+async fn add_worktree_creates_new_branch() {
+    use std::process::Command;
+    let td = TempDir::new().unwrap();
+    let repo = td.path();
+    let run = |args: &[&str]| {
+        Command::new("git").args(args).current_dir(repo).status().unwrap();
+    };
+    run(&["init", "--initial-branch=main", "-q"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("a"), "a").unwrap();
+    run(&["add", "a"]);
+    run(&["commit", "-q", "-m", "init"]);
+
+    let target = repo.join(".castcodes/worktrees/brand-new");
+    super::add_worktree(repo, &target, "brand-new", true).await.unwrap();
+    let branches = Command::new("git").args(["branch", "--list", "brand-new"])
+        .current_dir(repo).output().unwrap();
+    assert!(String::from_utf8_lossy(&branches.stdout).contains("brand-new"));
+}

@@ -5,6 +5,7 @@
 //! only contains pure-function helpers; async git wrappers land in
 //! subsequent tasks.
 
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 /// Convert a branch name to a filesystem-safe slug.
@@ -148,8 +149,6 @@ pub fn parse_worktree_list_porcelain(input: &str) -> Vec<WorktreeInfo> {
     out
 }
 
-use anyhow::Result;
-
 #[cfg(feature = "local_fs")]
 pub async fn list_worktrees(repo: &Path) -> Result<Vec<WorktreeInfo>> {
     let out = crate::util::git::run_git_command(repo, &["worktree", "list", "--porcelain"]).await?;
@@ -158,6 +157,26 @@ pub async fn list_worktrees(repo: &Path) -> Result<Vec<WorktreeInfo>> {
 
 #[cfg(not(feature = "local_fs"))]
 pub async fn list_worktrees(_repo: &Path) -> Result<Vec<WorktreeInfo>> {
+    Err(anyhow::anyhow!("Not supported on wasm"))
+}
+
+#[cfg(feature = "local_fs")]
+pub async fn add_worktree(repo: &Path, target: &Path, branch: &str, create: bool) -> Result<()> {
+    let target_str = target.to_string_lossy().to_string();
+    let mut args: Vec<&str> = vec!["worktree", "add"];
+    if create {
+        args.extend_from_slice(&["-b", branch]);
+        args.push(&target_str);
+    } else {
+        args.push(&target_str);
+        args.push(branch);
+    }
+    crate::util::git::run_git_command(repo, &args).await?;
+    Ok(())
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub async fn add_worktree(_repo: &Path, _target: &Path, _branch: &str, _create: bool) -> Result<()> {
     Err(anyhow::anyhow!("Not supported on wasm"))
 }
 
