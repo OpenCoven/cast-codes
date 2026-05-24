@@ -149,11 +149,13 @@ impl TerminalView {
         let cwd_path = std::path::PathBuf::from(&cwd_str);
         #[cfg(feature = "local_fs")]
         {
-            let (git_dir, common_dir) = crate::util::git::detect_git_dirs_sync(&cwd_path)?;
+            let worktree_root =
+                crate::util::git::detect_repo_root_sync(&cwd_path).unwrap_or(cwd_path);
+            let (git_dir, common_dir) = crate::util::git::detect_git_dirs_sync(&worktree_root)?;
             let branch = self.current_git_branch(ctx);
-            let exists = cwd_path.exists();
+            let exists = worktree_root.exists();
             Some(compute_git_label_from_paths(
-                &cwd_path,
+                &worktree_root,
                 branch,
                 &git_dir,
                 &common_dir,
@@ -222,6 +224,19 @@ mod git_label_tests {
         assert_eq!(label.worktree_slug.as_deref(), Some("feature-a"));
         assert_eq!(label.branch_or_sha, "feature/a");
         assert!(!label.missing);
+    }
+
+    #[test]
+    fn label_non_main_worktree_subdirectory_uses_worktree_root_slug() {
+        let worktree_root = PathBuf::from("/repo/.castcodes/worktrees/feature-a");
+        let label = compute_git_label_from_paths(
+            &worktree_root,
+            Some("feature/a".to_string()),
+            &PathBuf::from("/repo/.git/worktrees/feature-a"),
+            &PathBuf::from("/repo/.git"),
+            true,
+        );
+        assert_eq!(label.render(), "feature-a · feature/a");
     }
 
     #[test]

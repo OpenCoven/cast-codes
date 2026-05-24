@@ -5,4 +5,3 @@ branch refs/heads/main
 worktree /work/myrepo/.castcodes/worktrees/detached
 HEAD 3333333333333333333333333333333333333333
 detached
-

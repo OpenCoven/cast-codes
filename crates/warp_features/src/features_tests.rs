@@ -12,6 +12,11 @@ fn worktree_manager_flag_round_trip() {
 }
 
 #[test]
+fn worktree_manager_is_enabled_for_dogfood() {
+    assert!(DOGFOOD_FLAGS.contains(&FeatureFlag::WorktreeManager));
+}
+
+#[test]
 #[ignore = "CORE-3768 - need to clean up PREVIEW_FLAGS, but this is a temporary fix for the cluttered changelog"]
 fn test_all_preview_flags_have_a_description() {
     for flag in PREVIEW_FLAGS {

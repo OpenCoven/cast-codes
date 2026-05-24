@@ -6,4 +6,3 @@ worktree /work/myrepo/.castcodes/worktrees/gone
 HEAD 2222222222222222222222222222222222222222
 branch refs/heads/gone-branch
 prunable gitdir file points to non-existent location
-
