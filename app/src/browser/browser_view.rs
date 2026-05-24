@@ -59,7 +59,7 @@ fn webview_url_for(model_url: &str) -> String {
 /// they're served from the user's own machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SecurityState {
-    /// HTTPS or local/about/file/data — no warning needed.
+    /// HTTPS or loopback/localhost HTTP — no warning needed.
     Secure,
     /// HTTP to a non-loopback host — show a warning.
     Insecure,
