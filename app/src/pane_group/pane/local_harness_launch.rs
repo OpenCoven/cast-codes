@@ -57,15 +57,11 @@ pub(super) fn build_local_opencode_child_command(prompt: &str) -> String {
     let quoted_prompt = shell_quote(prompt);
     format!("opencode --prompt {quoted_prompt}")
 }
-pub(super) fn build_local_codex_child_command(prompt: &str) -> String {
-    let quoted_prompt = shell_quote(prompt);
-    format!("codex --dangerously-bypass-approvals-and-sandbox {quoted_prompt}")
-}
 
 fn local_child_task_config(harness: Harness) -> Option<AgentConfigSnapshot> {
     match harness {
-        Harness::Oz | Harness::Unknown => None,
-        Harness::Claude | Harness::OpenCode | Harness::Gemini | Harness::Codex => {
+        Harness::Oz | Harness::Codex | Harness::Unknown => None,
+        Harness::Claude | Harness::OpenCode | Harness::Gemini => {
             Some(AgentConfigSnapshot {
                 harness: Some(HarnessConfig::from_harness_type(harness)),
                 ..Default::default()
@@ -130,28 +126,14 @@ pub(super) async fn prepare_local_harness_child_launch(
 
             build_local_claude_child_command(&prompt)
         }
-        Harness::Codex => {
-            let HarnessKind::ThirdParty(third_party_harness) =
-                harness_kind(harness).map_err(|error: AgentDriverError| error.to_string())?
-            else {
-                unreachable!("Codex resolves to a third-party harness")
-            };
-            third_party_harness
-                .validate()
-                .map_err(|error: AgentDriverError| error.to_string())?;
-
-            // Local Codex child panes must rely on the user's existing local
-            // auth/session state. Do not run the shared Codex environment prep
-            // here: it can seed OPENAI_API_KEY into ~/.codex/auth.json and
-            // rewrite ~/.codex/config.toml for the whole machine.
-            build_local_codex_child_command(&prompt)
-        }
         Harness::OpenCode => {
             validate_cli_installed("opencode", Some("https://opencode.ai/docs"))
                 .map_err(|error: AgentDriverError| error.to_string())?;
             build_local_opencode_child_command(&prompt)
         }
-        Harness::Gemini => unreachable!("normalize_local_child_harness filters out Gemini"),
+        Harness::Gemini | Harness::Codex => {
+            unreachable!("normalize_local_child_harness filters out unsupported harnesses")
+        }
     };
 
     let task_id = ai_client

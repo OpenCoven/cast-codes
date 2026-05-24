@@ -1594,11 +1594,8 @@ fn harness_parse_orchestration_harness_accepts_codex() {
 }
 
 #[test]
-fn harness_parse_local_child_harness_accepts_codex() {
-    assert_eq!(
-        Harness::parse_local_child_harness("codex"),
-        Some(Harness::Codex)
-    );
+fn harness_parse_local_child_harness_rejects_codex() {
+    assert_eq!(Harness::parse_local_child_harness("codex"), None);
 }
 
 #[test]
