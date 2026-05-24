@@ -72,19 +72,19 @@ fn classify_security(url: &str) -> SecurityState {
     if lower.starts_with("https://") {
         return SecurityState::Secure;
     }
-    if let Some(rest) = lower.strip_prefix("http://") {
-        // Treat localhost / loopback / private dev URLs as secure-enough.
-        let host = rest
-            .split_once('/')
-            .map(|(h, _)| h)
-            .unwrap_or(rest)
-            .split_once(':')
-            .map(|(h, _)| h)
-            .unwrap_or_else(|| {
-                rest.split_once('/').map(|(h, _)| h).unwrap_or(rest)
-            });
-        if matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0") {
-            return SecurityState::Secure;
+    if lower.starts_with("http://") {
+        if let Ok(parsed) = url::Url::parse(url) {
+            if let Some(host) = parsed.host_str() {
+                let host = host
+                    .strip_prefix('[')
+                    .and_then(|rest| rest.strip_suffix(']'))
+                    .unwrap_or(host);
+                if host.eq_ignore_ascii_case("localhost")
+                    || matches!(host, "127.0.0.1" | "::1" | "0.0.0.0")
+                {
+                    return SecurityState::Secure;
+                }
+            }
         }
         return SecurityState::Insecure;
     }
@@ -665,9 +665,7 @@ impl BrowserView {
             SecurityState::Secure => Some(
                 ConstrainedBox::new(
                     Icon::LockClosed
-                        .to_warpui_icon(
-                            blended_colors::text_main(theme, theme.surface_1()).into(),
-                        )
+                        .to_warpui_icon(blended_colors::text_main(theme, theme.surface_1()).into())
                         .finish(),
                 )
                 .with_width(SECURITY_ICON_SIZE)
@@ -675,14 +673,10 @@ impl BrowserView {
                 .finish(),
             ),
             SecurityState::Insecure => Some(
-                ConstrainedBox::new(
-                    Icon::AlertTriangle
-                        .to_warpui_icon(theme.accent())
-                        .finish(),
-                )
-                .with_width(SECURITY_ICON_SIZE)
-                .with_height(SECURITY_ICON_SIZE)
-                .finish(),
+                ConstrainedBox::new(Icon::AlertTriangle.to_warpui_icon(theme.accent()).finish())
+                    .with_width(SECURITY_ICON_SIZE)
+                    .with_height(SECURITY_ICON_SIZE)
+                    .finish(),
             ),
             SecurityState::Neutral => None,
         };
@@ -691,11 +685,7 @@ impl BrowserView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Max);
         if let Some(indicator) = security_indicator {
-            url_row.add_child(
-                Container::new(indicator)
-                    .with_margin_right(6.0)
-                    .finish(),
-            );
+            url_row.add_child(Container::new(indicator).with_margin_right(6.0).finish());
         }
         url_row.add_child(
             Expanded::new(
@@ -1088,6 +1078,9 @@ mod tests {
             "http://127.0.0.1",
             "http://127.0.0.1:8080/path",
             "http://0.0.0.0:9000",
+            "http://[::1]",
+            "http://[::1]:3000/path",
+            "http://user:pass@localhost:3000",
         ] {
             assert_eq!(
                 classify_security(url),

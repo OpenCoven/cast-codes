@@ -55,7 +55,14 @@ pub fn decide(raw_url: &str) -> Decision {
 
     // System schemes that should leave the app entirely (mail client, dialer,
     // OS-level handlers).
-    for scheme in ["mailto", "tel", "sms", "facetime", "facetime-audio", "imessage"] {
+    for scheme in [
+        "mailto",
+        "tel",
+        "sms",
+        "facetime",
+        "facetime-audio",
+        "imessage",
+    ] {
         if is_scheme_eq(trimmed, scheme) {
             return Decision::External(trimmed.to_string());
         }
@@ -91,7 +98,11 @@ fn has_scheme(input: &str) -> bool {
         && head
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
-        && head.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+        && head
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -182,6 +193,14 @@ mod tests {
         assert_eq!(
             decide("example.com"),
             Decision::Tab("example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn non_ascii_before_colon_does_not_panic() {
+        assert_eq!(
+            decide("🦄javascript:alert(1)"),
+            Decision::Tab("🦄javascript:alert(1)".to_string())
         );
     }
 }

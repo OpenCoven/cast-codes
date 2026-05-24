@@ -295,6 +295,14 @@ mod tests {
     }
 
     #[test]
+    fn non_ascii_before_javascript_prefix_is_search_not_panic() {
+        assert!(matches!(
+            resolve("🦄🦄javascript:alert(1)"),
+            Resolved::Search(_)
+        ));
+    }
+
+    #[test]
     fn javascript_prefix_inside_path_is_not_rewritten() {
         // A real URL that happens to contain `javascript` is still a URL.
         assert_eq!(

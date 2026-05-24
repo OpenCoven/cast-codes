@@ -234,9 +234,9 @@ impl NativeBrowserWebView {
 
             // NOTE (wry 0.38 on macOS): `with_web_context` is a no-op here —
             // `wkwebview/mod.rs:95` ignores the parameter. The wiring is
-            // kept correct so it activates on Linux/webkit2gtk and whenever
-            // wry adds macOS `WKWebsiteDataStore` plumbing. See
-            // `data_dir.rs` for the platform reality check.
+            // kept correct for the current macOS attach path so this starts
+            // isolating pane data if wry adds macOS `WKWebsiteDataStore`
+            // plumbing. See `data_dir.rs` for the platform reality check.
             let webview_result = if let Some(ctx) = &self.web_context {
                 let mut ctx_borrow = ctx.borrow_mut();
                 builder = builder.with_web_context(&mut ctx_borrow);
