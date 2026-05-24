@@ -16,9 +16,9 @@ pub mod tooltips;
 pub(crate) mod traffic_lights;
 pub(crate) mod truncation;
 pub mod vm_detection;
-pub mod worktree;
 #[cfg(windows)]
 pub mod windows;
+pub mod worktree;
 
 use itertools::Itertools;
 use std::cmp::Ordering;

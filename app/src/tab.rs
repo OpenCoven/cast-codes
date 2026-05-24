@@ -352,7 +352,9 @@ impl TabData {
             Self::push_copy_metadata_menu_item(
                 &mut menu_items,
                 "Copy branch",
-                Self::copyable_metadata_value(terminal_view.current_git_label(ctx).map(|l| l.render())),
+                Self::copyable_metadata_value(
+                    terminal_view.current_git_label(ctx).map(|l| l.render()),
+                ),
             );
             Self::push_copy_metadata_menu_item(&mut menu_items, title_label, title);
             Self::push_copy_metadata_menu_item(

@@ -252,13 +252,10 @@ fn worktree_status_tags(info: &WorktreeInfo) -> Vec<&'static str> {
 /// segments are only added when the corresponding data exists.
 fn format_worktree_label(info: &WorktreeInfo) -> String {
     let slug = worktree_slug(info);
-    let detail = info
-        .branch
-        .clone()
-        .or_else(|| {
-            let head = info.head.trim();
-            (!head.is_empty()).then(|| head.to_string())
-        });
+    let detail = info.branch.clone().or_else(|| {
+        let head = info.head.trim();
+        (!head.is_empty()).then(|| head.to_string())
+    });
     let tags = worktree_status_tags(info);
 
     let mut label = slug;
@@ -312,7 +309,15 @@ mod tests {
 
     #[test]
     fn main_worktree_uses_main_slug_and_branch_label() {
-        let i = info("/repos/myrepo", Some("main"), "abc1234", true, false, false, false);
+        let i = info(
+            "/repos/myrepo",
+            Some("main"),
+            "abc1234",
+            true,
+            false,
+            false,
+            false,
+        );
         assert_eq!(format_worktree_label(&i), "main \u{2014} main");
     }
 

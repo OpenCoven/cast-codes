@@ -95,7 +95,6 @@ impl VerticalTabsPaneContextMenuTarget {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub enum WorkspaceAction {
     ActivateTab(usize),

@@ -69,7 +69,11 @@ pub fn unique_path(base: &Path) -> PathBuf {
         return base.to_path_buf();
     }
     let parent = base.parent().unwrap_or_else(|| Path::new("."));
-    let stem = base.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let stem = base
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
     let mut i: usize = 2;
     loop {
         let candidate = parent.join(format!("{stem}-{i}"));
@@ -176,7 +180,12 @@ pub async fn add_worktree(repo: &Path, target: &Path, branch: &str, create: bool
 }
 
 #[cfg(not(feature = "local_fs"))]
-pub async fn add_worktree(_repo: &Path, _target: &Path, _branch: &str, _create: bool) -> Result<()> {
+pub async fn add_worktree(
+    _repo: &Path,
+    _target: &Path,
+    _branch: &str,
+    _create: bool,
+) -> Result<()> {
     Err(anyhow::anyhow!("Not supported on wasm"))
 }
 

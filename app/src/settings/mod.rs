@@ -65,8 +65,8 @@ pub use select::*;
 pub use ssh::*;
 pub use theme::*;
 pub use vim_banner::*;
-pub use worktree_manager::*;
 use warp_core::user_preferences::GetUserPreferences as _;
+pub use worktree_manager::*;
 
 /// Describes errors encountered when loading settings from `settings.toml`.
 #[derive(Clone, Debug, PartialEq, Eq)]

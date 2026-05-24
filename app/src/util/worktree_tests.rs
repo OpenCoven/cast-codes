@@ -48,7 +48,10 @@ fn slugify_unicode_strips() {
 fn default_staging_dir_no_override() {
     let repo = Path::new("/work/myrepo");
     let dir = default_staging_dir(repo, "feature-a", None);
-    assert_eq!(dir, PathBuf::from("/work/myrepo/.castcodes/worktrees/feature-a"));
+    assert_eq!(
+        dir,
+        PathBuf::from("/work/myrepo/.castcodes/worktrees/feature-a")
+    );
 }
 
 #[test]
@@ -76,7 +79,10 @@ fn default_staging_dir_relative_override() {
 fn default_staging_dir_empty_override_falls_back() {
     let repo = Path::new("/work/myrepo");
     let dir = default_staging_dir(repo, "feature-a", Some(""));
-    assert_eq!(dir, PathBuf::from("/work/myrepo/.castcodes/worktrees/feature-a"));
+    assert_eq!(
+        dir,
+        PathBuf::from("/work/myrepo/.castcodes/worktrees/feature-a")
+    );
 }
 
 #[test]
@@ -135,13 +141,17 @@ fn parse_main_plus_one() {
 #[test]
 fn parse_locked_flag() {
     let r = parse_worktree_list_porcelain(F_LOCKED);
-    assert!(r.iter().any(|w| w.is_locked && w.branch.as_deref() == Some("locked-branch")));
+    assert!(r
+        .iter()
+        .any(|w| w.is_locked && w.branch.as_deref() == Some("locked-branch")));
 }
 
 #[test]
 fn parse_prunable_flag() {
     let r = parse_worktree_list_porcelain(F_PRUNABLE);
-    assert!(r.iter().any(|w| w.is_prunable && w.branch.as_deref() == Some("gone-branch")));
+    assert!(r
+        .iter()
+        .any(|w| w.is_prunable && w.branch.as_deref() == Some("gone-branch")));
 }
 
 #[test]
@@ -162,7 +172,10 @@ fn parse_bare_flag() {
 #[test]
 fn parse_main_is_first_entry() {
     let r = parse_worktree_list_porcelain(F_MAIN_PLUS_ONE);
-    assert!(r[0].is_main, "first entry of `git worktree list` is always main");
+    assert!(
+        r[0].is_main,
+        "first entry of `git worktree list` is always main"
+    );
 }
 
 #[cfg(feature = "local_fs")]
@@ -172,8 +185,16 @@ async fn list_worktrees_round_trip_on_temp_repo() {
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
-        let s = Command::new("git").args(args).current_dir(repo).output().unwrap();
-        assert!(s.status.success(), "git {args:?} failed: {}", String::from_utf8_lossy(&s.stderr));
+        let s = Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .output()
+            .unwrap();
+        assert!(
+            s.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&s.stderr)
+        );
     };
     run(&["init", "--initial-branch=main", "-q"]);
     run(&["config", "user.email", "test@example.com"]);
@@ -182,12 +203,20 @@ async fn list_worktrees_round_trip_on_temp_repo() {
     run(&["add", "a"]);
     run(&["commit", "-q", "-m", "init"]);
     run(&["branch", "feature/a"]);
-    run(&["worktree", "add", "-q", ".castcodes/worktrees/feature-a", "feature/a"]);
+    run(&[
+        "worktree",
+        "add",
+        "-q",
+        ".castcodes/worktrees/feature-a",
+        "feature/a",
+    ]);
 
     let list = super::list_worktrees(repo).await.unwrap();
     assert_eq!(list.len(), 2);
     assert!(list[0].is_main);
-    assert!(list.iter().any(|w| w.branch.as_deref() == Some("feature/a")));
+    assert!(list
+        .iter()
+        .any(|w| w.branch.as_deref() == Some("feature/a")));
 }
 
 #[cfg(feature = "local_fs")]
@@ -197,7 +226,11 @@ async fn add_worktree_existing_branch() {
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
-        Command::new("git").args(args).current_dir(repo).status().unwrap();
+        Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .status()
+            .unwrap();
     };
     run(&["init", "--initial-branch=main", "-q"]);
     run(&["config", "user.email", "test@example.com"]);
@@ -208,7 +241,9 @@ async fn add_worktree_existing_branch() {
     run(&["branch", "feature/a"]);
 
     let target = repo.join(".castcodes/worktrees/feature-a");
-    super::add_worktree(repo, &target, "feature/a", false).await.unwrap();
+    super::add_worktree(repo, &target, "feature/a", false)
+        .await
+        .unwrap();
     assert!(target.join(".git").exists() || target.join(".git").is_file());
 }
 
@@ -219,7 +254,11 @@ async fn add_worktree_creates_new_branch() {
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
-        Command::new("git").args(args).current_dir(repo).status().unwrap();
+        Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .status()
+            .unwrap();
     };
     run(&["init", "--initial-branch=main", "-q"]);
     run(&["config", "user.email", "test@example.com"]);
@@ -229,9 +268,14 @@ async fn add_worktree_creates_new_branch() {
     run(&["commit", "-q", "-m", "init"]);
 
     let target = repo.join(".castcodes/worktrees/brand-new");
-    super::add_worktree(repo, &target, "brand-new", true).await.unwrap();
-    let branches = Command::new("git").args(["branch", "--list", "brand-new"])
-        .current_dir(repo).output().unwrap();
+    super::add_worktree(repo, &target, "brand-new", true)
+        .await
+        .unwrap();
+    let branches = Command::new("git")
+        .args(["branch", "--list", "brand-new"])
+        .current_dir(repo)
+        .output()
+        .unwrap();
     assert!(String::from_utf8_lossy(&branches.stdout).contains("brand-new"));
 }
 
@@ -242,7 +286,11 @@ async fn remove_worktree_clean() {
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
-        Command::new("git").args(args).current_dir(repo).status().unwrap();
+        Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .status()
+            .unwrap();
     };
     run(&["init", "--initial-branch=main", "-q"]);
     run(&["config", "user.email", "test@example.com"]);
@@ -251,7 +299,13 @@ async fn remove_worktree_clean() {
     run(&["add", "a"]);
     run(&["commit", "-q", "-m", "init"]);
     run(&["branch", "feature/a"]);
-    run(&["worktree", "add", "-q", ".castcodes/worktrees/feature-a", "feature/a"]);
+    run(&[
+        "worktree",
+        "add",
+        "-q",
+        ".castcodes/worktrees/feature-a",
+        "feature/a",
+    ]);
     let target = repo.join(".castcodes/worktrees/feature-a");
 
     super::remove_worktree(repo, &target, false).await.unwrap();
@@ -265,7 +319,11 @@ async fn remove_worktree_dirty_requires_force() {
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
-        Command::new("git").args(args).current_dir(repo).status().unwrap();
+        Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .status()
+            .unwrap();
     };
     run(&["init", "--initial-branch=main", "-q"]);
     run(&["config", "user.email", "test@example.com"]);
@@ -274,12 +332,21 @@ async fn remove_worktree_dirty_requires_force() {
     run(&["add", "a"]);
     run(&["commit", "-q", "-m", "init"]);
     run(&["branch", "feature/a"]);
-    run(&["worktree", "add", "-q", ".castcodes/worktrees/feature-a", "feature/a"]);
+    run(&[
+        "worktree",
+        "add",
+        "-q",
+        ".castcodes/worktrees/feature-a",
+        "feature/a",
+    ]);
     let target = repo.join(".castcodes/worktrees/feature-a");
     std::fs::write(target.join("dirty.txt"), "dirty").unwrap();
 
     let res = super::remove_worktree(repo, &target, false).await;
-    assert!(res.is_err(), "non-force remove of dirty worktree should fail");
+    assert!(
+        res.is_err(),
+        "non-force remove of dirty worktree should fail"
+    );
     super::remove_worktree(repo, &target, true).await.unwrap();
     assert!(!target.exists());
 }

@@ -149,8 +149,7 @@ impl TerminalView {
         let cwd_path = std::path::PathBuf::from(&cwd_str);
         #[cfg(feature = "local_fs")]
         {
-            let (git_dir, common_dir) =
-                crate::util::git::detect_git_dirs_sync(&cwd_path)?;
+            let (git_dir, common_dir) = crate::util::git::detect_git_dirs_sync(&cwd_path)?;
             let branch = self.current_git_branch(ctx);
             let exists = cwd_path.exists();
             Some(compute_git_label_from_paths(
