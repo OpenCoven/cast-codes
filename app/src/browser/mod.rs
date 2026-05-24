@@ -8,6 +8,8 @@ pub(crate) mod data_dir;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod dialogs;
 pub(crate) mod find;
+#[cfg(not(target_family = "wasm"))]
+pub(crate) mod permissions;
 pub(crate) mod persistence;
 pub(crate) mod popup_policy;
 pub(crate) mod url_input;

@@ -15,6 +15,8 @@ use super::dialogs;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
 #[cfg(not(target_family = "wasm"))]
+use super::permissions;
+#[cfg(not(target_family = "wasm"))]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
@@ -247,6 +249,12 @@ impl NativeBrowserWebView {
                 // API on macOS, so pages that call these can otherwise
                 // hang. See `dialogs.rs` for the full reasoning.
                 .with_initialization_script(dialogs::INIT_SCRIPT)
+                // Deny camera / microphone / geolocation / notification
+                // permission requests at the JS layer. wry 0.38 hardcodes
+                // `WKPermissionDecisionGrant` on macOS with no override
+                // hook, so this is the only reachable defense without
+                // forking wry. See `permissions.rs`.
+                .with_initialization_script(permissions::INIT_SCRIPT)
                 // Make the `castcodes://` scheme actually load something
                 // instead of erroring out as "scheme not supported". Our
                 // URL normalizer already passes it through to the
