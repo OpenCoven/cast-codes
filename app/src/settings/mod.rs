@@ -32,6 +32,7 @@ mod select;
 mod ssh;
 mod theme;
 mod vim_banner;
+mod worktree_manager;
 
 #[cfg(test)]
 #[path = "schema_validation_tests.rs"]
@@ -64,6 +65,7 @@ pub use select::*;
 pub use ssh::*;
 pub use theme::*;
 pub use vim_banner::*;
+pub use worktree_manager::*;
 use warp_core::user_preferences::GetUserPreferences as _;
 
 /// Describes errors encountered when loading settings from `settings.toml`.
