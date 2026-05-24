@@ -180,6 +180,18 @@ pub(crate) fn read_envelope(
 /// - `<config_root>/projects/<encoded_cwd>/<uuid>.jsonl` - main transcript
 /// - `<config_root>/projects/<encoded_cwd>/<uuid>/subagents/<stem>.jsonl` - subagents
 /// - `<config_root>/todos/<stem>.json` - per-agent todo lists
+
+fn validated_stem(stem: &str, field_name: &str) -> Result<&str> {
+    anyhow::ensure!(!stem.is_empty(), "{field_name} stem cannot be empty");
+    let path = Path::new(stem);
+    anyhow::ensure!(
+        path.components()
+            .all(|component| matches!(component, std::path::Component::Normal(_))),
+        "Invalid {field_name} stem `{stem}`"
+    );
+    Ok(stem)
+}
+
 pub(crate) fn write_envelope(
     envelope: &ClaudeTranscriptEnvelope,
     config_root: &Path,
@@ -202,6 +214,7 @@ pub(crate) fn write_envelope(
         std::fs::create_dir_all(&subagents_dir)
             .with_context(|| format!("Failed to create {}", subagents_dir.display()))?;
         for (stem, entries) in &envelope.subagents {
+            let stem = validated_stem(stem, "subagent")?;
             let path = subagents_dir.join(format!("{stem}.jsonl"));
             std::fs::write(&path, entries_to_jsonl(entries)?)
                 .with_context(|| format!("Failed to write {}", path.display()))?;
@@ -214,6 +227,7 @@ pub(crate) fn write_envelope(
         std::fs::create_dir_all(&todos_dir)
             .with_context(|| format!("Failed to create {}", todos_dir.display()))?;
         for (stem, value) in &envelope.todos {
+            let stem = validated_stem(stem, "todo")?;
             let path = todos_dir.join(format!("{stem}.json"));
             std::fs::write(&path, serde_json::to_vec(value)?)
                 .with_context(|| format!("Failed to write {}", path.display()))?;

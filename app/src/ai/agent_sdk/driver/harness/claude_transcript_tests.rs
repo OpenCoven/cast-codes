@@ -166,6 +166,43 @@ fn write_envelope_round_trip() {
     assert_eq!(decoded, original);
 }
 
+
+#[test]
+fn write_envelope_rejects_path_traversal_in_todo_stem() {
+    let tmp = TempDir::new().unwrap();
+    let uuid = Uuid::new_v4();
+
+    let envelope = ClaudeTranscriptEnvelope {
+        cwd: Path::new("/my/project").to_path_buf(),
+        uuid,
+        claude_version: None,
+        entries: vec![],
+        subagents: HashMap::new(),
+        todos: HashMap::from([("../settings".to_string(), serde_json::json!({}))]),
+    };
+
+    let error = write_envelope(&envelope, tmp.path()).unwrap_err();
+    assert!(error.to_string().contains("Invalid todo stem"));
+}
+
+#[test]
+fn write_envelope_rejects_path_traversal_in_subagent_stem() {
+    let tmp = TempDir::new().unwrap();
+    let uuid = Uuid::new_v4();
+
+    let envelope = ClaudeTranscriptEnvelope {
+        cwd: Path::new("/my/project").to_path_buf(),
+        uuid,
+        claude_version: None,
+        entries: vec![],
+        subagents: HashMap::from([("../../escape".to_string(), vec![])]),
+        todos: HashMap::new(),
+    };
+
+    let error = write_envelope(&envelope, tmp.path()).unwrap_err();
+    assert!(error.to_string().contains("Invalid subagent stem"));
+}
+
 #[test]
 fn write_session_index_entry_creates_missing_file() {
     let tmp = TempDir::new().unwrap();
