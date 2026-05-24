@@ -778,7 +778,7 @@ fn test_try_submit_pending_cloud_followup_allows_repeat_submission_for_owned_tas
 }
 
 #[test]
-fn test_non_owned_tombstone_is_removed_for_followup_and_reinserted_after_completion() {
+fn test_non_owned_tombstone_cannot_start_cloud_followup() {
     let _handoff_flag = FeatureFlag::HandoffCloudCloud.override_enabled(true);
     let _setup_v2_flag = FeatureFlag::CloudModeSetupV2.override_enabled(true);
 
@@ -818,20 +818,7 @@ fn test_non_owned_tombstone_is_removed_for_followup_and_reinserted_after_complet
             );
 
             view.start_cloud_followup_from_tombstone(task_id, ctx);
-            assert_eq!(view.pending_cloud_followup_task_id, Some(task_id));
-            assert!(view.conversation_ended_tombstone_view_id.is_none());
-            assert_eq!(
-                view.model.lock().block_list().block_heights().items().len(),
-                initial_block_height_items
-            );
-
-            view.handle_ambient_agent_event(
-                &crate::terminal::view::ambient_agent::AmbientAgentViewModelEvent::FollowupSessionReady {
-                    session_id: SessionId::new(),
-                },
-                ctx,
-            );
-            view.on_ambient_agent_execution_ended(ctx);
+            assert_eq!(view.pending_cloud_followup_task_id, None);
             assert!(view.conversation_ended_tombstone_view_id.is_some());
             assert_eq!(
                 view.model.lock().block_list().block_heights().items().len(),
