@@ -95,6 +95,22 @@ impl VerticalTabsPaneContextMenuTarget {
     }
 }
 
+/// Specifies which branch to use when creating a new git worktree.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum BranchTarget {
+    /// Check out an existing branch by name.
+    Existing(String),
+    /// Create a new branch from HEAD with the given name.
+    CreateFromHead(String),
+}
+
+/// Specifies where to open a newly created or existing worktree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WorktreeOpenTarget {
+    /// Open the worktree in a new tab.
+    NewTab,
+}
+
 #[derive(Debug, Clone)]
 pub enum WorkspaceAction {
     ActivateTab(usize),
@@ -729,6 +745,24 @@ pub enum WorkspaceAction {
     NavigateBrowserPane {
         url: String,
     },
+    /// Create a new git worktree from the specified branch and open it.
+    NewWorktreeFromBranch {
+        branch: BranchTarget,
+        open_in: WorktreeOpenTarget,
+    },
+    /// Open an existing git worktree (by path) in a new tab.
+    OpenWorktreeInTab {
+        worktree_path: std::path::PathBuf,
+    },
+    /// Remove a git worktree (optionally with --force).
+    RemoveWorktree {
+        worktree_path: std::path::PathBuf,
+        force: bool,
+    },
+    /// Prune stale administrative files for a git worktree.
+    PruneWorktree {
+        worktree_path: std::path::PathBuf,
+    },
 }
 
 impl From<&WorkspaceAction> for LoginGatedFeature {
@@ -821,7 +855,11 @@ impl WorkspaceAction {
             | SummarizeAIConversation { .. }
             | OpenRepository { .. }
             | SelectTabConfig(_)
-            | ToggleVerticalTabsPanel => true, // actions that actually change a state of the state of user's
+            | ToggleVerticalTabsPanel
+            | NewWorktreeFromBranch { .. }
+            | OpenWorktreeInTab { .. }
+            | RemoveWorktree { .. }
+            | PruneWorktree { .. } => true, // actions that actually change a state of the state of user's
             // workspace would most likely require a save, so that if the app gets
             // restarted, the user can continue working
             #[cfg(not(target_family = "wasm"))]

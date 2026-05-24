@@ -21306,6 +21306,18 @@ impl TypedActionView for Workspace {
                 self.close_new_session_dropdown_menu(ctx);
                 self.open_folder_picker_for_worktree_submenu(ctx);
             }
+            NewWorktreeFromBranch { .. } => {
+                // TODO(worktree-manager): implement worktree creation logic.
+            }
+            OpenWorktreeInTab { .. } => {
+                // TODO(worktree-manager): implement opening worktree in tab.
+            }
+            RemoveWorktree { .. } => {
+                // TODO(worktree-manager): implement worktree removal logic.
+            }
+            PruneWorktree { .. } => {
+                // TODO(worktree-manager): implement worktree prune logic.
+            }
             AutoupdateFailureLink => self.open_autoupdate_failure_link(ctx),
             ApplyUpdate => self.apply_update(ctx),
             LogOut => {
