@@ -14,6 +14,24 @@ pub struct GitLabel {
     pub missing: bool,
 }
 
+impl GitLabel {
+    /// Formats the indicator text per PRODUCT.md 16–19.
+    /// - Main worktree (no slug) → `<branch>` only.
+    /// - Non-main worktree → `<slug> · <branch>` (or just `<slug>` if branch empty/detached).
+    /// - Missing worktree → `(missing) <slug>`.
+    pub fn render(&self) -> String {
+        if self.missing {
+            let slug = self.worktree_slug.as_deref().unwrap_or("");
+            return format!("(missing) {}", slug).trim().to_string();
+        }
+        match (self.worktree_slug.as_deref(), self.branch_or_sha.as_str()) {
+            (None, b) => b.to_string(),
+            (Some(slug), b) if !b.is_empty() => format!("{slug} · {b}"),
+            (Some(slug), _) => slug.to_string(),
+        }
+    }
+}
+
 /// Pure helper for unit-testing the label computation.
 ///
 /// `git_dir` is the per-worktree gitdir (e.g. `/repo/.git/worktrees/feature-a`).
@@ -231,5 +249,45 @@ mod git_label_tests {
         );
         assert!(label.missing);
         assert_eq!(label.worktree_slug.as_deref(), Some("gone"));
+    }
+
+    #[test]
+    fn render_main_worktree() {
+        let l = GitLabel {
+            worktree_slug: None,
+            branch_or_sha: "main".into(),
+            missing: false,
+        };
+        assert_eq!(l.render(), "main");
+    }
+
+    #[test]
+    fn render_non_main_worktree() {
+        let l = GitLabel {
+            worktree_slug: Some("feature-a".into()),
+            branch_or_sha: "feature/a".into(),
+            missing: false,
+        };
+        assert_eq!(l.render(), "feature-a · feature/a");
+    }
+
+    #[test]
+    fn render_detached_in_worktree() {
+        let l = GitLabel {
+            worktree_slug: Some("detached".into()),
+            branch_or_sha: "".into(),
+            missing: false,
+        };
+        assert_eq!(l.render(), "detached");
+    }
+
+    #[test]
+    fn render_missing_worktree() {
+        let l = GitLabel {
+            worktree_slug: Some("gone".into()),
+            branch_or_sha: "gone".into(),
+            missing: true,
+        };
+        assert_eq!(l.render(), "(missing) gone");
     }
 }
