@@ -86,9 +86,11 @@ pub async fn run_git_command_with_env(
 /// Returns `None` when `cwd` is not inside a git repository or `git` is unavailable.
 #[cfg(feature = "local_fs")]
 pub fn detect_git_dirs_sync(cwd: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
-    let out = std::process::Command::new("git")
+    let out = command::blocking::Command::new("git")
         .args(["rev-parse", "--git-dir", "--git-common-dir"])
         .current_dir(cwd)
+        .stdout(command::Stdio::piped())
+        .stderr(command::Stdio::null())
         .output()
         .ok()?;
     if !out.status.success() {
