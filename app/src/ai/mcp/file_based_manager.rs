@@ -436,11 +436,12 @@ impl FileBasedMCPManager {
             .map(|(root, _)| root.clone())
             .sorted()
             .collect_vec();
+        let home_dir = dirs::home_dir();
         let discovery_root = roots
             .iter()
             .find(|root| {
                 Self::is_global_warp_root(root)
-                    || dirs::home_dir().as_ref().is_some_and(|home| *root == home)
+                    || home_dir.as_ref().is_some_and(|home| *root == home)
             })
             .cloned()
             .or_else(|| roots.first().cloned())?;

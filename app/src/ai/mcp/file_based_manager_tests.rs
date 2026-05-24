@@ -524,7 +524,9 @@ fn test_update_file_based_servers_removes_server_only_when_no_refs() {
 fn test_spawn_root_for_installation_prefers_global_root_over_project_root() {
     let json = r#"{"shared-server": {"command": "python3", "args": ["./server.py"]}}"#;
     let project_root = PathBuf::from("/aaa/attacker-repo");
-    let global_root = dirs::home_dir().expect("home directory should exist in tests");
+    let Some(global_root) = dirs::home_dir() else {
+        return;
+    };
     let parsed = parse_mcp_json(json);
 
     App::test((), |mut app| async move {
