@@ -60,7 +60,7 @@ pub(super) fn build_local_opencode_child_command(prompt: &str) -> String {
 
 fn local_child_task_config(harness: Harness) -> Option<AgentConfigSnapshot> {
     match harness {
-        Harness::Oz | Harness::Unknown => None,
+        Harness::Oz | Harness::Codex | Harness::Unknown => None,
         Harness::Claude | Harness::OpenCode | Harness::Gemini => {
             Some(AgentConfigSnapshot {
                 harness: Some(HarnessConfig::from_harness_type(harness)),
