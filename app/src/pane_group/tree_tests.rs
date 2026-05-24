@@ -699,3 +699,28 @@ fn test_hide_multiple_child_agent_panes() {
     assert_eq!(tree.visible_pane_ids(), vec![panes[0], panes[1]]);
     assert!(tree.is_pane_hidden(&panes[2]));
 }
+
+#[test]
+fn test_max_leaf_min_pane_width_uses_strictest_descendant() {
+    let panes = [
+        PaneId::dummy_pane_id(),
+        PaneId::dummy_pane_id(),
+        PaneId::dummy_pane_id(),
+    ];
+    let mut tree = PaneData::new(panes[0]);
+
+    tree.split(panes[0], panes[1], Direction::Right);
+    tree.split(panes[1], panes[2], Direction::Down);
+
+    let pane_min_width = |pane_id: PaneId| match pane_id {
+        id if id == panes[0] => 80.0,
+        id if id == panes[1] => 240.0,
+        id if id == panes[2] => 120.0,
+        _ => 50.0,
+    };
+
+    let root = tree.root.as_branch().expect("Should be a branch");
+    assert_eq!(root.node(0).max_leaf_min_pane_width(&pane_min_width), 80.0);
+    assert_eq!(root.node(1).max_leaf_min_pane_width(&pane_min_width), 240.0);
+    assert_eq!(tree.root.max_leaf_min_pane_width(&pane_min_width), 240.0);
+}

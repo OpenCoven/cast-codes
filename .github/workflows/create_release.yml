@@ -212,7 +212,6 @@ jobs:
           target_os: macos
           is_self_hosted: false
           install_release_deps: true
-          use_cache: false
 
       - name: Ensure rust target is installed
         run: rustup target add aarch64-apple-darwin
@@ -276,7 +275,13 @@ jobs:
 
       - name: Checksum DMG
         shell: bash
-        run: shasum -a 256 "${{ steps.bundle_app.outputs.dmg_path }}" > "${{ steps.bundle_app.outputs.dmg_path }}.sha256"
+        run: |
+          set -euo pipefail
+          dmg_path="${{ steps.bundle_app.outputs.dmg_path }}"
+          (
+            cd "$(dirname "$dmg_path")"
+            shasum -a 256 "$(basename "$dmg_path")" > "$(basename "$dmg_path").sha256"
+          )
 
       - name: Add DMG to GitHub release assets
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
@@ -412,7 +417,10 @@ jobs:
           set -euo pipefail
           find "${{ steps.bundle_app.outputs.packages_dir }}" -maxdepth 1 -type f ! -name '*.sha256' -print0 |
             while IFS= read -r -d '' file; do
-              sha256sum "$file" > "$file.sha256"
+              (
+                cd "$(dirname "$file")"
+                sha256sum "$(basename "$file")" > "$(basename "$file").sha256"
+              )
             done
 
       - name: Add Linux app packages to GitHub release assets
@@ -508,43 +516,48 @@ jobs:
           artifact: cli
 
       - name: Checksum Linux CLI packages
+        id: cli_assets
         shell: bash
         run: |
           set -euo pipefail
           find "${{ steps.bundle_cli.outputs.packages_dir }}" -maxdepth 1 -type f ! -name '*.sha256' -print0 |
             while IFS= read -r -d '' file; do
-              sha256sum "$file" > "$file.sha256"
+              (
+                cd "$(dirname "$file")"
+                sha256sum "$(basename "$file")" > "$(basename "$file").sha256"
+              )
             done
           sha256sum cast-codes-linux-x86_64.tar.gz > cast-codes-linux-x86_64.tar.gz.sha256
+          release_assets_dir="$PWD/release-linux-cli-assets"
+          rm -rf "$release_assets_dir"
+          mkdir -p "$release_assets_dir"
+          find "${{ steps.bundle_cli.outputs.packages_dir }}" -maxdepth 1 -type f \
+            \( -name '*.deb' -o -name '*.deb.sha256' \
+            -o -name '*.rpm' -o -name '*.rpm.sha256' \
+            -o -name '*.pkg.tar.zst' -o -name '*.pkg.tar.zst.sha256' \) \
+            -exec cp '{}' "$release_assets_dir/" \;
+          cp cast-codes-linux-x86_64.tar.gz cast-codes-linux-x86_64.tar.gz.sha256 "$release_assets_dir/"
+          echo "release_assets_dir=$release_assets_dir" >> "$GITHUB_OUTPUT"
 
       - name: Add Linux CLI packages to GitHub release assets
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          files: |
-            ${{ steps.bundle_cli.outputs.packages_dir }}/*
-            cast-codes-linux-x86_64.tar.gz
-            cast-codes-linux-x86_64.tar.gz.sha256
+          files: ${{ steps.cli_assets.outputs.release_assets_dir }}/*
           token: ${{ github.token }}
 
       - name: Upload Linux CLI packages as workflow artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-linux-cli-x86_64-${{ needs.prepare_release.outputs.channel }}
-          path: |
-            ${{ steps.bundle_cli.outputs.packages_dir }}
-            cast-codes-linux-x86_64.tar.gz
-            cast-codes-linux-x86_64.tar.gz.sha256
+          path: ${{ steps.cli_assets.outputs.release_assets_dir }}/*
 
       - name: Attest Linux CLI packages
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: |
-            ${{ steps.bundle_cli.outputs.packages_dir }}/*
-            cast-codes-linux-x86_64.tar.gz
-            cast-codes-linux-x86_64.tar.gz.sha256
+          subject-path: ${{ steps.cli_assets.outputs.release_assets_dir }}/*
 
   release_web:
     name: Build Release (Web)
@@ -591,9 +604,12 @@ jobs:
         run: |
           set -euo pipefail
           for dir in "${{ steps.bundle_app.outputs.packages_dir }}" "${{ steps.bundle_app.outputs.assets_dir }}"; do
-            find "$dir" -maxdepth 1 -type f ! -name '*.sha256' -print0 |
+            find "$dir" -type f ! -name '*.sha256' -print0 |
               while IFS= read -r -d '' file; do
-                sha256sum "$file" > "$file.sha256"
+                (
+                  cd "$(dirname "$file")"
+                  sha256sum "$(basename "$file")" > "$(basename "$file").sha256"
+                )
               done
           done
 
@@ -602,9 +618,7 @@ jobs:
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          files: |
-            ${{ steps.bundle_app.outputs.packages_dir }}/*
-            ${{ steps.bundle_app.outputs.assets_dir }}/*
+          files: ${{ steps.bundle_app.outputs.packages_dir }}/*
           token: ${{ github.token }}
 
       - name: Upload web assets as workflow artifact
@@ -619,9 +633,7 @@ jobs:
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
-          subject-path: |
-            ${{ steps.bundle_app.outputs.packages_dir }}/*
-            ${{ steps.bundle_app.outputs.assets_dir }}/*
+          subject-path: ${{ steps.bundle_app.outputs.packages_dir }}/*
 
   release_windows:
     name: Build Release (Windows x64)
@@ -666,7 +678,13 @@ jobs:
 
       - name: Checksum Windows installer
         shell: bash
-        run: sha256sum "${{ steps.bundle_app.outputs.installer_path }}" > "${{ steps.bundle_app.outputs.installer_path }}.sha256"
+        run: |
+          set -euo pipefail
+          installer_path="${{ steps.bundle_app.outputs.installer_path }}"
+          (
+            cd "$(dirname "$installer_path")"
+            sha256sum "$(basename "$installer_path")" > "$(basename "$installer_path").sha256"
+          )
 
       - name: Add installer to GitHub release assets
         if: ${{ needs.prepare_release.outputs.should_publish == 'true' }}

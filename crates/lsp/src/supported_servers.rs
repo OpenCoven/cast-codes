@@ -13,7 +13,7 @@ use command::r#async::Command;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 #[cfg(not(target_arch = "wasm32"))]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -47,6 +47,71 @@ pub struct ResolvedLspBinaryConfig {
     pub custom_config: Option<CustomBinaryConfig>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn resolve_binary_on_path(
+    binary_name: &str,
+    path_env_var: Option<&str>,
+) -> Option<PathBuf> {
+    let path_var = path_env_var
+        .map(std::borrow::ToOwned::to_owned)
+        .or_else(|| std::env::var("PATH").ok())?;
+
+    for dir in std::env::split_paths(&path_var) {
+        if !dir.is_absolute() {
+            continue;
+        }
+
+        for candidate in binary_candidates(&dir, binary_name) {
+            if is_executable_file(&candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn binary_candidates(dir: &Path, binary_name: &str) -> Vec<PathBuf> {
+    #[cfg(windows)]
+    {
+        let binary_path = Path::new(binary_name);
+        if binary_path.extension().is_some() {
+            return vec![dir.join(binary_path)];
+        }
+
+        let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+        std::iter::once(String::new())
+            .chain(
+                pathext
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|extension| !extension.is_empty())
+                    .map(ToOwned::to_owned),
+            )
+            .map(|extension| dir.join(format!("{binary_name}{extension}")))
+            .collect()
+    }
+
+    #[cfg(not(windows))]
+    {
+        vec![dir.join(binary_name)]
+    }
+}
+
+#[cfg(all(not(target_arch = "wasm32"), unix))]
+fn is_executable_file(candidate: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    candidate
+        .metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(unix)))]
+fn is_executable_file(candidate: &Path) -> bool {
+    candidate.is_file()
+}
 pub const TYPESCRIPT_LSP_REPAIR_ACTION: &str = "Install/repair TypeScript language server";
 
 const TYPESCRIPT_LSP_MISSING_BINARY_PREFIX: &str = "typescript-language-server is not available.";
@@ -63,7 +128,7 @@ pub struct LspStartupError {
 }
 
 impl LspStartupError {
-    fn missing_binary(server_type: LSPServerType) -> Self {
+    pub(crate) fn missing_binary(server_type: LSPServerType) -> Self {
         Self {
             reason: LspStartupFailureReason::MissingBinary { server_type },
             message: actionable_missing_binary_message(server_type),
@@ -346,13 +411,25 @@ impl LSPServerType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn config(path: &str) -> CustomBinaryConfig {
         CustomBinaryConfig {
             binary_path: PathBuf::from(path),
             prepend_args: vec![],
         }
+    }
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("{name}-{}-{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 
     #[test]
@@ -478,5 +555,53 @@ mod tests {
 
         assert_eq!(resolved.source, LspBinarySource::Path);
         assert!(resolved.custom_config.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_binary_on_path_skips_relative_entries_and_non_executable_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = temp_test_dir("resolve-binary-on-path");
+        let first_dir = tmp.join("first");
+        let second_dir = tmp.join("second");
+        fs::create_dir_all(&first_dir).unwrap();
+        fs::create_dir_all(&second_dir).unwrap();
+
+        let non_executable = first_dir.join("rust-analyzer");
+        fs::write(&non_executable, "").unwrap();
+
+        let executable = second_dir.join("rust-analyzer");
+        fs::write(&executable, "").unwrap();
+        let mut permissions = fs::metadata(&executable).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&executable, permissions).unwrap();
+
+        let relative_dir = PathBuf::from("relative-bin");
+        let path_env = std::env::join_paths([relative_dir, first_dir, second_dir]).unwrap();
+
+        assert_eq!(
+            resolve_binary_on_path("rust-analyzer", path_env.to_str()),
+            Some(executable)
+        );
+
+        fs::remove_dir_all(tmp).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_binary_on_path_considers_windows_command_extensions() {
+        let tmp = temp_test_dir("resolve-binary-on-path-windows");
+        let binary = tmp.join("typescript-language-server.com");
+        fs::write(&binary, "").unwrap();
+
+        let path_env = std::env::join_paths([tmp.as_path()]).unwrap();
+
+        assert_eq!(
+            resolve_binary_on_path("typescript-language-server", path_env.to_str()),
+            Some(binary)
+        );
+
+        fs::remove_dir_all(tmp).unwrap();
     }
 }

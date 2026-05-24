@@ -11,28 +11,7 @@ fn castcodes_dark_theme_uses_phase_1_palette() {
             ColorU::from_u32(0x7C3AEDFF).into(),
             None,
             Some(Details::Darker),
-            TerminalColors {
-                normal: AnsiColor {
-                    black: ColorU::from_u32(0x0F0F12FF),
-                    red: ColorU::from_u32(0xF7768EFF),
-                    green: ColorU::from_u32(0x9ECE6AFF),
-                    yellow: ColorU::from_u32(0xE0AF68FF),
-                    blue: ColorU::from_u32(0x7AA2F7FF),
-                    magenta: ColorU::from_u32(0xBB9AFAFF),
-                    cyan: ColorU::from_u32(0x7DCFFFFF),
-                    white: ColorU::from_u32(0xA9B1D6FF),
-                },
-                bright: AnsiColor {
-                    black: ColorU::from_u32(0x414868FF),
-                    red: ColorU::from_u32(0xF7768EFF),
-                    green: ColorU::from_u32(0x9ECE6AFF),
-                    yellow: ColorU::from_u32(0xE0AF68FF),
-                    blue: ColorU::from_u32(0x7AA2F7FF),
-                    magenta: ColorU::from_u32(0xBB9AFAFF),
-                    cyan: ColorU::from_u32(0x7DCFFFFF),
-                    white: ColorU::from_u32(0xC0CAF5FF),
-                },
-            },
+            castcodes_terminal_colors(),
             None,
             Some("CastCodes Dark".to_string()),
         )
@@ -112,4 +91,88 @@ fn in_memory_theme_generation_test() {
             Some("mountains".to_string()),
         )
     );
+}
+
+/// Backward-compat pixel parity for all 24 built-in themes.
+///
+/// Every built-in theme must:
+/// 1. Carry no `ui` block (tasks 1–6 guarantee `WarpTheme::new` sets `ui = None`).
+/// 2. Return the same derived values from `surface_2()`, `outline()`, and
+///    `active_ui_text_color()` as they would without the override path — i.e.
+///    the shims must be transparent when `ui` is absent.
+///
+/// If any of these assertions fire it means a built-in theme was accidentally
+/// given a `ui` block, or one of the accessor fallback paths drifted.
+#[test]
+fn builtin_themes_render_identically_without_ui_block() {
+    let builtins: Vec<WarpTheme> = vec![
+        castcodes_dark(),
+        dark_theme(),
+        light_theme(),
+        dracula(),
+        solarized_light(),
+        solarized_dark(),
+        gruvbox_dark(),
+        gruvbox_light(),
+        cyber_wave(),
+        willow_dream(),
+        fancy_dracula(),
+        phenomenon(),
+        jellyfish(),
+        koi(),
+        leafy(),
+        marble(),
+        pink_city(),
+        snowy(),
+        red_rock(),
+        dark_city(),
+        sent_referral_reward(),
+        solar_flare(),
+        adeberry(),
+        received_referral_reward(),
+    ];
+
+    assert_eq!(
+        builtins.len(),
+        24,
+        "update this test when adding/removing built-in themes"
+    );
+
+    for theme in &builtins {
+        let name = theme.name();
+
+        // Invariant 1: no ui block on any built-in.
+        assert!(
+            theme.ui().is_none(),
+            "built-in {:?} unexpectedly carries a ui block",
+            name
+        );
+
+        // Invariant 2: surface_2() returns the same value as the derived path.
+        let derived_surface_2 = Fill::Solid(color::internal_colors::neutral_2(theme));
+        assert_eq!(
+            theme.surface_2(),
+            derived_surface_2,
+            "surface_2 drift for {:?}",
+            name
+        );
+
+        // Invariant 3: outline() returns the same value as the derived path.
+        let derived_outline = color::internal_colors::fg_overlay_2(theme);
+        assert_eq!(
+            theme.outline(),
+            derived_outline,
+            "outline drift for {:?}",
+            name
+        );
+
+        // Invariant 4: active_ui_text_color() returns the same value as the derived path.
+        let derived_text = theme.main_text_color(theme.surface_2());
+        assert_eq!(
+            theme.active_ui_text_color(),
+            derived_text,
+            "active_ui_text_color drift for {:?}",
+            name
+        );
+    }
 }

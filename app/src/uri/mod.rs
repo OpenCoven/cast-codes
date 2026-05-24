@@ -14,7 +14,7 @@ use crate::root_view::{open_new_window_get_handles, OpenLaunchConfigArg};
 use crate::server::ids::ServerId;
 use crate::server::telemetry::{LaunchConfigUiLocation, TelemetryEvent};
 use crate::util::openable_file_type::{
-    is_file_openable_in_warp, is_markdown_file, is_runnable_shell_script, starts_with_shebang,
+    is_file_openable_in_warp, is_markdown_file, starts_with_shebang,
 };
 use crate::workspace::util::PaneViewLocator;
 use crate::workspace::{Workspace, WorkspaceAction, WorkspaceRegistry};
@@ -1079,9 +1079,6 @@ fn classify_open_file_action(path: &Path) -> OpenFileAction {
         return OpenFileAction::Notebook;
     }
     if path.is_file() {
-        if is_runnable_shell_script(path) {
-            return OpenFileAction::ExecuteInSession;
-        }
         // Anything we can show in the editor opens there. The second branch catches
         // shebang scripts that `is_file_openable_in_warp` rejects on extension alone
         // (e.g. an extensionless `#!/bin/sh` file without the user-execute bit) so

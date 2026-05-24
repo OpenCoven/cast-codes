@@ -30,6 +30,10 @@ mod tests;
 pub(in crate::pane_group) const DEFAULT_FLEX_VALUE: f32 = 1.0;
 pub(in crate::pane_group) const DEFAULT_FLEX_SIZE: PaneFlex = PaneFlex(DEFAULT_FLEX_VALUE);
 
+/// A short-lived borrow of a closure that maps a [`PaneId`] to its minimum
+/// horizontal pixel width for splitter clamping.
+pub(in crate::pane_group) type PaneMinWidthFn<'a> = &'a dyn Fn(PaneId) -> f32;
+
 pub fn get_divider_thickness() -> f32 {
     if FeatureFlag::MinimalistUI.is_enabled() {
         1.0
@@ -528,9 +532,11 @@ impl PaneData {
         &mut self,
         border_id: EntityId,
         delta: f32,
+        pane_min_width: PaneMinWidthFn<'_>,
         ctx: &mut ViewContext<PaneGroup>,
     ) {
-        self.root.adjust_pane_size(border_id, delta, ctx);
+        self.root
+            .adjust_pane_size(border_id, delta, pane_min_width, ctx);
     }
 
     pub fn adjust_pane_size_by_id(
@@ -538,10 +544,11 @@ impl PaneData {
         pane_id: PaneId,
         direction: SplitDirection,
         delta: f32,
+        pane_min_width: PaneMinWidthFn<'_>,
         ctx: &mut ViewContext<PaneGroup>,
     ) {
         self.root
-            .adjust_pane_size_by_id(pane_id, direction, delta, ctx);
+            .adjust_pane_size_by_id(pane_id, direction, delta, pane_min_width, ctx);
     }
 
     pub fn panes_by_direction(
@@ -753,11 +760,14 @@ impl PaneNode {
         &mut self,
         border_id: EntityId,
         delta: f32,
+        pane_min_width: PaneMinWidthFn<'_>,
         ctx: &mut ViewContext<PaneGroup>,
     ) -> bool {
         match self {
             PaneNode::Leaf(_) => false,
-            PaneNode::Branch(branch) => branch.adjust_pane_size(border_id, delta, ctx),
+            PaneNode::Branch(branch) => {
+                branch.adjust_pane_size(border_id, delta, pane_min_width, ctx)
+            }
         }
     }
 
@@ -773,13 +783,28 @@ impl PaneNode {
         pane_id: PaneId,
         direction: SplitDirection,
         delta: f32,
+        pane_min_width: PaneMinWidthFn<'_>,
         ctx: &mut ViewContext<PaneGroup>,
     ) -> bool {
         match self {
             PaneNode::Leaf(id) => *id == pane_id,
             PaneNode::Branch(branch) => {
-                branch.adjust_pane_size_by_id(pane_id, direction, delta, ctx)
+                branch.adjust_pane_size_by_id(pane_id, direction, delta, pane_min_width, ctx)
             }
+        }
+    }
+
+    /// The largest [`PaneContent::min_pane_width`] of any leaf reachable from
+    /// this subtree. Used by the splitter clamp so a divider drag cannot
+    /// shrink the subtree below the minimum width its strictest leaf demands.
+    fn max_leaf_min_pane_width(&self, pane_min_width: PaneMinWidthFn<'_>) -> f32 {
+        match self {
+            PaneNode::Leaf(id) => pane_min_width(*id),
+            PaneNode::Branch(branch) => branch
+                .nodes
+                .iter()
+                .map(|(_, node)| node.max_leaf_min_pane_width(pane_min_width))
+                .fold(0.0_f32, f32::max),
         }
     }
 
@@ -1132,6 +1157,7 @@ impl PaneBranch {
         &mut self,
         border_id: EntityId,
         delta: f32,
+        pane_min_width: PaneMinWidthFn<'_>,
         ctx: &mut ViewContext<PaneGroup>,
     ) -> bool {
         if let Some(idx) = self
@@ -1152,12 +1178,26 @@ impl PaneBranch {
                 SplitDirection::Vertical => (pane_size_1.y(), pane_size_2.y()),
             };
 
+            // Clamp at the larger of (a) the shared MINIMUM_PANE_SIZE floor and
+            // (b) the strictest per-pane-content minimum on each side of the
+            // divider (e.g. terminals need ~240px so columns stay legible).
+            // Vertical splits only constrain by the shared minimum: rows
+            // simply get fewer when squeezed, no per-character wrap.
+            let base_min = get_minimum_pane_size(ctx);
+            let (min_1, min_2) = match self.axis {
+                SplitDirection::Horizontal => (
+                    base_min.max(self.nodes[idx].1.max_leaf_min_pane_width(pane_min_width)),
+                    base_min.max(
+                        self.nodes[idx + 1]
+                            .1
+                            .max_leaf_min_pane_width(pane_min_width),
+                    ),
+                ),
+                SplitDirection::Vertical => (base_min, base_min),
+            };
+
             // Omit noise in dragging.
-            let minimum_pane_size = get_minimum_pane_size(ctx);
-            if size_1 + delta < minimum_pane_size
-                || size_2 - delta < minimum_pane_size
-                || delta.abs() < f32::EPSILON
-            {
+            if size_1 + delta < min_1 || size_2 - delta < min_2 || delta.abs() < f32::EPSILON {
                 return true;
             }
 
@@ -1173,7 +1213,7 @@ impl PaneBranch {
         }
 
         for (_, node) in &mut self.nodes {
-            if node.adjust_pane_size(border_id, delta, ctx) {
+            if node.adjust_pane_size(border_id, delta, pane_min_width, ctx) {
                 return true;
             }
         }
@@ -1204,10 +1244,11 @@ impl PaneBranch {
         pane_id: PaneId,
         direction: SplitDirection,
         delta: f32,
+        pane_min_width: PaneMinWidthFn<'_>,
         ctx: &mut ViewContext<PaneGroup>,
     ) -> bool {
         for (idx, (_, node)) in self.nodes.iter_mut().enumerate() {
-            if node.adjust_pane_size_by_id(pane_id, direction, delta, ctx) {
+            if node.adjust_pane_size_by_id(pane_id, direction, delta, pane_min_width, ctx) {
                 // If the resizing direction is different from the splitting direction
                 // of the branch, we return for the parents to handle.
                 if direction != self.axis {
@@ -1215,7 +1256,7 @@ impl PaneBranch {
                 }
 
                 let divider_id = self.dividers[idx.min(self.dividers.len() - 1)].id;
-                self.adjust_pane_size(divider_id, delta, ctx);
+                self.adjust_pane_size(divider_id, delta, pane_min_width, ctx);
                 break;
             }
         }

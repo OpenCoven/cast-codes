@@ -21,6 +21,27 @@ use dirs::home_dir;
 use serde::{Deserialize, Serialize};
 use warpui::{assets::asset_cache::AssetSource, color::ColorU, geometry::vector::vec2f};
 
+mod opt_hex_color {
+    use super::ColorU;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &Option<ColorU>, s: S) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(c) => {
+                let hex = format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b);
+                hex.serialize(s)
+            }
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<ColorU>, D::Error> {
+        let opt: Option<String> = Option::deserialize(d)?;
+        opt.map(|s| super::hex_color::coloru_from_hex_string(&s).map_err(serde::de::Error::custom))
+            .transpose()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Image {
     pub source: AssetSource,
@@ -585,6 +606,109 @@ impl TerminalColors {
     }
 }
 
+/// Optional, tweakcn-aligned semantic UI tokens. Every field is optional;
+/// missing fields fall back to today's derived values in `color.rs`.
+/// Field names mirror tweakcn (`--card`, `--card-foreground`, etc.) snake_cased.
+#[derive(Serialize, Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct UiTokens {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub card: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub card_foreground: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub popover: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub popover_foreground: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub primary: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub primary_foreground: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub secondary: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub secondary_foreground: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub muted: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub muted_foreground: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub destructive: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub border: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub input: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub ring: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub sidebar: Option<ColorU>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub sidebar_foreground: Option<ColorU>,
+}
+
 #[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct WarpTheme {
     background: Fill,
@@ -602,6 +726,19 @@ pub struct WarpTheme {
     terminal_colors: TerminalColors,
     // If name is None, we construct the name by processing the theme .yaml file name
     name: Option<String>,
+
+    /// Optional tweakcn-aligned UI tokens. See `UiTokens` for the schema.
+    /// When absent, all accessors fall back to today's derived values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) ui: Option<UiTokens>,
+
+    /// Provenance — set by the import flow; ignored at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<String>,
+
+    /// Provenance — set by the import flow; ignored at runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source_imported_at: Option<String>,
 }
 
 impl WarpTheme {
@@ -625,6 +762,9 @@ impl WarpTheme {
             terminal_colors,
             background_image,
             name,
+            ui: None,
+            source: None,
+            source_imported_at: None,
         }
     }
 
@@ -634,6 +774,33 @@ impl WarpTheme {
 
     pub fn set_name(&mut self, name: String) {
         self.name = Some(name);
+    }
+
+    pub fn with_ui(
+        mut self,
+        ui: UiTokens,
+        source: impl Into<String>,
+        imported_at: impl Into<String>,
+    ) -> Self {
+        self.ui = Some(ui);
+        self.source = Some(source.into());
+        self.source_imported_at = Some(imported_at.into());
+        self
+    }
+
+    /// Returns a reference to the optional UI token block, if present.
+    pub fn ui(&self) -> Option<&UiTokens> {
+        self.ui.as_ref()
+    }
+
+    /// Returns the provenance source tag (e.g. `"tweakcn"`), if set.
+    pub fn source(&self) -> Option<&str> {
+        self.source.as_deref()
+    }
+
+    /// Returns the raw foreground `ColorU` (no wrapping `Fill`).
+    pub fn foreground_color(&self) -> ColorU {
+        self.foreground
     }
 
     pub fn details(&self) -> CustomDetails {
@@ -676,6 +843,22 @@ pub fn mock_terminal_colors() -> TerminalColors {
             AnsiColor::from_u32(0xE5E6FEFF),
             AnsiColor::from_u32(0xFEFFFFFF),
         ),
+    )
+}
+
+/// Minimal `WarpTheme` suitable for use in tests across crates.
+/// Dark background, light foreground, blue accent; no `ui` block.
+#[cfg(any(test, feature = "test-util"))]
+pub fn mock_warp_theme() -> WarpTheme {
+    WarpTheme::new(
+        Fill::Solid(ColorU::from_u32(0x090300ff)), // background
+        ColorU::from_u32(0xa5a2a2ff),              // foreground
+        Fill::Solid(ColorU::from_u32(0x01a0e4ff)), // accent
+        None,                                      // cursor
+        Some(Details::Darker),                     // details
+        mock_terminal_colors(),                    // terminal_colors
+        None,                                      // background_image
+        None,                                      // name
     )
 }
 

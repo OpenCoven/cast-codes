@@ -98,6 +98,8 @@ integration_tests! {
     test_accepting_completion_inserts_space,
     test_palette_opens_when_theme_chooser_is_open,
     test_launch_warp_with_theme_in_warp_config,
+    #[ignore = "Requires real display; run manually with WARPUI_USE_REAL_DISPLAY_IN_INTEGRATION_TESTS=1"]
+    test_ui_block_theme_drives_colour_accessors,
     #[cfg(target_os="macos")]
     test_preview_config_dir_migration,
     #[ignore = "Flakes in CI"]

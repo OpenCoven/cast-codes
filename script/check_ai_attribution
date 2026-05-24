@@ -33,6 +33,53 @@ for pattern in "${patterns[@]}"; do
     "$pattern" . >> "$tmp" || true
 done
 
+# Commit-message scan. The file-content scan above only catches attribution that
+# lives in tracked files; an agent that follows the default `Co-Authored-By: ...`
+# trailer for git commits would slip past it. Scan commit-message bodies of
+# commits ahead of the base ref (default: origin/main) against the same patterns.
+#
+# Override the base ref with AI_ATTRIBUTION_BASE_REF for CI or non-standard
+# setups. Skips silently when no usable base ref exists (fresh clone, detached
+# HEAD on the base itself, etc.) so the existing file-scan behavior is preserved.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  base_ref="${AI_ATTRIBUTION_BASE_REF:-}"
+  if [[ -z "$base_ref" ]]; then
+    for candidate in origin/main main origin/master master; do
+      if git rev-parse --verify --quiet "$candidate" >/dev/null; then
+        base_ref="$candidate"
+        break
+      fi
+    done
+  fi
+
+  if [[ -n "$base_ref" ]]; then
+    # Reject refs that start with '-' to prevent option injection
+    if [[ "$base_ref" == -* ]]; then
+      echo "AI_ATTRIBUTION_BASE_REF must not start with '-': $base_ref" >&2
+      exit 1
+    fi
+
+    # Resolve to a commit SHA to avoid option injection
+    base_sha=$(git rev-parse --verify --quiet -- "${base_ref}^{commit}" 2>/dev/null) || base_sha=""
+
+    if [[ -n "$base_sha" ]]; then
+      while IFS= read -r sha; do
+        [[ -z "$sha" ]] && continue
+        body="$(git log -1 --pretty=format:%B "$sha")"
+        for pattern in "${patterns[@]}"; do
+          # Emit one prefixed line per matching message line.
+          if matched="$(printf '%s\n' "$body" | rg --pcre2 --no-line-number --no-filename "$pattern" 2>/dev/null)"; then
+            while IFS= read -r line; do
+              [[ -z "$line" ]] && continue
+              printf '[commit-msg %s] %s\n' "$sha" "$line" >> "$tmp"
+            done <<< "$matched"
+          fi
+        done
+      done < <(git log "$base_sha..HEAD" --pretty=tformat:%H 2>/dev/null || true)
+    fi
+  fi
+fi
+
 if [[ ! -s "$tmp" ]]; then
   echo "AI attribution guard passed."
   exit 0
