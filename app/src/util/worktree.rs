@@ -148,6 +148,19 @@ pub fn parse_worktree_list_porcelain(input: &str) -> Vec<WorktreeInfo> {
     out
 }
 
+use anyhow::Result;
+
+#[cfg(feature = "local_fs")]
+pub async fn list_worktrees(repo: &Path) -> Result<Vec<WorktreeInfo>> {
+    let out = crate::util::git::run_git_command(repo, &["worktree", "list", "--porcelain"]).await?;
+    Ok(parse_worktree_list_porcelain(&out))
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub async fn list_worktrees(_repo: &Path) -> Result<Vec<WorktreeInfo>> {
+    Err(anyhow::anyhow!("Not supported on wasm"))
+}
+
 #[cfg(test)]
 #[path = "worktree_tests.rs"]
 mod tests;

@@ -164,3 +164,28 @@ fn parse_main_is_first_entry() {
     let r = parse_worktree_list_porcelain(F_MAIN_PLUS_ONE);
     assert!(r[0].is_main, "first entry of `git worktree list` is always main");
 }
+
+#[cfg(feature = "local_fs")]
+#[tokio::test]
+async fn list_worktrees_round_trip_on_temp_repo() {
+    use std::process::Command;
+    let td = TempDir::new().unwrap();
+    let repo = td.path();
+    let run = |args: &[&str]| {
+        let s = Command::new("git").args(args).current_dir(repo).output().unwrap();
+        assert!(s.status.success(), "git {args:?} failed: {}", String::from_utf8_lossy(&s.stderr));
+    };
+    run(&["init", "--initial-branch=main", "-q"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("a"), "a").unwrap();
+    run(&["add", "a"]);
+    run(&["commit", "-q", "-m", "init"]);
+    run(&["branch", "feature/a"]);
+    run(&["worktree", "add", "-q", ".castcodes/worktrees/feature-a", "feature/a"]);
+
+    let list = super::list_worktrees(repo).await.unwrap();
+    assert_eq!(list.len(), 2);
+    assert!(list[0].is_main);
+    assert!(list.iter().any(|w| w.branch.as_deref() == Some("feature/a")));
+}
