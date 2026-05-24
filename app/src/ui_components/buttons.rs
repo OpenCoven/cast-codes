@@ -229,6 +229,46 @@ pub fn close_button(appearance: &Appearance, mouse_state_handle: MouseStateHandl
     icon_button(appearance, Icon::X, false, mouse_state_handle)
 }
 
+/// Icon button with a caller-controlled size, intended for compact
+/// affordances inside chips/badges (e.g. the browser tab close button).
+/// Unlike [`icon_button_with_color`], which hard-codes the 24pt standard
+/// icon-button frame, this preserves the supplied `size` across all four
+/// interactive states so hover/press don't reflow the parent.
+///
+/// This keeps the standard icon-button hover/press backgrounds, while using
+/// chip-scale padding and radius so compact callsites do not need per-state
+/// sizing overrides.
+pub fn small_icon_button_with_color(
+    appearance: &Appearance,
+    icon: Icon,
+    size: f32,
+    mouse_state_handle: MouseStateHandle,
+    color: Fill,
+) -> Button {
+    let theme = appearance.theme();
+    let radius = CornerRadius::with_all(Radius::Pixels(3.0));
+
+    let base = UiComponentStyles::default()
+        .set_width(size)
+        .set_height(size)
+        .set_border_width(0.)
+        .set_padding(Coords::uniform(0.))
+        .set_border_radius(radius)
+        .set_font_color(color.into());
+
+    let hovered = base.set_background(theme.surface_2().into());
+    let pressed = base.set_background(theme.background().into());
+
+    Button::new(
+        mouse_state_handle,
+        base,
+        Some(hovered),
+        Some(pressed),
+        Some(base),
+    )
+    .with_icon_label(icon.to_warpui_icon(color))
+}
+
 pub fn highlight(button: Button, appearance: &Appearance) -> Button {
     button
         .with_style(UiComponentStyles::default().set_font_color(
