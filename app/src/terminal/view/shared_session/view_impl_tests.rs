@@ -18,6 +18,7 @@ use crate::terminal::view::shared_session::test_utils::terminal_view_for_viewer;
 use crate::terminal::TerminalView;
 use crate::test_util::add_window_with_terminal;
 use crate::test_util::terminal::initialize_app_for_terminal_view;
+use crate::workspace::ToastStack;
 use crate::{assert_lines_approx_eq, FeatureFlag};
 
 use super::*;
@@ -783,6 +784,8 @@ fn test_non_owned_tombstone_cannot_start_cloud_followup() {
     let _setup_v2_flag = FeatureFlag::CloudModeSetupV2.override_enabled(true);
 
     App::test((), |mut app| async move {
+        app.add_singleton_model(|_| ToastStack);
+
         let terminal = cloud_mode_terminal_for_test(&mut app);
         let task = create_cloud_mode_task_for_user("another-user");
         let task_id = task.task_id;
