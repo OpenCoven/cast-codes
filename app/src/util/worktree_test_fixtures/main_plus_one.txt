@@ -1,0 +1,8 @@
+worktree /work/myrepo
+HEAD abcdef0123456789abcdef0123456789abcdef01
+branch refs/heads/main
+
+worktree /work/myrepo/.castcodes/worktrees/feature-a
+HEAD 1234567890123456789012345678901234567890
+branch refs/heads/feature/a
+

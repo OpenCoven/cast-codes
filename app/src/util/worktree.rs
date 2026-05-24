@@ -79,6 +79,75 @@ pub fn unique_path(base: &Path) -> PathBuf {
     }
 }
 
+/// Parsed entry from `git worktree list --porcelain`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorktreeInfo {
+    pub path: PathBuf,
+    pub branch: Option<String>, // refs/heads/X → X; None when detached or bare
+    pub head: String,           // short SHA (first 7 chars)
+    pub is_main: bool,          // true for the first entry
+    pub is_locked: bool,
+    pub is_prunable: bool,
+    pub is_bare: bool,
+}
+
+/// Parse `git worktree list --porcelain` output.
+///
+/// Each entry starts with `worktree <path>` and ends at a blank line. Unknown
+/// lines are ignored defensively so a future git version cannot break listing.
+pub fn parse_worktree_list_porcelain(input: &str) -> Vec<WorktreeInfo> {
+    let mut out = Vec::new();
+    let mut first = true;
+    let mut current: Option<WorktreeInfo> = None;
+
+    fn flush(cur: &mut Option<WorktreeInfo>, out: &mut Vec<WorktreeInfo>) {
+        if let Some(w) = cur.take() {
+            out.push(w);
+        }
+    }
+
+    for line in input.lines() {
+        if line.is_empty() {
+            flush(&mut current, &mut out);
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("worktree ") {
+            flush(&mut current, &mut out);
+            current = Some(WorktreeInfo {
+                path: PathBuf::from(rest),
+                branch: None,
+                head: String::new(),
+                is_main: first,
+                is_locked: false,
+                is_prunable: false,
+                is_bare: false,
+            });
+            first = false;
+            continue;
+        }
+        let Some(w) = current.as_mut() else { continue };
+        if let Some(sha) = line.strip_prefix("HEAD ") {
+            w.head = sha.chars().take(7).collect();
+        } else if let Some(refname) = line.strip_prefix("branch ") {
+            w.branch = refname
+                .strip_prefix("refs/heads/")
+                .map(str::to_string)
+                .or_else(|| Some(refname.to_string()));
+        } else if line == "detached" {
+            w.branch = None;
+        } else if line == "bare" {
+            w.is_bare = true;
+        } else if line == "locked" || line.starts_with("locked ") {
+            w.is_locked = true;
+        } else if line == "prunable" || line.starts_with("prunable ") {
+            w.is_prunable = true;
+        }
+        // unknown leading tokens are ignored
+    }
+    flush(&mut current, &mut out);
+    out
+}
+
 #[cfg(test)]
 #[path = "worktree_tests.rs"]
 mod tests;

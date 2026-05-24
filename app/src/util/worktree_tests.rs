@@ -1,4 +1,4 @@
-use super::{default_staging_dir, slugify_branch, unique_path};
+use super::{default_staging_dir, parse_worktree_list_porcelain, slugify_branch, unique_path};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -104,4 +104,63 @@ fn unique_path_skips_existing_suffixes() {
     fs::create_dir(td.path().join("feature-a-3")).unwrap();
     let got = unique_path(&base);
     assert_eq!(got, td.path().join("feature-a-4"));
+}
+
+const F_SINGLE: &str = include_str!("worktree_test_fixtures/single_main.txt");
+const F_MAIN_PLUS_ONE: &str = include_str!("worktree_test_fixtures/main_plus_one.txt");
+const F_LOCKED: &str = include_str!("worktree_test_fixtures/locked.txt");
+const F_PRUNABLE: &str = include_str!("worktree_test_fixtures/prunable.txt");
+const F_DETACHED: &str = include_str!("worktree_test_fixtures/detached.txt");
+const F_BARE: &str = include_str!("worktree_test_fixtures/bare.txt");
+
+#[test]
+fn parse_single_main() {
+    let r = parse_worktree_list_porcelain(F_SINGLE);
+    assert_eq!(r.len(), 1);
+    assert!(r[0].is_main);
+    assert_eq!(r[0].branch.as_deref(), Some("main"));
+    assert_eq!(r[0].head, "abcdef0");
+    assert_eq!(r[0].path, PathBuf::from("/work/myrepo"));
+}
+
+#[test]
+fn parse_main_plus_one() {
+    let r = parse_worktree_list_porcelain(F_MAIN_PLUS_ONE);
+    assert_eq!(r.len(), 2);
+    assert!(r[0].is_main);
+    assert!(!r[1].is_main);
+    assert_eq!(r[1].branch.as_deref(), Some("feature/a"));
+}
+
+#[test]
+fn parse_locked_flag() {
+    let r = parse_worktree_list_porcelain(F_LOCKED);
+    assert!(r.iter().any(|w| w.is_locked && w.branch.as_deref() == Some("locked-branch")));
+}
+
+#[test]
+fn parse_prunable_flag() {
+    let r = parse_worktree_list_porcelain(F_PRUNABLE);
+    assert!(r.iter().any(|w| w.is_prunable && w.branch.as_deref() == Some("gone-branch")));
+}
+
+#[test]
+fn parse_detached_head() {
+    let r = parse_worktree_list_porcelain(F_DETACHED);
+    let detached = r.iter().find(|w| w.path.ends_with("detached")).unwrap();
+    assert_eq!(detached.branch, None);
+    assert_eq!(detached.head, "3333333");
+}
+
+#[test]
+fn parse_bare_flag() {
+    let r = parse_worktree_list_porcelain(F_BARE);
+    assert!(r[0].is_bare);
+    assert!(r[0].branch.is_none());
+}
+
+#[test]
+fn parse_main_is_first_entry() {
+    let r = parse_worktree_list_porcelain(F_MAIN_PLUS_ONE);
+    assert!(r[0].is_main, "first entry of `git worktree list` is always main");
 }

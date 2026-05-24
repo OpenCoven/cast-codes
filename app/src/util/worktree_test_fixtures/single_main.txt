@@ -1,0 +1,4 @@
+worktree /work/myrepo
+HEAD abcdef0123456789abcdef0123456789abcdef01
+branch refs/heads/main
+
