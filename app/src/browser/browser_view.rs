@@ -36,6 +36,7 @@ use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
 #[cfg(not(target_family = "wasm"))]
 use super::data_dir;
+use super::find::FindState;
 use super::persistence;
 use super::url_input::{resolve_with_engine, Resolved};
 #[cfg(not(target_family = "wasm"))]
@@ -130,6 +131,14 @@ pub enum BrowserViewAction {
     SelectTab(usize),
     OpenExternal,
     Collapse,
+    /// Open the find-in-page overlay, or close it if already open.
+    ToggleFind,
+    /// Advance to the next find-in-page match.
+    FindNext,
+    /// Step back to the previous find-in-page match.
+    FindPrev,
+    /// Close the find overlay and clear all highlights in the page.
+    CloseFind,
 }
 
 #[derive(Default, Clone)]
@@ -235,6 +244,15 @@ pub struct BrowserView {
     new_tab_button_mouse_state: MouseStateHandle,
     collapse_button_mouse_state: MouseStateHandle,
     open_external_button_mouse_state: MouseStateHandle,
+    find_toggle_button_mouse_state: MouseStateHandle,
+    find_next_button_mouse_state: MouseStateHandle,
+    find_prev_button_mouse_state: MouseStateHandle,
+    find_close_button_mouse_state: MouseStateHandle,
+    /// Editor used by the find overlay. Kept around even when the overlay
+    /// is hidden so the input view's focus state survives toggle cycles.
+    find_editor: ViewHandle<EditorView>,
+    /// `Some` while the find overlay is visible.
+    find_state: Option<FindState>,
 }
 
 impl BrowserView {
@@ -300,6 +318,32 @@ impl BrowserView {
         });
         ctx.spawn_stream_local(event_rx, Self::handle_webview_event, |_, _| {});
 
+        let find_editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let mut editor = EditorView::single_line(
+                SingleLineEditorOptions {
+                    text: TextOptions::ui_text(Some(12.0), appearance),
+                    select_all_on_focus: true,
+                    clear_selections_on_blur: false,
+                    propagate_and_no_op_vertical_navigation_keys:
+                        PropagateAndNoOpNavigationKeys::Always,
+                    ..Default::default()
+                },
+                ctx,
+            );
+            editor.set_placeholder_text("Find in page", ctx);
+            editor
+        });
+
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
+            match event {
+                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+                _ => {}
+            }
+        });
+
         Self {
             model,
             window_id: ctx.window_id(),
@@ -317,6 +361,12 @@ impl BrowserView {
             new_tab_button_mouse_state: MouseStateHandle::default(),
             collapse_button_mouse_state: MouseStateHandle::default(),
             open_external_button_mouse_state: MouseStateHandle::default(),
+            find_toggle_button_mouse_state: MouseStateHandle::default(),
+            find_next_button_mouse_state: MouseStateHandle::default(),
+            find_prev_button_mouse_state: MouseStateHandle::default(),
+            find_close_button_mouse_state: MouseStateHandle::default(),
+            find_editor,
+            find_state: None,
         }
     }
 
@@ -553,7 +603,53 @@ impl BrowserView {
             NativeWebViewEvent::PopupOpenExternal(url) => {
                 ctx.open_url(&url);
             }
+            NativeWebViewEvent::FindResults(tab_id, current, total) => {
+                if self.model.active_tab().id() != tab_id {
+                    // Find results from a now-background tab — ignore.
+                    return;
+                }
+                if let Some(state) = self.find_state.as_mut() {
+                    state.current = current;
+                    state.total = total;
+                    ctx.notify();
+                }
+            }
         }
+    }
+
+    fn handle_find_query_changed(&mut self, ctx: &mut ViewContext<Self>) {
+        let query = self.find_editor.as_ref(ctx).buffer_text(ctx);
+        if let Some(state) = self.find_state.as_mut() {
+            state.query = query.clone();
+        }
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(webview) = self.active_webview() {
+            webview.borrow().find_set_query(&query);
+        }
+        ctx.notify();
+    }
+
+    fn toggle_find(&mut self, ctx: &mut ViewContext<Self>) {
+        if self.find_state.is_some() {
+            self.close_find(ctx);
+        } else {
+            self.find_state = Some(FindState::default());
+            self.find_editor.update(ctx, |editor, ctx| {
+                editor.set_buffer_text_with_base_buffer("", ctx);
+            });
+            ctx.focus(&self.find_editor);
+            ctx.notify();
+        }
+    }
+
+    fn close_find(&mut self, ctx: &mut ViewContext<Self>) {
+        self.find_state = None;
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(webview) = self.active_webview() {
+            webview.borrow().find_clear();
+        }
+        ctx.focus(&self.url_editor);
+        ctx.notify();
     }
 
     fn sync_pane_title(&self, ctx: &mut ViewContext<Self>) {
@@ -721,6 +817,19 @@ impl BrowserView {
 
         toolbar.add_child(
             Container::new(self.render_toolbar_button(
+                Icon::Search,
+                "Find in page",
+                self.find_toggle_button_mouse_state.clone(),
+                self.find_state.is_some(),
+                false,
+                BrowserViewAction::ToggleFind,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .finish(),
+        );
+        toolbar.add_child(
+            Container::new(self.render_toolbar_button(
                 Icon::LinkExternal,
                 "Open in default browser",
                 self.open_external_button_mouse_state.clone(),
@@ -729,7 +838,7 @@ impl BrowserView {
                 BrowserViewAction::OpenExternal,
                 app,
             ))
-            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
             .finish(),
         );
 
@@ -754,6 +863,94 @@ impl BrowserView {
         ConstrainedBox::new(container.finish())
             .with_height(LOADING_STRIP_HEIGHT)
             .finish()
+    }
+
+    fn render_find_overlay(&self, app: &AppContext) -> Option<Box<dyn Element>> {
+        let state = self.find_state.as_ref()?;
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let font_family = appearance.ui_font_family();
+
+        let input = Container::new(
+            ConstrainedBox::new(
+                Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+            )
+            .with_height(URL_BAR_HEIGHT)
+            .with_min_width(URL_BAR_MIN_WIDTH)
+            .finish(),
+        )
+        .with_horizontal_padding(10.0)
+        .with_background(theme.surface_1())
+        .with_border(Border::all(1.0).with_border_fill(theme.surface_3()))
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
+            URL_BAR_BORDER_RADIUS,
+        )))
+        .finish();
+
+        let count_label = Text::new_inline(state.count_label(), font_family, 12.0)
+            .with_color(blended_colors::text_main(theme, theme.background()))
+            .finish();
+
+        let mut row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_main_axis_size(MainAxisSize::Max);
+        row.add_child(Expanded::new(1.0, input).finish());
+        row.add_child(
+            Container::new(count_label)
+                .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+                .finish(),
+        );
+        row.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::ArrowUp,
+                "Previous match",
+                self.find_prev_button_mouse_state.clone(),
+                false,
+                state.total == 0,
+                BrowserViewAction::FindPrev,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
+        row.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::ArrowDown,
+                "Next match",
+                self.find_next_button_mouse_state.clone(),
+                false,
+                state.total == 0,
+                BrowserViewAction::FindNext,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
+        row.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::X,
+                "Close find",
+                self.find_close_button_mouse_state.clone(),
+                false,
+                false,
+                BrowserViewAction::CloseFind,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
+
+        Some(
+            ConstrainedBox::new(
+                Container::new(row.finish())
+                    .with_horizontal_padding(TOOLBAR_HORIZONTAL_PADDING)
+                    .with_background(theme.surface_1())
+                    .with_border(Border::top(1.0).with_border_fill(theme.surface_3()))
+                    .finish(),
+            )
+            .with_height(TOOLBAR_HEIGHT)
+            .finish(),
+        )
     }
 
     fn render_tab_strip(&self, app: &AppContext) -> Box<dyn Element> {
@@ -941,10 +1138,14 @@ impl View for BrowserView {
                 .finish(),
         };
 
-        Flex::column()
+        let mut column = Flex::column()
             .with_main_axis_size(MainAxisSize::Max)
             .with_child(self.render_tab_strip(app))
-            .with_child(self.render_toolbar(app))
+            .with_child(self.render_toolbar(app));
+        if let Some(overlay) = self.render_find_overlay(app) {
+            column = column.with_child(overlay);
+        }
+        column
             .with_child(self.render_loading_strip(app))
             .with_child(Expanded::new(1.0, webview_element).finish())
             .finish()
@@ -971,6 +1172,20 @@ impl TypedActionView for BrowserView {
                 // registered in Phase 7; dispatching by string name resolves
                 // at runtime, so it's safe to land before the handler exists.
                 ctx.dispatch_global_action("workspace:toggle_browser_pane", &());
+            }
+            BrowserViewAction::ToggleFind => self.toggle_find(ctx),
+            BrowserViewAction::CloseFind => self.close_find(ctx),
+            BrowserViewAction::FindNext => {
+                #[cfg(not(target_family = "wasm"))]
+                if let Some(webview) = self.active_webview() {
+                    webview.borrow().find_next();
+                }
+            }
+            BrowserViewAction::FindPrev => {
+                #[cfg(not(target_family = "wasm"))]
+                if let Some(webview) = self.active_webview() {
+                    webview.borrow().find_prev();
+                }
             }
         }
     }

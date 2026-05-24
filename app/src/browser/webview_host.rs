@@ -9,6 +9,8 @@ use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
 #[cfg(not(target_family = "wasm"))]
+use super::find::{self, FindResultsMessage};
+#[cfg(not(target_family = "wasm"))]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
@@ -32,6 +34,9 @@ pub(crate) enum NativeWebViewEvent {
     PopupOpenTab(String),
     /// A popup classified as external. Host should hand off to `ctx.open_url`.
     PopupOpenExternal(String),
+    /// Find-in-page results posted back by the injected JS. `current` is
+    /// 1-based when `total > 0`; both are 0 when there are no matches.
+    FindResults(TabId, usize, usize),
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -106,6 +111,38 @@ impl NativeBrowserWebView {
         if let Some(webview) = &self.webview {
             if let Err(err) = webview.evaluate_script("location.reload()") {
                 log::warn!("failed to reload browser pane: {err}");
+            }
+        }
+    }
+
+    /// Inject the find script and search for `query`. Idempotent: the
+    /// script clears any prior state on every call.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_set_query(&self, query: &str) {
+        self.run_script(find::FIND_SCRIPT);
+        self.run_script(&find::set_query_script(query));
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_next(&self) {
+        self.run_script(find::next_script());
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_prev(&self) {
+        self.run_script(find::prev_script());
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_clear(&self) {
+        self.run_script(find::clear_script());
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn run_script(&self, script: &str) {
+        if let Some(webview) = &self.webview {
+            if let Err(err) = webview.evaluate_script(script) {
+                log::warn!("failed to evaluate browser pane script: {err}");
             }
         }
     }
@@ -194,6 +231,7 @@ impl NativeBrowserWebView {
             let nav_tx = self.event_tx.clone();
             let load_tx = self.event_tx.clone();
             let popup_tx = self.event_tx.clone();
+            let ipc_tx = self.event_tx.clone();
 
             let mut builder = wry::WebViewBuilder::new_as_child(&parent)
                 .with_url(url)
@@ -230,6 +268,22 @@ impl NativeBrowserWebView {
                         }
                     }
                     false
+                })
+                .with_ipc_handler(move |request| {
+                    // The only IPC contract today is the find-in-page
+                    // results message. We parse defensively so a malformed
+                    // body from a (hypothetical) future sender doesn't take
+                    // down the channel.
+                    let body = request.body();
+                    if let Ok(msg) = serde_json::from_str::<FindResultsMessage>(body) {
+                        if msg.kind == "find_results" {
+                            let _ = ipc_tx.try_send(NativeWebViewEvent::FindResults(
+                                tab_id,
+                                msg.current,
+                                msg.total,
+                            ));
+                        }
+                    }
                 });
 
             // NOTE (wry 0.38 on macOS): `with_web_context` is a no-op here —
