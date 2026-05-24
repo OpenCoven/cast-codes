@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 use std::{cell::RefCell, rc::Rc};
 
 use pathfinder_geometry::{
@@ -114,11 +115,26 @@ const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
 const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
-/// Height of the page-load progress strip below the toolbar. Renders
-/// accent-colored when the active tab is loading; transparent otherwise.
+/// Height of the page-load progress strip below the toolbar. Renders an
+/// animated accent-colored fill while the active tab is loading.
 const LOADING_STRIP_HEIGHT: f32 = 2.0;
 /// Size of the SSL/security indicator rendered inside the URL bar.
 const SECURITY_ICON_SIZE: f32 = 14.0;
+
+/// Time constant for the indeterminate progress ramp. The fill follows
+/// `0.9 * (1 - exp(-elapsed / tau))`, so it reaches ~57% at one tau,
+/// ~86% at three tau, and asymptotes to 90% — leaving headroom for the
+/// completion snap. wry exposes no real load-progress percentage, so
+/// this is an indeterminate visual cue, not a measurement.
+const LOADING_RAMP_TAU_SECS: f32 = 2.0;
+/// Time the fill takes to snap from its `Ramping` value up to 100% on
+/// load complete. Short enough to feel instant, long enough to read.
+const LOADING_SNAP_SECS: f32 = 0.08;
+/// Time the strip takes to fade out after hitting 100%.
+const LOADING_FADE_SECS: f32 = 0.30;
+/// Target animation frame interval (~60fps). The strip element schedules
+/// the next paint via `PaintContext::repaint_after` while animating.
+const LOADING_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -149,6 +165,194 @@ pub enum BrowserViewAction {
 struct TabUiState {
     chip_mouse: MouseStateHandle,
     close_mouse: MouseStateHandle,
+}
+
+/// Animation phase for the page-load progress strip. The strip is
+/// indeterminate (wry doesn't surface a real progress %), so on nav start
+/// we begin a slow exponential ramp toward 90%; on load complete we snap
+/// from the current fill to 100% and fade out.
+#[derive(Clone, Copy, Debug)]
+enum LoadingStripPhase {
+    /// Not visible. The element paints nothing and stops scheduling frames.
+    Idle,
+    /// Loading is in progress; fill rises from 0 toward 0.9 asymptotically.
+    Ramping { started: Instant },
+    /// Loading has finished; the strip first snaps from `fill_at_complete`
+    /// to 1.0 over `LOADING_SNAP_SECS`, then fades alpha to 0 over
+    /// `LOADING_FADE_SECS`, then transitions to `Idle`.
+    Complete {
+        started: Instant,
+        fill_at_complete: f32,
+    },
+}
+
+impl LoadingStripPhase {
+    /// Returns (fill width fraction in [0,1], alpha multiplier in [0,1]).
+    fn fill_and_alpha(&self) -> (f32, f32) {
+        match *self {
+            Self::Idle => (0.0, 0.0),
+            Self::Ramping { started } => {
+                let t = started.elapsed().as_secs_f32();
+                let fill = 0.9 * (1.0 - (-t / LOADING_RAMP_TAU_SECS).exp());
+                (fill, 1.0)
+            }
+            Self::Complete {
+                started,
+                fill_at_complete,
+            } => {
+                let t = started.elapsed().as_secs_f32();
+                if t < LOADING_SNAP_SECS {
+                    let s = t / LOADING_SNAP_SECS;
+                    let fill = fill_at_complete + (1.0 - fill_at_complete) * s;
+                    (fill, 1.0)
+                } else {
+                    let f = (t - LOADING_SNAP_SECS) / LOADING_FADE_SECS;
+                    let alpha = (1.0 - f).max(0.0);
+                    (1.0, alpha)
+                }
+            }
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        match self {
+            Self::Idle => true,
+            Self::Ramping { .. } => false,
+            Self::Complete { started, .. } => {
+                started.elapsed().as_secs_f32() >= LOADING_SNAP_SECS + LOADING_FADE_SECS
+            }
+        }
+    }
+
+    fn is_animating(&self) -> bool {
+        !matches!(self, Self::Idle)
+    }
+}
+
+/// Shared loading-strip state. Cloned cheaply (Rc<RefCell<_>>) into both
+/// the BrowserView and each `LoadingStripElement` so the element can read
+/// and transition the phase from within `paint`.
+#[derive(Default, Clone)]
+struct LoadingStrip {
+    phase: Rc<RefCell<LoadingStripPhase>>,
+}
+
+impl Default for LoadingStripPhase {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+impl LoadingStrip {
+    /// Update the phase based on a `loading` flag change for the active
+    /// tab. Idempotent — calling `set_loading(true)` while already
+    /// ramping does nothing.
+    fn set_loading(&self, loading: bool) {
+        let now = Instant::now();
+        let mut phase = self.phase.borrow_mut();
+        match (*phase, loading) {
+            (LoadingStripPhase::Idle, true) | (LoadingStripPhase::Complete { .. }, true) => {
+                *phase = LoadingStripPhase::Ramping { started: now };
+            }
+            (LoadingStripPhase::Ramping { .. }, false) => {
+                let fill = phase.fill_and_alpha().0;
+                *phase = LoadingStripPhase::Complete {
+                    started: now,
+                    fill_at_complete: fill,
+                };
+            }
+            // Already in the target phase (Ramping+true, Idle+false,
+            // Complete+false) — no transition.
+            _ => {}
+        }
+    }
+}
+
+struct LoadingStripElement {
+    state: LoadingStrip,
+    color: warp_core::ui::theme::Fill,
+    size: Option<Vector2F>,
+    origin: Option<Point>,
+}
+
+impl LoadingStripElement {
+    fn new(state: LoadingStrip, color: warp_core::ui::theme::Fill) -> Self {
+        Self {
+            state,
+            color,
+            size: None,
+            origin: None,
+        }
+    }
+}
+
+impl Element for LoadingStripElement {
+    fn layout(
+        &mut self,
+        constraint: SizeConstraint,
+        _ctx: &mut LayoutContext,
+        _app: &AppContext,
+    ) -> Vector2F {
+        let width = if constraint.max.x().is_infinite() {
+            constraint.min.x()
+        } else {
+            constraint.max.x()
+        };
+        let size = vec2f(width, LOADING_STRIP_HEIGHT);
+        self.size = Some(size);
+        size
+    }
+
+    fn after_layout(&mut self, _ctx: &mut AfterLayoutContext, _app: &AppContext) {}
+
+    fn paint(&mut self, origin: Vector2F, ctx: &mut PaintContext, _app: &AppContext) {
+        self.origin = Some(Point::from_vec2f(origin, ctx.scene.z_index()));
+        let size = self.size.unwrap_or_default();
+
+        let (fill, alpha) = {
+            let mut phase = self.state.phase.borrow_mut();
+            // Drain finished Complete animations back to Idle so we stop
+            // scheduling frames once the fade ends.
+            if phase.is_expired() && !matches!(*phase, LoadingStripPhase::Idle) {
+                *phase = LoadingStripPhase::Idle;
+            }
+            phase.fill_and_alpha()
+        };
+
+        if fill > 0.0 && alpha > 0.0 {
+            let fill_width = (size.x() * fill).max(0.0);
+            // u8 opacity: clamp to 0..=255 from float alpha.
+            let opacity = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
+            let tinted = self.color.with_opacity(opacity);
+            ctx.scene
+                .draw_rect_with_hit_recording(RectF::new(origin, vec2f(fill_width, size.y())))
+                .with_background(tinted);
+        }
+
+        // Keep the frame pump alive while there's any animation in flight.
+        // (Equivalent to repainting at ~60fps; the framework collapses
+        // multiple repaint_after calls to the earliest one.)
+        if self.state.phase.borrow().is_animating() {
+            ctx.repaint_after(LOADING_FRAME_INTERVAL);
+        }
+    }
+
+    fn dispatch_event(
+        &mut self,
+        _event: &warpui::event::DispatchedEvent,
+        _ctx: &mut EventContext,
+        _app: &AppContext,
+    ) -> bool {
+        false
+    }
+
+    fn size(&self) -> Option<Vector2F> {
+        self.size
+    }
+
+    fn origin(&self) -> Option<Point> {
+        self.origin
+    }
 }
 
 struct NativeWebViewElement {
@@ -257,6 +461,8 @@ pub struct BrowserView {
     find_editor: ViewHandle<EditorView>,
     /// `Some` while the find overlay is visible.
     find_state: Option<FindState>,
+    /// Shared animation state for the page-load progress strip.
+    loading_strip: LoadingStrip,
 }
 
 impl BrowserView {
@@ -339,13 +545,11 @@ impl BrowserView {
             editor
         });
 
-        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
-            match event {
-                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
-                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
-                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
-                _ => {}
-            }
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| match event {
+            EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+            EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+            EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+            _ => {}
         });
 
         Self {
@@ -371,6 +575,7 @@ impl BrowserView {
             find_close_button_mouse_state: MouseStateHandle::default(),
             find_editor,
             find_state: None,
+            loading_strip: LoadingStrip::default(),
         }
     }
 
@@ -411,6 +616,9 @@ impl BrowserView {
                 webview.borrow_mut().load_url(&webview_url_for(&url));
             }
             self.sync_pane_title(ctx);
+            // Optimistic: wry's PageLoadEvent::Started may not race us, so
+            // start the strip immediately. set_loading is idempotent.
+            self.loading_strip.set_loading(true);
             ctx.notify();
         }
     }
@@ -424,6 +632,7 @@ impl BrowserView {
                 webview.borrow().go_back();
             }
             self.sync_pane_title(ctx);
+            self.loading_strip.set_loading(true);
             ctx.notify();
         }
     }
@@ -437,6 +646,7 @@ impl BrowserView {
                 webview.borrow().go_forward();
             }
             self.sync_pane_title(ctx);
+            self.loading_strip.set_loading(true);
             ctx.notify();
         }
     }
@@ -447,6 +657,7 @@ impl BrowserView {
             webview.borrow().reload();
         }
         self.sync_pane_title(ctx);
+        self.loading_strip.set_loading(true);
         ctx.notify();
     }
 
@@ -542,6 +753,8 @@ impl BrowserView {
 
         self.sync_active_tab_into_editor(ctx);
         self.sync_pane_title(ctx);
+        self.loading_strip
+            .set_loading(self.model.active_tab().is_loading());
         ctx.notify();
     }
 
@@ -585,7 +798,17 @@ impl BrowserView {
                 }
             }
             NativeWebViewEvent::LoadingChanged(tab_id, loading) => {
-                if self.model.set_loading_for(tab_id, loading) {
+                let model_changed = self.model.set_loading_for(tab_id, loading);
+                // The progress strip mirrors only the active tab's load
+                // state; background-tab load events update the model but
+                // don't drive the visible animation. Sync unconditionally
+                // (set_loading is idempotent) so the strip catches up even
+                // when the model flag is already in sync — e.g. when the
+                // optimistic `navigate` flip beat the wry event.
+                if self.model.active_tab().id() == tab_id {
+                    self.loading_strip.set_loading(loading);
+                }
+                if model_changed {
                     ctx.notify();
                 }
             }
@@ -858,15 +1081,10 @@ impl BrowserView {
 
     fn render_loading_strip(&self, app: &AppContext) -> Box<dyn Element> {
         let theme = Appearance::as_ref(app).theme();
-        // Always reserve the height so the webview area doesn't reflow when
-        // loading toggles. Background switches to accent while loading.
-        let mut container = Container::new(Flex::row().finish());
-        if self.model.is_loading() {
-            container = container.with_background(theme.accent());
-        }
-        ConstrainedBox::new(container.finish())
-            .with_height(LOADING_STRIP_HEIGHT)
-            .finish()
+        // The strip element reserves height itself and self-schedules
+        // repaints via `PaintContext::repaint_after` while animating;
+        // when idle it produces zero paint commands.
+        LoadingStripElement::new(self.loading_strip.clone(), theme.accent()).finish()
     }
 
     fn render_find_overlay(&self, app: &AppContext) -> Option<Box<dyn Element>> {
@@ -876,12 +1094,10 @@ impl BrowserView {
         let font_family = appearance.ui_font_family();
 
         let input = Container::new(
-            ConstrainedBox::new(
-                Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
-            )
-            .with_height(URL_BAR_HEIGHT)
-            .with_min_width(URL_BAR_MIN_WIDTH)
-            .finish(),
+            ConstrainedBox::new(Clipped::new(ChildView::new(&self.find_editor).finish()).finish())
+                .with_height(URL_BAR_HEIGHT)
+                .with_min_width(URL_BAR_MIN_WIDTH)
+                .finish(),
         )
         .with_horizontal_padding(10.0)
         .with_background(theme.surface_1())
@@ -1181,13 +1397,15 @@ impl TypedActionView for BrowserView {
             }
             BrowserViewAction::ToggleFind => self.toggle_find(ctx),
             BrowserViewAction::CloseFind => self.close_find(ctx),
-            BrowserViewAction::FindNext => {
+            BrowserViewAction::FindNext =>
+            {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_next();
                 }
             }
-            BrowserViewAction::FindPrev => {
+            BrowserViewAction::FindPrev =>
+            {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_prev();
@@ -1264,7 +1482,8 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_security, SecurityState};
+    use super::{classify_security, LoadingStrip, LoadingStripPhase, SecurityState};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn https_is_secure() {
@@ -1331,5 +1550,120 @@ mod tests {
     #[test]
     fn empty_input_is_neutral() {
         assert_eq!(classify_security(""), SecurityState::Neutral);
+    }
+
+    #[test]
+    fn loading_strip_starts_idle() {
+        let strip = LoadingStrip::default();
+        let phase = *strip.phase.borrow();
+        assert!(matches!(phase, LoadingStripPhase::Idle));
+        assert_eq!(phase.fill_and_alpha(), (0.0, 0.0));
+        assert!(phase.is_expired());
+        assert!(!phase.is_animating());
+    }
+
+    #[test]
+    fn loading_strip_transitions_idle_to_ramping_to_complete() {
+        let strip = LoadingStrip::default();
+        strip.set_loading(true);
+        assert!(matches!(
+            *strip.phase.borrow(),
+            LoadingStripPhase::Ramping { .. }
+        ));
+        strip.set_loading(false);
+        assert!(matches!(
+            *strip.phase.borrow(),
+            LoadingStripPhase::Complete { .. }
+        ));
+    }
+
+    #[test]
+    fn loading_strip_set_loading_is_idempotent_while_ramping() {
+        let strip = LoadingStrip::default();
+        strip.set_loading(true);
+        let started_first = if let LoadingStripPhase::Ramping { started } = *strip.phase.borrow() {
+            started
+        } else {
+            panic!("expected Ramping");
+        };
+        // A second true call should NOT reset the start time.
+        std::thread::sleep(Duration::from_millis(5));
+        strip.set_loading(true);
+        let started_second = if let LoadingStripPhase::Ramping { started } = *strip.phase.borrow() {
+            started
+        } else {
+            panic!("expected Ramping after second set");
+        };
+        assert_eq!(started_first, started_second);
+    }
+
+    #[test]
+    fn loading_strip_complete_then_true_restarts_ramp() {
+        let strip = LoadingStrip::default();
+        strip.set_loading(true);
+        strip.set_loading(false);
+        assert!(matches!(
+            *strip.phase.borrow(),
+            LoadingStripPhase::Complete { .. }
+        ));
+        strip.set_loading(true);
+        assert!(matches!(
+            *strip.phase.borrow(),
+            LoadingStripPhase::Ramping { .. }
+        ));
+    }
+
+    #[test]
+    fn loading_strip_ramping_fill_grows_with_time() {
+        let now = Instant::now();
+        let early = LoadingStripPhase::Ramping {
+            started: now - Duration::from_millis(100),
+        };
+        let later = LoadingStripPhase::Ramping {
+            started: now - Duration::from_secs(2),
+        };
+        let (f_early, a_early) = early.fill_and_alpha();
+        let (f_later, a_later) = later.fill_and_alpha();
+        assert!(f_early < f_later, "{f_early} < {f_later}");
+        assert_eq!(a_early, 1.0);
+        assert_eq!(a_later, 1.0);
+        // Asymptote is 0.9, never above.
+        let way_later = LoadingStripPhase::Ramping {
+            started: now - Duration::from_secs(30),
+        };
+        let (f_way_later, _) = way_later.fill_and_alpha();
+        assert!(f_way_later < 0.9 + 1e-3);
+    }
+
+    #[test]
+    fn loading_strip_complete_snaps_then_fades() {
+        let now = Instant::now();
+        // Mid-snap: t=0.04s in, fill_at_complete=0.5 → fill should be halfway to 1.0.
+        let mid_snap = LoadingStripPhase::Complete {
+            started: now - Duration::from_millis(40),
+            fill_at_complete: 0.5,
+        };
+        let (fill, alpha) = mid_snap.fill_and_alpha();
+        assert!((fill - 0.75).abs() < 0.05, "got fill={fill}");
+        assert_eq!(alpha, 1.0);
+
+        // Mid-fade: snap+half-fade in, alpha should be ~0.5.
+        let mid_fade = LoadingStripPhase::Complete {
+            started: now - Duration::from_millis(80 + 150),
+            fill_at_complete: 0.5,
+        };
+        let (fill, alpha) = mid_fade.fill_and_alpha();
+        assert_eq!(fill, 1.0);
+        assert!(alpha > 0.0 && alpha < 1.0, "got alpha={alpha}");
+    }
+
+    #[test]
+    fn loading_strip_complete_is_expired_after_full_fade() {
+        let started = Instant::now() - Duration::from_secs(2);
+        let phase = LoadingStripPhase::Complete {
+            started,
+            fill_at_complete: 0.8,
+        };
+        assert!(phase.is_expired());
     }
 }
