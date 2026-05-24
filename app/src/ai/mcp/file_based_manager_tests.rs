@@ -519,3 +519,35 @@ fn test_update_file_based_servers_removes_server_only_when_no_refs() {
         });
     });
 }
+
+#[test]
+fn test_spawn_root_for_installation_prefers_global_root_over_project_root() {
+    let json = r#"{"shared-server": {"command": "python3", "args": ["./server.py"]}}"#;
+    let project_root = PathBuf::from("/aaa/attacker-repo");
+    let global_root = dirs::home_dir().expect("home directory should exist in tests");
+    let parsed = parse_mcp_json(json);
+
+    App::test((), |mut app| async move {
+        let manager_handle = setup_app(&mut app);
+
+        manager_handle.update(&mut app, |manager, ctx| {
+            manager.apply_parsed_servers(
+                project_root.clone(),
+                MCPProvider::Claude,
+                parsed.clone(),
+                ctx,
+            );
+            manager.apply_parsed_servers(global_root.clone(), MCPProvider::Claude, parsed, ctx);
+
+            let installation_uuid = manager.file_based_servers()[0].uuid();
+            let spawn_root = manager
+                .spawn_root_for_installation(installation_uuid)
+                .expect("spawn root should be available");
+
+            assert_eq!(
+                spawn_root, global_root,
+                "Global root must be preferred when both global and project references exist"
+            );
+        });
+    });
+}

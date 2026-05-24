@@ -422,18 +422,28 @@ impl FileBasedMCPManager {
     /// - Global installations (`~/.warp/.mcp.json`, `~/.claude.json`, etc.): the
     ///   home directory.
     ///
-    /// If the installation is referenced from multiple roots, the lexicographically
-    /// smallest is returned for determinism. Returns `None` for installations that
-    /// are not tracked by `FileBasedMCPManager` (e.g. cloud-templated installs).
+    /// If the installation is referenced from both global and project roots,
+    /// global roots are preferred to preserve auto-spawn trust boundaries.
+    /// Within a scope, the lexicographically smallest root is returned for
+    /// determinism. Returns `None` for installations that are not tracked by
+    /// `FileBasedMCPManager` (e.g. cloud-templated installs).
     pub fn spawn_root_for_installation(&self, uuid: Uuid) -> Option<PathBuf> {
         let hash = self.get_hash_by_uuid(uuid)?;
-        let discovery_root = self
+        let roots = self
             .file_based_servers_by_root
             .iter()
             .filter(|(_, provider_map)| provider_map.values().any(|hashes| hashes.contains(&hash)))
             .map(|(root, _)| root.clone())
             .sorted()
-            .next()?;
+            .collect_vec();
+        let discovery_root = roots
+            .iter()
+            .find(|root| {
+                Self::is_global_warp_root(root)
+                    || dirs::home_dir().as_ref().is_some_and(|home| *root == home)
+            })
+            .cloned()
+            .or_else(|| roots.first().cloned())?;
 
         // Global Warp installs live under `~/.warp*/`, which is internal Warp
         // state rather than a meaningful working directory. Map them to the
