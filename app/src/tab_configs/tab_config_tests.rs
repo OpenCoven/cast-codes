@@ -881,6 +881,36 @@ fn test_build_worktree_toml_manual_round_trips() {
 }
 
 #[test]
+fn test_build_worktree_toml_quotes_base_branch() {
+    let base_branch = "evil;touch${IFS}/tmp/pwn";
+    let toml_str = build_worktree_config_toml(
+        "Worktree: my-project",
+        "/Users/me/repo",
+        base_branch,
+        Some("my-feature"),
+    );
+    let config: TabConfig = toml::from_str(&toml_str).expect("Generated TOML should parse");
+
+    let mut params = HashMap::new();
+    params.insert("worktree_branch_name".to_string(), "my-feature".to_string());
+    let (_, template) = render_tab_config(&config, &params, None);
+
+    if let PaneTemplateType::PaneTemplate { commands, .. } = template {
+        assert_eq!(commands.len(), 2);
+        assert_eq!(
+            commands[0].exec,
+            format!(
+                "git worktree add -b my-feature {} {}",
+                generated_worktree_path_string("/Users/me/repo", "my-feature"),
+                shell_words::quote(base_branch)
+            )
+        );
+    } else {
+        panic!("Expected PaneTemplate");
+    }
+}
+
+#[test]
 fn test_flat_split_with_fewer_than_two_children_falls_back() {
     let toml_str = r#"
 name = "Bad Split"

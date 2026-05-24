@@ -425,6 +425,8 @@ pub(crate) fn build_worktree_config_toml(
     let mut doc = toml::map::Map::new();
     doc.insert("name".into(), Value::String(config_name.to_string()));
 
+    let base_branch = shell_words::quote(base_branch).into_owned();
+
     let mut pane = toml::map::Map::new();
     pane.insert("id".into(), Value::String("main".into()));
     pane.insert("type".into(), Value::String("terminal".into()));
