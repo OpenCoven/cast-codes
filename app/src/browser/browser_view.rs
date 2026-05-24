@@ -1050,3 +1050,72 @@ impl BackingView for BrowserView {
         self.focus_handle = Some(focus_handle);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_security, SecurityState};
+
+    #[test]
+    fn https_is_secure() {
+        assert_eq!(
+            classify_security("https://example.com"),
+            SecurityState::Secure
+        );
+        assert_eq!(
+            classify_security("HTTPS://EXAMPLE.COM/path?q=1"),
+            SecurityState::Secure
+        );
+    }
+
+    #[test]
+    fn remote_http_is_insecure() {
+        assert_eq!(
+            classify_security("http://example.com"),
+            SecurityState::Insecure
+        );
+        assert_eq!(
+            classify_security("http://example.com:8080/path"),
+            SecurityState::Insecure
+        );
+    }
+
+    #[test]
+    fn loopback_http_is_treated_as_secure() {
+        for url in [
+            "http://localhost",
+            "http://localhost:3000",
+            "http://localhost:3000/api",
+            "http://127.0.0.1",
+            "http://127.0.0.1:8080/path",
+            "http://0.0.0.0:9000",
+        ] {
+            assert_eq!(
+                classify_security(url),
+                SecurityState::Secure,
+                "{url} should be treated as Secure (loopback)"
+            );
+        }
+    }
+
+    #[test]
+    fn about_and_file_and_data_are_neutral() {
+        for url in [
+            "about:home",
+            "about:blank",
+            "file:///tmp/x.html",
+            "data:text/html,<h1>hi</h1>",
+            "castcodes://settings",
+        ] {
+            assert_eq!(
+                classify_security(url),
+                SecurityState::Neutral,
+                "{url} should classify as Neutral"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_input_is_neutral() {
+        assert_eq!(classify_security(""), SecurityState::Neutral);
+    }
+}
