@@ -4,6 +4,28 @@
 
 A first-class way to create, open, and remove multiple git worktrees of the same repository from inside CastCodes, plus a per-pane indicator so the user always knows which worktree a pane is running in. Gives the user fully concurrent multi-branch workflows in one window without leaving the terminal, in the spirit of how the Codex agent stages each task in its own worktree.
 
+## MVP scope (what ships behind the flag in this PR)
+
+Discovery during implementation revealed that CastCodes already has `WorkspaceAction::OpenNewWorktreeModal` (a working "create worktree" UI) and `WorkspaceAction::OpenWorktreeInRepo { repo_path }` (a working "open existing worktree" handler). To avoid duplication, this PR ships:
+
+- The per-pane `<slug> · <branch>` tab indicator for any non-main worktree, regardless of how it was created (invariants 16–21, 23). **Already implemented in Phase 1.**
+- The `WorktreeManagerSettings` group with `staging_directory` and `prune_on_remove` knobs (22).
+- Three palette entries (2 and 4):
+  - **"New worktree…"** dispatches the existing `OpenNewWorktreeModal`. Defers to whatever default branch / staging convention that modal already uses; our `staging_directory` setting (22) is **not honored by it in this PR**.
+  - **"Open worktree in repo…"** opens a small `FilterableDropdown` modal listing all worktrees of the active pane's repo (rows from `list_worktrees`), then dispatches the existing `OpenWorktreeInRepo` with the picked path. Matches invariants 11, 12.
+  - **"Remove worktree…"** shows an error toast "Coming in a follow-up" when invoked, so it's discoverable but inert. Real removal flow (15) is deferred.
+- The feature flag `WorktreeManager` gates all three entries (1).
+
+Deferred to a follow-up PR:
+- `NewWorktreeFromBranch` action variant and branch sub-picker (5–10). Until we have a real reason to bypass `OpenNewWorktreeModal`, we don't ship a parallel create flow.
+- `RemoveWorktree` real flow + force-escalation modal + `RemoveWorktreeConfirmationDialog` (15). The action variant exists in the enum but its handler only toasts the deferral message.
+- `PruneWorktree` real flow (13). Variant exists; handler toasts.
+- "Disabled outside a git repo" palette subtitle (3). MVP shows the entries unconditionally; the picker handler shows the error toast if the active pane is not in a repo.
+- Integration tests (Tasks 19–28 in PLAN.md).
+- Staging-directory setting wiring into the create flow (23). The setting parses correctly and is unit-tested; no path actually consumes it in this PR.
+
+Everything below this section describes the **target** behavior. Anything not in the MVP-scope list above is target-only for this PR and tracked as follow-up work.
+
 ## Figma
 
 Figma: none provided.

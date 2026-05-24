@@ -1,6 +1,31 @@
 # Worktree Manager — Tech Spec
 
-See `PRODUCT.md` for user-visible behavior.
+See `PRODUCT.md` for user-visible behavior. See `PRODUCT.md` § "MVP scope" for what actually ships in this PR vs. what's deferred.
+
+## MVP integration notes (from implementation discovery)
+
+CastCodes already has the following infrastructure we now integrate with rather than duplicate:
+
+- **`WorkspaceAction::OpenNewWorktreeModal`** at `app/src/workspace/action.rs:687-689`, handler at `app/src/workspace/view.rs:21110-21123`. Existing user-facing create flow. Our "New worktree…" palette entry dispatches this rather than building a parallel create handler.
+- **`WorkspaceAction::OpenWorktreeInRepo { repo_path: String }`** at `action.rs:692-695`, handler `Workspace::open_worktree_in_repo` at `view.rs:9503-9577`. Existing open-existing-worktree handler. Our "Open worktree in repo…" palette entry opens a bespoke `WorktreePicker` (copy of `BranchPicker` at `app/src/tab_configs/branch_picker.rs:28-111`) that fetches rows via `list_worktrees` and on-select dispatches `OpenWorktreeInRepo`.
+- **Toast infra:** `DismissibleToast::error(msg)` + `view.toast_stack.update(ctx, |s, c| s.add_persistent_toast(t, c))`. Canonical example: `view.rs:7812-7838`.
+- **Async spawn:** `ctx.spawn(async move { … }, move |view, result, ctx| { … })` on `ViewContext<Workspace>`. Canonical: `view.rs:7812` and `app/src/tab_configs/branch_picker.rs:138-145`.
+- **Tab spawn with starting CWD:** `Workspace::add_tab_with_pane_layout(PanesLayout::SingleTerminal(Box::new(NewTerminalOptions { initial_directory: Some(cwd), …Default::default() })), …)`. Canonical: `view.rs:11057-11075` (`add_new_coven_session_tab`). Not directly used in MVP since we delegate to the existing `OpenWorktreeInRepo` handler, but documented for the deferred Remove flow.
+- **Palette entry registration:** `EditableBinding::new("workspace:<key>", "<description>", WorkspaceAction::X).with_context_predicate(id!("Workspace")).with_group(bindings::BindingGroup::Settings.as_str())` registered in `app/src/workspace/mod.rs`. Canonical: `mod.rs:952-958` (`RenameActivePane`). Bindings that need runtime-state gating require a new context flag managed by Workspace — deferred for MVP; our handlers degrade gracefully via toast.
+- **Repo root detection:** Add `pub fn detect_repo_root_sync(cwd: &Path) -> Option<PathBuf>` next to `detect_git_dirs_sync` at `app/src/util/git.rs:88` running `git rev-parse --show-toplevel`. The cached app-side alternative `crates/repo_metadata/src/repositories.rs:167` (`DetectedRepositories::get_root_for_path`) is preferred when a `ViewContext` is already in scope.
+
+### Variant changes vs. original TECH.md
+
+The original spec proposed four new `WorkspaceAction` variants. After discovery, the MVP shipping set is:
+
+- ❌ `NewWorktreeFromBranch { branch, open_in }` — **dropped** (duplicates `OpenNewWorktreeModal`).
+- ❌ `OpenWorktreeInTab { worktree_path }` — **dropped** (duplicates `OpenWorktreeInRepo`).
+- ✅ `RemoveWorktree { worktree_path, force }` — **kept**; MVP handler toasts "Coming in a follow-up".
+- ✅ `PruneWorktree { worktree_path }` — **kept**; same MVP handler.
+- ➕ `OpenWorktreePicker` (no fields) — **added** as a sentinel that the "Open worktree in repo…" palette entry dispatches; handler opens the `WorktreePicker` modal.
+- ➕ `OpenWorktreeRemoveStub` (no fields) — **added** as a sentinel that the "Remove worktree…" palette entry dispatches; handler emits the "coming soon" toast.
+
+Supporting types `BranchTarget` and `WorktreeOpenTarget` are dropped along with the variants that used them.
 
 ## Context
 
