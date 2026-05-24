@@ -39,7 +39,7 @@ use super::{
     CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings, FontSettingsChangedEvent,
     GPUSettings, InputBoxType, InputModeSettings, InputSettings, PaneSettings,
     SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
-    VimBannerSettings, WarpDrivePrivacySettings,
+    VimBannerSettings, WarpDrivePrivacySettings, WorktreeManagerSettings,
 };
 
 pub struct UserDefaultsOnStartup {
@@ -98,7 +98,7 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     EmacsBindingsSettings::register(ctx);
     SameLinePromptBlockSettings::register(ctx);
     SemanticSelection::register(ctx);
-    super::worktree_manager::WorktreeManagerSettings::register(ctx);
+    WorktreeManagerSettings::register(ctx);
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     super::LinuxAppConfiguration::register(ctx);
