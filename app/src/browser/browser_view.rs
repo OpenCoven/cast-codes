@@ -29,14 +29,23 @@ use crate::{
         pane::view::{self, HeaderContent, StandardHeader, StandardHeaderOptions},
         BackingView, PaneConfiguration, PaneEvent,
     },
-    ui_components::{blended_colors, buttons::icon_button_with_color, icons::Icon},
+    ui_components::{
+        blended_colors,
+        buttons::{icon_button_with_color, small_icon_button_with_color},
+        icons::Icon,
+    },
 };
 
 use super::about_home;
 use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
+#[cfg(not(target_family = "wasm"))]
+use super::data_dir;
+use super::find::FindState;
 use super::persistence;
 use super::url_input::{resolve_with_engine, Resolved};
-use super::webview_host::NativeBrowserWebView;
+#[cfg(not(target_family = "wasm"))]
+use super::webview_host::SharedWebContext;
+use super::webview_host::{NativeBrowserWebView, NativeWebViewEvent};
 use crate::terminal::general_settings::GeneralSettings;
 
 /// Map a model-side URL to the URL the webview should actually load.
@@ -48,6 +57,43 @@ fn webview_url_for(model_url: &str) -> String {
     } else {
         model_url.to_string()
     }
+}
+
+/// Classification of the active URL for the SSL/security indicator in the
+/// URL bar. Loopback http URLs are intentionally treated as `Secure` since
+/// they're served from the user's own machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SecurityState {
+    /// HTTPS or loopback/localhost HTTP — no warning needed.
+    Secure,
+    /// HTTP to a non-loopback host — show a warning.
+    Insecure,
+    /// Schemes for which a security indicator is irrelevant (no icon).
+    Neutral,
+}
+
+fn classify_security(url: &str) -> SecurityState {
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("https://") {
+        return SecurityState::Secure;
+    }
+    if lower.starts_with("http://") {
+        if let Ok(parsed) = url::Url::parse(url) {
+            if let Some(host) = parsed.host_str() {
+                let host = host
+                    .strip_prefix('[')
+                    .and_then(|rest| rest.strip_suffix(']'))
+                    .unwrap_or(host);
+                if host.eq_ignore_ascii_case("localhost")
+                    || matches!(host, "127.0.0.1" | "::1" | "0.0.0.0")
+                {
+                    return SecurityState::Secure;
+                }
+            }
+        }
+        return SecurityState::Insecure;
+    }
+    SecurityState::Neutral
 }
 
 const URL_BAR_HEIGHT: f32 = 32.0;
@@ -68,6 +114,11 @@ const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
 const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
+/// Height of the page-load progress strip below the toolbar. Renders
+/// accent-colored when the active tab is loading; transparent otherwise.
+const LOADING_STRIP_HEIGHT: f32 = 2.0;
+/// Size of the SSL/security indicator rendered inside the URL bar.
+const SECURITY_ICON_SIZE: f32 = 14.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -84,6 +135,14 @@ pub enum BrowserViewAction {
     SelectTab(usize),
     OpenExternal,
     Collapse,
+    /// Open the find-in-page overlay, or close it if already open.
+    ToggleFind,
+    /// Advance to the next find-in-page match.
+    FindNext,
+    /// Step back to the previous find-in-page match.
+    FindPrev,
+    /// Close the find overlay and clear all highlights in the page.
+    CloseFind,
 }
 
 #[derive(Default, Clone)]
@@ -172,8 +231,14 @@ pub struct BrowserView {
     focus_handle: Option<PaneFocusHandle>,
     /// Per-tab native webviews, aligned by index with `model.tabs()`.
     webviews: Vec<Rc<RefCell<NativeBrowserWebView>>>,
-    /// Channel for tab-tagged document title updates from all webviews.
-    title_tx: async_channel::Sender<(TabId, String)>,
+    /// Channel for tab-tagged events from all webviews (titles, page-load
+    /// lifecycle, popup requests, navigation redirects).
+    event_tx: async_channel::Sender<NativeWebViewEvent>,
+    /// Shared WebKit data store for every tab in this pane. Lifetime spans
+    /// the pane (and outlives every wry::WebView built from it — required
+    /// per wry's docs). `None` on wasm.
+    #[cfg(not(target_family = "wasm"))]
+    web_context: Option<SharedWebContext>,
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
@@ -183,6 +248,15 @@ pub struct BrowserView {
     new_tab_button_mouse_state: MouseStateHandle,
     collapse_button_mouse_state: MouseStateHandle,
     open_external_button_mouse_state: MouseStateHandle,
+    find_toggle_button_mouse_state: MouseStateHandle,
+    find_next_button_mouse_state: MouseStateHandle,
+    find_prev_button_mouse_state: MouseStateHandle,
+    find_close_button_mouse_state: MouseStateHandle,
+    /// Editor used by the find overlay. Kept around even when the overlay
+    /// is hidden so the input view's focus state survives toggle cycles.
+    find_editor: ViewHandle<EditorView>,
+    /// `Some` while the find overlay is visible.
+    find_state: Option<FindState>,
 }
 
 impl BrowserView {
@@ -198,13 +272,23 @@ impl BrowserView {
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
-        let (title_tx, title_rx) = async_channel::unbounded::<(TabId, String)>();
+        let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
+
+        #[cfg(not(target_family = "wasm"))]
+        let web_context: Option<SharedWebContext> = {
+            let dir = data_dir::browser_data_dir();
+            // Construct the WebContext even when dir is None — wry handles
+            // the missing-dir case internally with its platform default.
+            Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
+        };
 
         let initial_tab_id = model.active_tab().id();
         let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             initial_tab_id,
             webview_url_for(model.current_url()),
-            title_tx.clone(),
+            event_tx.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            web_context.clone(),
             true,
         )));
 
@@ -236,7 +320,33 @@ impl BrowserView {
                 view.navigate_to_editor_url(ctx);
             }
         });
-        ctx.spawn_stream_local(title_rx, Self::handle_document_title, |_, _| {});
+        ctx.spawn_stream_local(event_rx, Self::handle_webview_event, |_, _| {});
+
+        let find_editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let mut editor = EditorView::single_line(
+                SingleLineEditorOptions {
+                    text: TextOptions::ui_text(Some(12.0), appearance),
+                    select_all_on_focus: true,
+                    clear_selections_on_blur: false,
+                    propagate_and_no_op_vertical_navigation_keys:
+                        PropagateAndNoOpNavigationKeys::Always,
+                    ..Default::default()
+                },
+                ctx,
+            );
+            editor.set_placeholder_text("Find in page", ctx);
+            editor
+        });
+
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
+            match event {
+                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+                _ => {}
+            }
+        });
 
         Self {
             model,
@@ -245,7 +355,9 @@ impl BrowserView {
             pane_configuration,
             focus_handle: None,
             webviews: vec![native_webview],
-            title_tx,
+            event_tx,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
             tab_ui_states,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
@@ -253,6 +365,12 @@ impl BrowserView {
             new_tab_button_mouse_state: MouseStateHandle::default(),
             collapse_button_mouse_state: MouseStateHandle::default(),
             open_external_button_mouse_state: MouseStateHandle::default(),
+            find_toggle_button_mouse_state: MouseStateHandle::default(),
+            find_next_button_mouse_state: MouseStateHandle::default(),
+            find_prev_button_mouse_state: MouseStateHandle::default(),
+            find_close_button_mouse_state: MouseStateHandle::default(),
+            find_editor,
+            find_state: None,
         }
     }
 
@@ -333,16 +451,24 @@ impl BrowserView {
     }
 
     fn new_tab(&mut self, ctx: &mut ViewContext<Self>) {
+        self.open_tab(DEFAULT_BROWSER_URL.to_string(), ctx);
+    }
+
+    /// Open a new in-pane tab loading `url`, making it active. Shared by
+    /// the `NewTab` action and the popup handler (Action 5).
+    fn open_tab(&mut self, url: String, ctx: &mut ViewContext<Self>) {
         // Hide the currently active tab before adding the new one.
         if let Some(prev_active) = self.webviews.get(self.model.active_index()) {
             prev_active.borrow_mut().set_visibility(false);
         }
 
-        let (tab_id, _idx) = self.model.add_tab(DEFAULT_BROWSER_URL);
+        let (tab_id, _idx) = self.model.add_tab(&url);
         let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
             tab_id,
-            webview_url_for(DEFAULT_BROWSER_URL),
-            self.title_tx.clone(),
+            webview_url_for(self.model.current_url()),
+            self.event_tx.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            self.web_context.clone(),
             true,
         )));
         self.webviews.push(webview);
@@ -377,7 +503,9 @@ impl BrowserView {
             let webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
                 new_tab_id,
                 webview_url_for(DEFAULT_BROWSER_URL),
-                self.title_tx.clone(),
+                self.event_tx.clone(),
+                #[cfg(not(target_family = "wasm"))]
+                self.web_context.clone(),
                 true,
             )));
             self.webviews.push(webview);
@@ -446,15 +574,86 @@ impl BrowserView {
         });
     }
 
-    fn handle_document_title(&mut self, msg: (TabId, String), ctx: &mut ViewContext<Self>) {
-        let (tab_id, title) = msg;
-        if self.model.set_title_for(tab_id, title) {
-            // Only resync the pane title if the active tab's title changed.
-            if self.model.active_tab().id() == tab_id {
-                self.sync_pane_title(ctx);
+    fn handle_webview_event(&mut self, event: NativeWebViewEvent, ctx: &mut ViewContext<Self>) {
+        match event {
+            NativeWebViewEvent::TitleChanged(tab_id, title) => {
+                if self.model.set_title_for(tab_id, title) {
+                    if self.model.active_tab().id() == tab_id {
+                        self.sync_pane_title(ctx);
+                    }
+                    ctx.notify();
+                }
             }
+            NativeWebViewEvent::LoadingChanged(tab_id, loading) => {
+                if self.model.set_loading_for(tab_id, loading) {
+                    ctx.notify();
+                }
+            }
+            NativeWebViewEvent::NavigationStarted(tab_id, url) => {
+                // Catches HTTP redirects (the user-typed URL was already set
+                // optimistically by `navigate`; same URL → no-op). In-page
+                // `history.pushState` doesn't reach this handler.
+                if self.model.replace_current_url_for(tab_id, url) {
+                    if self.model.active_tab().id() == tab_id {
+                        self.sync_active_tab_into_editor(ctx);
+                        self.sync_pane_title(ctx);
+                    }
+                    ctx.notify();
+                }
+            }
+            NativeWebViewEvent::PopupOpenTab(url) => {
+                self.open_tab(url, ctx);
+            }
+            NativeWebViewEvent::PopupOpenExternal(url) => {
+                ctx.open_url(&url);
+            }
+            NativeWebViewEvent::FindResults(tab_id, current, total) => {
+                if self.model.active_tab().id() != tab_id {
+                    // Find results from a now-background tab — ignore.
+                    return;
+                }
+                if let Some(state) = self.find_state.as_mut() {
+                    state.current = current;
+                    state.total = total;
+                    ctx.notify();
+                }
+            }
+        }
+    }
+
+    fn handle_find_query_changed(&mut self, ctx: &mut ViewContext<Self>) {
+        let query = self.find_editor.as_ref(ctx).buffer_text(ctx);
+        if let Some(state) = self.find_state.as_mut() {
+            state.query = query.clone();
+        }
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(webview) = self.active_webview() {
+            webview.borrow().find_set_query(&query);
+        }
+        ctx.notify();
+    }
+
+    fn toggle_find(&mut self, ctx: &mut ViewContext<Self>) {
+        if self.find_state.is_some() {
+            self.close_find(ctx);
+        } else {
+            self.find_state = Some(FindState::default());
+            self.find_editor.update(ctx, |editor, ctx| {
+                editor.set_buffer_text_with_base_buffer("", ctx);
+            });
+            ctx.focus(&self.find_editor);
             ctx.notify();
         }
+    }
+
+    fn close_find(&mut self, ctx: &mut ViewContext<Self>) {
+        self.find_state = None;
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(webview) = self.active_webview() {
+            webview.borrow().find_clear();
+        }
+        ctx.focus(&self.url_editor);
+        ctx.notify();
     }
 
     fn sync_pane_title(&self, ctx: &mut ViewContext<Self>) {
@@ -562,8 +761,42 @@ impl BrowserView {
             .finish(),
         );
 
+        let security_indicator = match classify_security(self.model.current_url()) {
+            SecurityState::Secure => Some(
+                ConstrainedBox::new(
+                    Icon::LockClosed
+                        .to_warpui_icon(blended_colors::text_main(theme, theme.surface_1()).into())
+                        .finish(),
+                )
+                .with_width(SECURITY_ICON_SIZE)
+                .with_height(SECURITY_ICON_SIZE)
+                .finish(),
+            ),
+            SecurityState::Insecure => Some(
+                ConstrainedBox::new(Icon::AlertTriangle.to_warpui_icon(theme.accent()).finish())
+                    .with_width(SECURITY_ICON_SIZE)
+                    .with_height(SECURITY_ICON_SIZE)
+                    .finish(),
+            ),
+            SecurityState::Neutral => None,
+        };
+
+        let mut url_row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_main_axis_size(MainAxisSize::Max);
+        if let Some(indicator) = security_indicator {
+            url_row.add_child(Container::new(indicator).with_margin_right(6.0).finish());
+        }
+        url_row.add_child(
+            Expanded::new(
+                1.0,
+                Clipped::new(ChildView::new(&self.url_editor).finish()).finish(),
+            )
+            .finish(),
+        );
+
         let editor = Container::new(
-            ConstrainedBox::new(Clipped::new(ChildView::new(&self.url_editor).finish()).finish())
+            ConstrainedBox::new(url_row.finish())
                 .with_height(URL_BAR_HEIGHT)
                 .with_min_width(URL_BAR_MIN_WIDTH)
                 .finish(),
@@ -588,6 +821,19 @@ impl BrowserView {
 
         toolbar.add_child(
             Container::new(self.render_toolbar_button(
+                Icon::Search,
+                "Find in page",
+                self.find_toggle_button_mouse_state.clone(),
+                self.find_state.is_some(),
+                false,
+                BrowserViewAction::ToggleFind,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .finish(),
+        );
+        toolbar.add_child(
+            Container::new(self.render_toolbar_button(
                 Icon::LinkExternal,
                 "Open in default browser",
                 self.open_external_button_mouse_state.clone(),
@@ -596,7 +842,7 @@ impl BrowserView {
                 BrowserViewAction::OpenExternal,
                 app,
             ))
-            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
             .finish(),
         );
 
@@ -608,6 +854,107 @@ impl BrowserView {
         )
         .with_height(TOOLBAR_HEIGHT)
         .finish()
+    }
+
+    fn render_loading_strip(&self, app: &AppContext) -> Box<dyn Element> {
+        let theme = Appearance::as_ref(app).theme();
+        // Always reserve the height so the webview area doesn't reflow when
+        // loading toggles. Background switches to accent while loading.
+        let mut container = Container::new(Flex::row().finish());
+        if self.model.is_loading() {
+            container = container.with_background(theme.accent());
+        }
+        ConstrainedBox::new(container.finish())
+            .with_height(LOADING_STRIP_HEIGHT)
+            .finish()
+    }
+
+    fn render_find_overlay(&self, app: &AppContext) -> Option<Box<dyn Element>> {
+        let state = self.find_state.as_ref()?;
+        let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
+        let font_family = appearance.ui_font_family();
+
+        let input = Container::new(
+            ConstrainedBox::new(
+                Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+            )
+            .with_height(URL_BAR_HEIGHT)
+            .with_min_width(URL_BAR_MIN_WIDTH)
+            .finish(),
+        )
+        .with_horizontal_padding(10.0)
+        .with_background(theme.surface_1())
+        .with_border(Border::all(1.0).with_border_fill(theme.surface_3()))
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
+            URL_BAR_BORDER_RADIUS,
+        )))
+        .finish();
+
+        let count_label = Text::new_inline(state.count_label(), font_family, 12.0)
+            .with_color(blended_colors::text_main(theme, theme.background()))
+            .finish();
+
+        let mut row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_main_axis_size(MainAxisSize::Max);
+        row.add_child(Expanded::new(1.0, input).finish());
+        row.add_child(
+            Container::new(count_label)
+                .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+                .finish(),
+        );
+        row.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::ArrowUp,
+                "Previous match",
+                self.find_prev_button_mouse_state.clone(),
+                false,
+                state.total == 0,
+                BrowserViewAction::FindPrev,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
+        row.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::ArrowDown,
+                "Next match",
+                self.find_next_button_mouse_state.clone(),
+                false,
+                state.total == 0,
+                BrowserViewAction::FindNext,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
+        row.add_child(
+            Container::new(self.render_toolbar_button(
+                Icon::X,
+                "Close find",
+                self.find_close_button_mouse_state.clone(),
+                false,
+                false,
+                BrowserViewAction::CloseFind,
+                app,
+            ))
+            .with_margin_left(TOOLBAR_BUTTON_GAP)
+            .finish(),
+        );
+
+        Some(
+            ConstrainedBox::new(
+                Container::new(row.finish())
+                    .with_horizontal_padding(TOOLBAR_HORIZONTAL_PADDING)
+                    .with_background(theme.surface_1())
+                    .with_border(Border::top(1.0).with_border_fill(theme.surface_3()))
+                    .finish(),
+            )
+            .with_height(TOOLBAR_HEIGHT)
+            .finish(),
+        )
     }
 
     fn render_tab_strip(&self, app: &AppContext) -> Box<dyn Element> {
@@ -674,24 +1021,25 @@ impl BrowserView {
         let font_family = appearance.ui_font_family();
         let close_mouse = ui_state.close_mouse.clone();
 
-        let close_button_color = chip_text_color;
-        let close_button = Hoverable::new(close_mouse, move |hover_state| {
-            let icon_color = if hover_state.is_hovered() {
-                active_text
-            } else {
-                close_button_color
-            };
-            let icon = ConstrainedBox::new(Icon::X.to_warpui_icon(icon_color).finish())
-                .with_width(TAB_CLOSE_BUTTON_SIZE)
-                .with_height(TAB_CLOSE_BUTTON_SIZE)
-                .finish();
-            let mut container = Container::new(icon)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.0)));
-            if hover_state.is_hovered() {
-                container = container.with_background(hover_bg);
-            }
-            container.finish()
+        // The close-X used to be a hand-rolled Hoverable so the icon could
+        // brighten on hover. We trade that micro-effect for an accessible
+        // tooltip + standard Button focus/keyboard semantics, which only
+        // Button exposes today. The surface_2 hover background remains.
+        let ui_builder = appearance.ui_builder().clone();
+        let close_button = small_icon_button_with_color(
+            appearance,
+            Icon::X,
+            TAB_CLOSE_BUTTON_SIZE,
+            close_mouse,
+            chip_text_color.into(),
+        )
+        .with_tooltip(move || {
+            ui_builder
+                .tool_tip("Close tab".to_string())
+                .build()
+                .finish()
         })
+        .build()
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
 
@@ -733,6 +1081,7 @@ impl BrowserView {
             }
             container.finish()
         })
+        .with_defer_events_to_children()
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx)))
         .finish();
 
@@ -795,10 +1144,15 @@ impl View for BrowserView {
                 .finish(),
         };
 
-        Flex::column()
+        let mut column = Flex::column()
             .with_main_axis_size(MainAxisSize::Max)
             .with_child(self.render_tab_strip(app))
-            .with_child(self.render_toolbar(app))
+            .with_child(self.render_toolbar(app));
+        if let Some(overlay) = self.render_find_overlay(app) {
+            column = column.with_child(overlay);
+        }
+        column
+            .with_child(self.render_loading_strip(app))
             .with_child(Expanded::new(1.0, webview_element).finish())
             .finish()
     }
@@ -824,6 +1178,20 @@ impl TypedActionView for BrowserView {
                 // registered in Phase 7; dispatching by string name resolves
                 // at runtime, so it's safe to land before the handler exists.
                 ctx.dispatch_global_action("workspace:toggle_browser_pane", &());
+            }
+            BrowserViewAction::ToggleFind => self.toggle_find(ctx),
+            BrowserViewAction::CloseFind => self.close_find(ctx),
+            BrowserViewAction::FindNext => {
+                #[cfg(not(target_family = "wasm"))]
+                if let Some(webview) = self.active_webview() {
+                    webview.borrow().find_next();
+                }
+            }
+            BrowserViewAction::FindPrev => {
+                #[cfg(not(target_family = "wasm"))]
+                if let Some(webview) = self.active_webview() {
+                    webview.borrow().find_prev();
+                }
             }
         }
     }
@@ -891,5 +1259,77 @@ impl BackingView for BrowserView {
 
     fn set_focus_handle(&mut self, focus_handle: PaneFocusHandle, _ctx: &mut ViewContext<Self>) {
         self.focus_handle = Some(focus_handle);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_security, SecurityState};
+
+    #[test]
+    fn https_is_secure() {
+        assert_eq!(
+            classify_security("https://example.com"),
+            SecurityState::Secure
+        );
+        assert_eq!(
+            classify_security("HTTPS://EXAMPLE.COM/path?q=1"),
+            SecurityState::Secure
+        );
+    }
+
+    #[test]
+    fn remote_http_is_insecure() {
+        assert_eq!(
+            classify_security("http://example.com"),
+            SecurityState::Insecure
+        );
+        assert_eq!(
+            classify_security("http://example.com:8080/path"),
+            SecurityState::Insecure
+        );
+    }
+
+    #[test]
+    fn loopback_http_is_treated_as_secure() {
+        for url in [
+            "http://localhost",
+            "http://localhost:3000",
+            "http://localhost:3000/api",
+            "http://127.0.0.1",
+            "http://127.0.0.1:8080/path",
+            "http://0.0.0.0:9000",
+            "http://[::1]",
+            "http://[::1]:3000/path",
+            "http://user:pass@localhost:3000",
+        ] {
+            assert_eq!(
+                classify_security(url),
+                SecurityState::Secure,
+                "{url} should be treated as Secure (loopback)"
+            );
+        }
+    }
+
+    #[test]
+    fn about_and_file_and_data_are_neutral() {
+        for url in [
+            "about:home",
+            "about:blank",
+            "file:///tmp/x.html",
+            "data:text/html,<h1>hi</h1>",
+            "castcodes://settings",
+        ] {
+            assert_eq!(
+                classify_security(url),
+                SecurityState::Neutral,
+                "{url} should classify as Neutral"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_input_is_neutral() {
+        assert_eq!(classify_security(""), SecurityState::Neutral);
     }
 }

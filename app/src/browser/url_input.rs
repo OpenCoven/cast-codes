@@ -86,6 +86,13 @@ pub fn resolve_with_engine(raw: &str, engine: SearchEngine) -> Resolved {
         return Resolved::Url("about:home".to_string());
     }
 
+    // Defensively reject `javascript:` URLs typed into the address bar.
+    // Browsers (Chrome, Safari, Firefox) all sanitize these to prevent
+    // self-XSS via pasted bookmarklets — treat as a search instead.
+    if is_javascript_scheme(trimmed) {
+        return Resolved::Search(engine.search_url(trimmed));
+    }
+
     for scheme in [
         "http://",
         "https://",
@@ -112,6 +119,18 @@ pub fn resolve_with_engine(raw: &str, engine: SearchEngine) -> Resolved {
     }
 
     Resolved::Search(engine.search_url(trimmed))
+}
+
+fn is_javascript_scheme(input: &str) -> bool {
+    // Case-insensitive match on `javascript:` prefix, after trimming. Matches
+    // browser behavior (RFC 3986 schemes are case-insensitive).
+    let prefix_len = "javascript:".len();
+    if input.len() < prefix_len {
+        return false;
+    }
+    input
+        .get(..prefix_len)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
 }
 
 fn is_loopback_host(input: &str) -> bool {
@@ -248,6 +267,47 @@ mod tests {
         assert_eq!(
             resolve("foo.bar baz"),
             Resolved::Search("https://www.google.com/search?q=foo.bar%20baz".to_string())
+        );
+    }
+
+    #[test]
+    fn javascript_urls_are_rewritten_as_search() {
+        // Verbatim
+        let Resolved::Search(url) = resolve("javascript:alert(1)") else {
+            panic!("expected javascript: input to resolve as Search");
+        };
+        assert!(
+            url.starts_with("https://www.google.com/search?q=javascript"),
+            "got {url}"
+        );
+
+        // Case-insensitive scheme matching
+        for raw in [
+            "JavaScript:alert(1)",
+            "JAVASCRIPT:void(0)",
+            "  javascript:fetch('/x')  ",
+        ] {
+            assert!(
+                matches!(resolve(raw), Resolved::Search(_)),
+                "{raw} should resolve as Search, not Url",
+            );
+        }
+    }
+
+    #[test]
+    fn non_ascii_before_javascript_prefix_is_search_not_panic() {
+        assert!(matches!(
+            resolve("🦄🦄javascript:alert(1)"),
+            Resolved::Search(_)
+        ));
+    }
+
+    #[test]
+    fn javascript_prefix_inside_path_is_not_rewritten() {
+        // A real URL that happens to contain `javascript` is still a URL.
+        assert_eq!(
+            resolve("https://example.com/javascript:foo"),
+            Resolved::Url("https://example.com/javascript:foo".to_string())
         );
     }
 

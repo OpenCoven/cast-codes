@@ -1,16 +1,54 @@
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
+#[cfg(not(target_family = "wasm"))]
+use std::{cell::RefCell, rc::Rc};
+
 use pathfinder_geometry::rect::RectF;
 use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
+#[cfg(not(target_family = "wasm"))]
+use super::find::{self, FindResultsMessage};
+#[cfg(not(target_family = "wasm"))]
+use super::popup_policy::{self, Decision};
+
+/// Events the native webview layer can push back to `BrowserView`.
+///
+/// All variants carry the originating `TabId` (when relevant) so the
+/// receiver doesn't need a parallel mapping. Popup events don't carry a
+/// `TabId` — the host treats them as "open a new tab" and the new tab gets
+/// its own id.
+#[derive(Debug, Clone)]
+pub(crate) enum NativeWebViewEvent {
+    /// Document title changed (raw from WKWebView).
+    TitleChanged(TabId, String),
+    /// A page-load lifecycle event fired. `loading=true` means a load
+    /// started; `false` means it finished (success or failure).
+    LoadingChanged(TabId, bool),
+    /// Top-level navigation began. Used to keep the model URL in sync with
+    /// HTTP redirects and direct user nav. Does NOT cover in-page
+    /// `history.pushState`, which doesn't fire wry's navigation handler.
+    NavigationStarted(TabId, String),
+    /// A popup classified as a new in-pane tab. Host should add a tab.
+    PopupOpenTab(String),
+    /// A popup classified as external. Host should hand off to `ctx.open_url`.
+    PopupOpenExternal(String),
+    /// Find-in-page results posted back by the injected JS. `current` is
+    /// 1-based when `total > 0`; both are 0 when there are no matches.
+    FindResults(TabId, usize, usize),
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) type SharedWebContext = Rc<RefCell<wry::WebContext>>;
 
 pub(crate) struct NativeBrowserWebView {
     tab_id: TabId,
     #[cfg(not(target_family = "wasm"))]
     webview: Option<wry::WebView>,
-    title_tx: async_channel::Sender<(TabId, String)>,
+    event_tx: async_channel::Sender<NativeWebViewEvent>,
+    #[cfg(not(target_family = "wasm"))]
+    web_context: Option<SharedWebContext>,
     pending_url: Option<String>,
     bounds: Option<RectF>,
     desired_visible: bool,
@@ -21,14 +59,17 @@ impl NativeBrowserWebView {
     pub(crate) fn new(
         tab_id: TabId,
         initial_url: impl Into<String>,
-        title_tx: async_channel::Sender<(TabId, String)>,
+        event_tx: async_channel::Sender<NativeWebViewEvent>,
+        #[cfg(not(target_family = "wasm"))] web_context: Option<SharedWebContext>,
         desired_visible: bool,
     ) -> Self {
         Self {
             tab_id,
             #[cfg(not(target_family = "wasm"))]
             webview: None,
-            title_tx,
+            event_tx,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
             pending_url: Some(initial_url.into()),
             bounds: None,
             desired_visible,
@@ -70,6 +111,38 @@ impl NativeBrowserWebView {
         if let Some(webview) = &self.webview {
             if let Err(err) = webview.evaluate_script("location.reload()") {
                 log::warn!("failed to reload browser pane: {err}");
+            }
+        }
+    }
+
+    /// Inject the find script and search for `query`. Idempotent: the
+    /// script clears any prior state on every call.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_set_query(&self, query: &str) {
+        self.run_script(find::FIND_SCRIPT);
+        self.run_script(&find::set_query_script(query));
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_next(&self) {
+        self.run_script(find::next_script());
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_prev(&self) {
+        self.run_script(find::prev_script());
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn find_clear(&self) {
+        self.run_script(find::clear_script());
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn run_script(&self, script: &str) {
+        if let Some(webview) = &self.webview {
+            if let Err(err) = webview.evaluate_script(script) {
+                log::warn!("failed to evaluate browser pane script: {err}");
             }
         }
     }
@@ -152,18 +225,81 @@ impl NativeBrowserWebView {
             };
 
             let url = self.pending_url.clone().unwrap_or_default();
-            let title_tx = self.title_tx.clone();
             let tab_id = self.tab_id;
-            match wry::WebViewBuilder::new_as_child(&parent)
+
+            let title_tx = self.event_tx.clone();
+            let nav_tx = self.event_tx.clone();
+            let load_tx = self.event_tx.clone();
+            let popup_tx = self.event_tx.clone();
+            let ipc_tx = self.event_tx.clone();
+
+            let mut builder = wry::WebViewBuilder::new_as_child(&parent)
                 .with_url(url)
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
                 .with_document_title_changed_handler(move |title| {
-                    let _ = title_tx.try_send((tab_id, title));
+                    let _ = title_tx.try_send(NativeWebViewEvent::TitleChanged(tab_id, title));
                 })
-                .build()
-            {
+                .with_navigation_handler(move |url| {
+                    // Track top-level nav so the model can resync URL on
+                    // HTTP redirects. Always allow (return true) — we do
+                    // not gate navigation here.
+                    let _ = nav_tx.try_send(NativeWebViewEvent::NavigationStarted(tab_id, url));
+                    true
+                })
+                .with_on_page_load_handler(move |event, _url| {
+                    let loading = matches!(event, wry::PageLoadEvent::Started);
+                    let _ = load_tx.try_send(NativeWebViewEvent::LoadingChanged(tab_id, loading));
+                })
+                .with_new_window_req_handler(move |url| {
+                    // Classify popups via our policy and dispatch through the
+                    // event channel; always return `false` so wry doesn't
+                    // spawn an OS-level window in parallel.
+                    match popup_policy::decide(&url) {
+                        Decision::Tab(u) => {
+                            let _ = popup_tx.try_send(NativeWebViewEvent::PopupOpenTab(u));
+                        }
+                        Decision::External(u) => {
+                            let _ = popup_tx.try_send(NativeWebViewEvent::PopupOpenExternal(u));
+                        }
+                        Decision::Block => {
+                            log::debug!("blocked popup request: {url}");
+                        }
+                    }
+                    false
+                })
+                .with_ipc_handler(move |request| {
+                    // The only IPC contract today is the find-in-page
+                    // results message. We parse defensively so a malformed
+                    // body from a (hypothetical) future sender doesn't take
+                    // down the channel.
+                    let body = request.body();
+                    if let Ok(msg) = serde_json::from_str::<FindResultsMessage>(body) {
+                        if msg.kind == "find_results" {
+                            let _ = ipc_tx.try_send(NativeWebViewEvent::FindResults(
+                                tab_id,
+                                msg.current,
+                                msg.total,
+                            ));
+                        }
+                    }
+                });
+
+            // NOTE (wry 0.38 on macOS): `with_web_context` is a no-op here —
+            // `wkwebview/mod.rs:95` ignores the parameter. The wiring is
+            // kept correct for the current macOS attach path so this starts
+            // isolating pane data if wry adds macOS `WKWebsiteDataStore`
+            // plumbing. See `data_dir.rs` for the platform reality check.
+            let webview_result = if let Some(ctx) = &self.web_context {
+                let mut ctx_borrow = ctx.borrow_mut();
+                builder = builder.with_web_context(&mut ctx_borrow);
+                builder.build()
+            } else {
+                builder.build()
+            };
+
+            match webview_result {
                 Ok(webview) => {
                     self.webview = Some(webview);
                 }

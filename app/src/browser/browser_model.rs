@@ -119,10 +119,29 @@ impl BrowserTab {
 
     fn set_title(&mut self, title: impl Into<String>) -> bool {
         let title = title.into();
-        let changed = self.title != title || self.loading;
+        let changed = self.title != title;
         self.title = title;
-        self.loading = false;
         changed
+    }
+
+    fn set_loading(&mut self, loading: bool) -> bool {
+        if self.loading == loading {
+            return false;
+        }
+        self.loading = loading;
+        true
+    }
+
+    /// Replace `current_url` without touching history. Used to keep the URL
+    /// bar in sync with HTTP redirects observed via the navigation handler.
+    /// Returns true if the URL actually changed.
+    fn replace_current_url(&mut self, url: impl Into<String>) -> bool {
+        let next = normalize_url(url.into());
+        if next == self.current_url {
+            return false;
+        }
+        self.current_url = next;
+        true
     }
 
     pub fn pinned(&self) -> bool {
@@ -279,12 +298,30 @@ impl BrowserModel {
     }
 
     /// Updates the title of the tab identified by `id`. Returns whether
-    /// anything changed (title text or loading flag).
+    /// the title text changed.
     pub fn set_title_for(&mut self, id: TabId, title: impl Into<String>) -> bool {
         let Some(idx) = self.index_of(id) else {
             return false;
         };
         self.tabs[idx].set_title(title)
+    }
+
+    /// Sets the loading flag on tab `id`. Returns whether the value changed.
+    pub fn set_loading_for(&mut self, id: TabId, loading: bool) -> bool {
+        let Some(idx) = self.index_of(id) else {
+            return false;
+        };
+        self.tabs[idx].set_loading(loading)
+    }
+
+    /// Replace the current URL of tab `id` without disturbing back/forward
+    /// history. Used by the navigation handler to track HTTP redirects.
+    /// Returns whether the URL changed.
+    pub fn replace_current_url_for(&mut self, id: TabId, url: impl Into<String>) -> bool {
+        let Some(idx) = self.index_of(id) else {
+            return false;
+        };
+        self.tabs[idx].replace_current_url(url)
     }
 
     pub fn set_pinned(&mut self, id: TabId, pinned: bool) -> bool {
