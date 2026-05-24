@@ -1,6 +1,5 @@
 use super::WorkspaceAction;
 use crate::pane_group::TerminalPaneId;
-use crate::workspace::action::{BranchTarget, WorktreeOpenTarget};
 use crate::workspace::tab_settings::{
     VerticalTabsDisplayGranularity, VerticalTabsPrimaryInfo, VerticalTabsTabItemMode,
     VerticalTabsViewMode,
@@ -83,52 +82,12 @@ fn pane_name_actions_save_workspace_state() {
 
 // --- Worktree Manager action tests ---
 
-/// WorkspaceAction itself is not Serialize/Deserialize, so round-trip tests
-/// exercise the supporting types (BranchTarget, WorktreeOpenTarget) directly
-/// and verify should_save_app_state_on_action for all four new variants.
-
-#[test]
-fn new_worktree_round_trip() {
-    // Round-trip the supporting types.
-    let branch = BranchTarget::Existing("feature/a".to_string());
-    let json = serde_json::to_string(&branch).expect("serialize BranchTarget");
-    let back: BranchTarget = serde_json::from_str(&json).expect("deserialize BranchTarget");
-    assert_eq!(branch, back);
-
-    let target = WorktreeOpenTarget::NewTab;
-    let json = serde_json::to_string(&target).expect("serialize WorktreeOpenTarget");
-    let back: WorktreeOpenTarget = serde_json::from_str(&json).expect("deserialize WorktreeOpenTarget");
-    assert_eq!(target, back);
-
-    // Verify save-state opt-in for NewWorktreeFromBranch.
-    assert!(WorkspaceAction::NewWorktreeFromBranch {
-        branch: BranchTarget::Existing("feature/a".to_string()),
-        open_in: WorktreeOpenTarget::NewTab,
-    }
-    .should_save_app_state_on_action());
-}
-
 #[test]
 fn remove_worktree_round_trip() {
-    // Round-trip BranchTarget::CreateFromHead variant.
-    let branch = BranchTarget::CreateFromHead("new-branch".to_string());
-    let json = serde_json::to_string(&branch).expect("serialize BranchTarget::CreateFromHead");
-    let back: BranchTarget = serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(branch, back);
-
-    // Verify save-state opt-in for RemoveWorktree.
+    // Verify save-state opt-in for RemoveWorktree and PruneWorktree.
     assert!(WorkspaceAction::RemoveWorktree {
         worktree_path: std::path::PathBuf::from("/tmp/feature-a"),
         force: false,
-    }
-    .should_save_app_state_on_action());
-}
-
-#[test]
-fn open_and_prune_round_trip() {
-    // Verify save-state opt-in for OpenWorktreeInTab and PruneWorktree.
-    assert!(WorkspaceAction::OpenWorktreeInTab {
-        worktree_path: std::path::PathBuf::from("/tmp/feature-a"),
     }
     .should_save_app_state_on_action());
 
@@ -136,4 +95,12 @@ fn open_and_prune_round_trip() {
         worktree_path: std::path::PathBuf::from("/tmp/gone"),
     }
     .should_save_app_state_on_action());
+}
+
+#[test]
+fn sentinel_variants_do_not_save_workspace_state() {
+    // OpenWorktreePicker and OpenWorktreeRemoveStub are UI-only triggers —
+    // they must NOT cause a workspace-state save.
+    assert!(!WorkspaceAction::OpenWorktreePicker.should_save_app_state_on_action());
+    assert!(!WorkspaceAction::OpenWorktreeRemoveStub.should_save_app_state_on_action());
 }

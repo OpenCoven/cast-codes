@@ -115,6 +115,30 @@ pub fn detect_git_dirs_sync(_cwd: &Path) -> Option<(std::path::PathBuf, std::pat
     None
 }
 
+/// Resolve the absolute path of the git repository root containing `cwd`.
+/// Returns `None` if `cwd` is not inside any git repository.
+#[cfg(feature = "local_fs")]
+pub fn detect_repo_root_sync(cwd: &Path) -> Option<std::path::PathBuf> {
+    let out = command::blocking::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(cwd)
+        .stdout(command::Stdio::piped())
+        .stderr(command::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    let line = s.lines().find(|l| !l.trim().is_empty())?;
+    Some(std::path::PathBuf::from(line.trim()))
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub fn detect_repo_root_sync(_cwd: &Path) -> Option<std::path::PathBuf> {
+    None
+}
+
 /// Returns the set of local branch names for the repo at `repo_path`.
 /// Uses a synchronous subprocess call — suitable for call sites in
 /// synchronous view handlers where the result is needed immediately.

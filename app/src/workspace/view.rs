@@ -21306,11 +21306,11 @@ impl TypedActionView for Workspace {
                 self.close_new_session_dropdown_menu(ctx);
                 self.open_folder_picker_for_worktree_submenu(ctx);
             }
-            NewWorktreeFromBranch { .. } => {
-                // TODO(worktree-manager): implement worktree creation logic.
+            OpenWorktreePicker => {
+                // TODO(worktree-manager pass 2/3): open WorktreePicker modal.
             }
-            OpenWorktreeInTab { .. } => {
-                // TODO(worktree-manager): implement opening worktree in tab.
+            OpenWorktreeRemoveStub => {
+                // TODO(worktree-manager pass 3): toast "coming soon".
             }
             RemoveWorktree { .. } => {
                 // TODO(worktree-manager): implement worktree removal logic.
