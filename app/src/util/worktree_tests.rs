@@ -234,3 +234,52 @@ async fn add_worktree_creates_new_branch() {
         .current_dir(repo).output().unwrap();
     assert!(String::from_utf8_lossy(&branches.stdout).contains("brand-new"));
 }
+
+#[cfg(feature = "local_fs")]
+#[tokio::test]
+async fn remove_worktree_clean() {
+    use std::process::Command;
+    let td = TempDir::new().unwrap();
+    let repo = td.path();
+    let run = |args: &[&str]| {
+        Command::new("git").args(args).current_dir(repo).status().unwrap();
+    };
+    run(&["init", "--initial-branch=main", "-q"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("a"), "a").unwrap();
+    run(&["add", "a"]);
+    run(&["commit", "-q", "-m", "init"]);
+    run(&["branch", "feature/a"]);
+    run(&["worktree", "add", "-q", ".castcodes/worktrees/feature-a", "feature/a"]);
+    let target = repo.join(".castcodes/worktrees/feature-a");
+
+    super::remove_worktree(repo, &target, false).await.unwrap();
+    assert!(!target.exists());
+}
+
+#[cfg(feature = "local_fs")]
+#[tokio::test]
+async fn remove_worktree_dirty_requires_force() {
+    use std::process::Command;
+    let td = TempDir::new().unwrap();
+    let repo = td.path();
+    let run = |args: &[&str]| {
+        Command::new("git").args(args).current_dir(repo).status().unwrap();
+    };
+    run(&["init", "--initial-branch=main", "-q"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("a"), "a").unwrap();
+    run(&["add", "a"]);
+    run(&["commit", "-q", "-m", "init"]);
+    run(&["branch", "feature/a"]);
+    run(&["worktree", "add", "-q", ".castcodes/worktrees/feature-a", "feature/a"]);
+    let target = repo.join(".castcodes/worktrees/feature-a");
+    std::fs::write(target.join("dirty.txt"), "dirty").unwrap();
+
+    let res = super::remove_worktree(repo, &target, false).await;
+    assert!(res.is_err(), "non-force remove of dirty worktree should fail");
+    super::remove_worktree(repo, &target, true).await.unwrap();
+    assert!(!target.exists());
+}

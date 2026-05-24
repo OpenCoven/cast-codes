@@ -180,6 +180,34 @@ pub async fn add_worktree(_repo: &Path, _target: &Path, _branch: &str, _create: 
     Err(anyhow::anyhow!("Not supported on wasm"))
 }
 
+#[cfg(feature = "local_fs")]
+pub async fn remove_worktree(repo: &Path, target: &Path, force: bool) -> Result<()> {
+    let target_str = target.to_string_lossy().to_string();
+    let mut args: Vec<&str> = vec!["worktree", "remove"];
+    if force {
+        args.push("--force");
+    }
+    args.push(&target_str);
+    crate::util::git::run_git_command(repo, &args).await?;
+    Ok(())
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub async fn remove_worktree(_repo: &Path, _target: &Path, _force: bool) -> Result<()> {
+    Err(anyhow::anyhow!("Not supported on wasm"))
+}
+
+#[cfg(feature = "local_fs")]
+pub async fn prune_worktrees(repo: &Path) -> Result<()> {
+    crate::util::git::run_git_command(repo, &["worktree", "prune"]).await?;
+    Ok(())
+}
+
+#[cfg(not(feature = "local_fs"))]
+pub async fn prune_worktrees(_repo: &Path) -> Result<()> {
+    Err(anyhow::anyhow!("Not supported on wasm"))
+}
+
 #[cfg(test)]
 #[path = "worktree_tests.rs"]
 mod tests;
