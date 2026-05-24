@@ -21393,13 +21393,34 @@ impl TypedActionView for Workspace {
                 ctx.notify();
             }
             OpenWorktreeRemoveStub => {
-                // TODO(worktree-manager pass 3): toast "coming soon".
+                self.toast_stack.update(ctx, |ts, ctx| {
+                    ts.add_ephemeral_toast(
+                        crate::view_components::DismissibleToast::default(
+                            "Worktree removal is coming in a follow-up PR.".to_string(),
+                        ),
+                        ctx,
+                    );
+                });
             }
             RemoveWorktree { .. } => {
-                // TODO(worktree-manager): implement worktree removal logic.
+                self.toast_stack.update(ctx, |ts, ctx| {
+                    ts.add_ephemeral_toast(
+                        crate::view_components::DismissibleToast::default(
+                            "Worktree removal is coming in a follow-up PR.".to_string(),
+                        ),
+                        ctx,
+                    );
+                });
             }
             PruneWorktree { .. } => {
-                // TODO(worktree-manager): implement worktree prune logic.
+                self.toast_stack.update(ctx, |ts, ctx| {
+                    ts.add_ephemeral_toast(
+                        crate::view_components::DismissibleToast::default(
+                            "Worktree pruning is coming in a follow-up PR.".to_string(),
+                        ),
+                        ctx,
+                    );
+                });
             }
             AutoupdateFailureLink => self.open_autoupdate_failure_link(ctx),
             ApplyUpdate => self.apply_update(ctx),
