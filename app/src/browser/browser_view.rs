@@ -29,7 +29,11 @@ use crate::{
         pane::view::{self, HeaderContent, StandardHeader, StandardHeaderOptions},
         BackingView, PaneConfiguration, PaneEvent,
     },
-    ui_components::{blended_colors, buttons::icon_button_with_color, icons::Icon},
+    ui_components::{
+        blended_colors,
+        buttons::{icon_button_with_color, small_icon_button_with_color},
+        icons::Icon,
+    },
 };
 
 use super::about_home;
@@ -820,24 +824,25 @@ impl BrowserView {
         let font_family = appearance.ui_font_family();
         let close_mouse = ui_state.close_mouse.clone();
 
-        let close_button_color = chip_text_color;
-        let close_button = Hoverable::new(close_mouse, move |hover_state| {
-            let icon_color = if hover_state.is_hovered() {
-                active_text
-            } else {
-                close_button_color
-            };
-            let icon = ConstrainedBox::new(Icon::X.to_warpui_icon(icon_color).finish())
-                .with_width(TAB_CLOSE_BUTTON_SIZE)
-                .with_height(TAB_CLOSE_BUTTON_SIZE)
-                .finish();
-            let mut container = Container::new(icon)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.0)));
-            if hover_state.is_hovered() {
-                container = container.with_background(hover_bg);
-            }
-            container.finish()
+        // The close-X used to be a hand-rolled Hoverable so the icon could
+        // brighten on hover. We trade that micro-effect for an accessible
+        // tooltip + standard Button focus/keyboard semantics, which only
+        // Button exposes today. The surface_2 hover background remains.
+        let ui_builder = appearance.ui_builder().clone();
+        let close_button = small_icon_button_with_color(
+            appearance,
+            Icon::X,
+            TAB_CLOSE_BUTTON_SIZE,
+            close_mouse,
+            chip_text_color.into(),
+        )
+        .with_tooltip(move || {
+            ui_builder
+                .tool_tip("Close tab".to_string())
+                .build()
+                .finish()
         })
+        .build()
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
 
@@ -879,6 +884,7 @@ impl BrowserView {
             }
             container.finish()
         })
+        .with_defer_events_to_children()
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::SelectTab(idx)))
         .finish();
 
