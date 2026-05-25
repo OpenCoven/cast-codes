@@ -59,6 +59,10 @@ pub(crate) struct NativeBrowserWebView {
     bounds: Option<RectF>,
     desired_visible: bool,
     attach_error_logged: bool,
+    #[cfg(not(target_family = "wasm"))]
+    last_sent_rect: Option<(i32, i32, u32, u32)>,
+    #[cfg(not(target_family = "wasm"))]
+    last_sent_visible: Option<bool>,
 }
 
 impl NativeBrowserWebView {
@@ -80,6 +84,10 @@ impl NativeBrowserWebView {
             bounds: None,
             desired_visible,
             attach_error_logged: false,
+            #[cfg(not(target_family = "wasm"))]
+            last_sent_rect: None,
+            #[cfg(not(target_family = "wasm"))]
+            last_sent_visible: None,
         }
     }
 
@@ -182,9 +190,14 @@ impl NativeBrowserWebView {
 
         #[cfg(not(target_family = "wasm"))]
         if let Some(webview) = &self.webview {
+            if self.last_sent_visible == Some(visible) {
+                return;
+            }
             if let Err(err) = webview.set_visible(visible) {
                 log::warn!("failed to update browser pane visibility: {err}");
+                return;
             }
+            self.last_sent_visible = Some(visible);
         }
     }
 
@@ -207,6 +220,8 @@ impl NativeBrowserWebView {
             }
             // Allow a fresh attach if the pane is ever re-painted.
             self.attach_error_logged = false;
+            self.last_sent_rect = None;
+            self.last_sent_visible = None;
         }
     }
 
@@ -217,13 +232,23 @@ impl NativeBrowserWebView {
         #[cfg(not(target_family = "wasm"))]
         if let Some(webview) = &self.webview {
             let rect = Self::wry_rect(bounds);
+            let rect_key = (rect.x, rect.y, rect.width, rect.height);
 
-            if let Err(err) = webview.set_bounds(rect) {
-                log::warn!("failed to resize browser pane webview: {err}");
+            if self.last_sent_rect != Some(rect_key) {
+                if let Err(err) = webview.set_bounds(rect) {
+                    log::warn!("failed to resize browser pane webview: {err}");
+                } else {
+                    self.last_sent_rect = Some(rect_key);
+                }
             }
             if self.desired_visible {
+                if self.last_sent_visible == Some(true) {
+                    return;
+                }
                 if let Err(err) = webview.set_visible(true) {
                     log::warn!("failed to show browser pane webview: {err}");
+                } else {
+                    self.last_sent_visible = Some(true);
                 }
             }
         }
