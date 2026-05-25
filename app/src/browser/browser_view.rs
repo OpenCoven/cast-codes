@@ -7,6 +7,8 @@ use pathfinder_geometry::{
     rect::RectF,
     vector::{vec2f, Vector2F},
 };
+#[cfg(not(target_family = "wasm"))]
+use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::{
     elements::{
         AfterLayoutContext, Align, Border, ChildView, Clipped, ConstrainedBox, Container,
@@ -222,6 +224,11 @@ const LOADING_FADE_SECS: f32 = 0.30;
 /// Target animation frame interval (~60fps). The strip element schedules
 /// the next paint via `PaintContext::repaint_after` while animating.
 const LOADING_FRAME_INTERVAL: Duration = Duration::from_millis(16);
+/// How long a tab can spend loading before the native stall watchdog
+/// logs a warning. This is a hung-load signal, not true renderer crash
+/// detection; wry 0.38 does not bridge WKWebView process-termination
+/// callbacks.
+const STALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -553,6 +560,11 @@ pub struct BrowserView {
     find_state: Option<FindState>,
     /// Shared animation state for the page-load progress strip.
     loading_strip: LoadingStrip,
+    /// Per-tab native load-stall watchers.
+    #[cfg(not(target_family = "wasm"))]
+    stall_watchers: HashMap<TabId, (u64, SpawnedFutureHandle)>,
+    #[cfg(not(target_family = "wasm"))]
+    next_stall_generation: u64,
 }
 
 impl BrowserView {
@@ -681,6 +693,10 @@ impl BrowserView {
             find_editor,
             find_state: None,
             loading_strip: LoadingStrip::default(),
+            #[cfg(not(target_family = "wasm"))]
+            stall_watchers: HashMap::new(),
+            #[cfg(not(target_family = "wasm"))]
+            next_stall_generation: 0,
         }
     }
 
@@ -699,6 +715,52 @@ impl BrowserView {
     fn active_webview(&self) -> Option<&Rc<RefCell<NativeBrowserWebView>>> {
         self.webviews.get(self.model.active_index())
     }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn arm_stall_watch(&mut self, tab_id: TabId, url: String, ctx: &mut ViewContext<Self>) {
+        if let Some((_, handle)) = self.stall_watchers.remove(&tab_id) {
+            handle.abort();
+        }
+
+        self.next_stall_generation = self.next_stall_generation.wrapping_add(1);
+        let generation = self.next_stall_generation;
+        let handle = ctx.spawn(
+            async move {
+                Timer::after(STALL_TIMEOUT).await;
+                (tab_id, generation, url)
+            },
+            move |this, (tab_id, generation, url), _ctx| {
+                let Some((current_generation, _)) = this.stall_watchers.get(&tab_id) else {
+                    return;
+                };
+                if *current_generation != generation {
+                    return;
+                }
+                log::warn!(
+                    "browser pane: tab {tab_id} load stalled (no completion in {:?}): {url}",
+                    STALL_TIMEOUT
+                );
+                this.stall_watchers.remove(&tab_id);
+            },
+        );
+        self.stall_watchers.insert(tab_id, (generation, handle));
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn arm_stall_watch(&mut self, _tab_id: TabId, _url: String, _ctx: &mut ViewContext<Self>) {
+        // The current embedded browser host is native-only; keep the
+        // load-stall watchdog scoped to native webviews.
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn disarm_stall_watch(&mut self, tab_id: TabId) {
+        if let Some((_, handle)) = self.stall_watchers.remove(&tab_id) {
+            handle.abort();
+        }
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn disarm_stall_watch(&mut self, _tab_id: TabId) {}
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
         let raw_text = self.url_editor.as_ref(ctx).buffer_text(ctx);
@@ -720,6 +782,8 @@ impl BrowserView {
             if let Some(webview) = self.active_webview() {
                 webview.borrow_mut().load_url(&webview_url_for(&url));
             }
+            let tab_id = self.model.active_tab().id();
+            self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
             // Optimistic: wry's PageLoadEvent::Started may not race us, so
             // start the strip immediately. set_loading is idempotent.
@@ -736,6 +800,8 @@ impl BrowserView {
             if let Some(webview) = self.active_webview() {
                 webview.borrow().go_back();
             }
+            let tab_id = self.model.active_tab().id();
+            self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
             self.loading_strip.set_loading(true);
             ctx.notify();
@@ -750,6 +816,8 @@ impl BrowserView {
             if let Some(webview) = self.active_webview() {
                 webview.borrow().go_forward();
             }
+            let tab_id = self.model.active_tab().id();
+            self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
             self.loading_strip.set_loading(true);
             ctx.notify();
@@ -761,6 +829,9 @@ impl BrowserView {
         if let Some(webview) = self.active_webview() {
             webview.borrow().reload();
         }
+        let tab_id = self.model.active_tab().id();
+        let url = self.model.current_url().to_string();
+        self.arm_stall_watch(tab_id, url, ctx);
         self.sync_pane_title(ctx);
         self.loading_strip.set_loading(true);
         ctx.notify();
@@ -797,6 +868,7 @@ impl BrowserView {
 
     fn close_tab(&mut self, idx: usize, ctx: &mut ViewContext<Self>) {
         let prior_active_idx = self.model.active_index();
+        let removed_tab_id = self.model.tabs().get(idx).map(|tab| tab.id());
         let Some(result) = self.model.close_tab(idx) else {
             return;
         };
@@ -812,6 +884,9 @@ impl BrowserView {
         // Also clean up its UI state.
         if let Some(removed_tab_id) = self.tab_ui_states_remove_for_index(result.removed_index) {
             let _ = removed_tab_id;
+        }
+        if let Some(removed_tab_id) = removed_tab_id {
+            self.disarm_stall_watch(removed_tab_id);
         }
 
         // If we replaced the last tab with a fresh default tab, create a matching webview.
@@ -913,11 +988,15 @@ impl BrowserView {
                 if self.model.active_tab().id() == tab_id {
                     self.loading_strip.set_loading(loading);
                 }
+                if !loading {
+                    self.disarm_stall_watch(tab_id);
+                }
                 if model_changed {
                     ctx.notify();
                 }
             }
             NativeWebViewEvent::NavigationStarted(tab_id, url) => {
+                let stalled_url = url.clone();
                 // Catches HTTP redirects (the user-typed URL was already set
                 // optimistically by `navigate`; same URL → no-op). In-page
                 // `history.pushState` doesn't reach this handler.
@@ -928,6 +1007,7 @@ impl BrowserView {
                     }
                     ctx.notify();
                 }
+                self.arm_stall_watch(tab_id, stalled_url, ctx);
             }
             NativeWebViewEvent::PopupOpenTab(url) => {
                 self.open_tab(url, ctx);
@@ -1617,6 +1697,9 @@ impl BackingView for BrowserView {
     fn close(&mut self, ctx: &mut ViewContext<Self>) {
         #[cfg(not(target_family = "wasm"))]
         {
+            for (_, (_, handle)) in self.stall_watchers.drain() {
+                handle.abort();
+            }
             // Detach every native webview before the pane group shadow-closes
             // us. `UndoClosedPanes` keeps `BrowserView` alive, so Drop on
             // `NativeBrowserWebView` won't run on its own; without this the
