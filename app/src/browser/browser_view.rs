@@ -1,4 +1,9 @@
 use std::collections::HashMap;
+#[cfg(not(target_family = "wasm"))]
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
 use std::{cell::RefCell, rc::Rc};
 
@@ -135,16 +140,66 @@ const TAB_ICON_GAP: f32 = 6.0;
 /// lightness so white text reads on every entry. Indexed by hashing
 /// the hostname, so the same site gets the same color across sessions.
 const TAB_ICON_PALETTE: &[ColorU] = &[
-    ColorU { r: 0xe5, g: 0x5a, b: 0x5a, a: 0xff }, // red
-    ColorU { r: 0xff, g: 0x9f, b: 0x40, a: 0xff }, // orange
-    ColorU { r: 0xe6, g: 0xb4, b: 0x3c, a: 0xff }, // amber
-    ColorU { r: 0x4e, g: 0xc9, b: 0x76, a: 0xff }, // green
-    ColorU { r: 0x37, g: 0xb3, b: 0xc3, a: 0xff }, // teal
-    ColorU { r: 0x49, g: 0x91, b: 0xe5, a: 0xff }, // blue
-    ColorU { r: 0x7c, g: 0x77, b: 0xe5, a: 0xff }, // indigo
-    ColorU { r: 0x9b, g: 0x59, b: 0xb6, a: 0xff }, // purple
-    ColorU { r: 0xd1, g: 0x6a, b: 0xa9, a: 0xff }, // pink
-    ColorU { r: 0x88, g: 0x8b, b: 0x9a, a: 0xff }, // slate
+    ColorU {
+        r: 0xe5,
+        g: 0x5a,
+        b: 0x5a,
+        a: 0xff,
+    }, // red
+    ColorU {
+        r: 0xff,
+        g: 0x9f,
+        b: 0x40,
+        a: 0xff,
+    }, // orange
+    ColorU {
+        r: 0xe6,
+        g: 0xb4,
+        b: 0x3c,
+        a: 0xff,
+    }, // amber
+    ColorU {
+        r: 0x4e,
+        g: 0xc9,
+        b: 0x76,
+        a: 0xff,
+    }, // green
+    ColorU {
+        r: 0x37,
+        g: 0xb3,
+        b: 0xc3,
+        a: 0xff,
+    }, // teal
+    ColorU {
+        r: 0x49,
+        g: 0x91,
+        b: 0xe5,
+        a: 0xff,
+    }, // blue
+    ColorU {
+        r: 0x7c,
+        g: 0x77,
+        b: 0xe5,
+        a: 0xff,
+    }, // indigo
+    ColorU {
+        r: 0x9b,
+        g: 0x59,
+        b: 0xb6,
+        a: 0xff,
+    }, // purple
+    ColorU {
+        r: 0xd1,
+        g: 0x6a,
+        b: 0xa9,
+        a: 0xff,
+    }, // pink
+    ColorU {
+        r: 0x88,
+        g: 0x8b,
+        b: 0x9a,
+        a: 0xff,
+    }, // slate
 ];
 
 /// Per-tab icon decision: render a colored letter circle (for normal
@@ -229,6 +284,10 @@ const LOADING_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 /// detection; wry 0.38 does not bridge WKWebView process-termination
 /// callbacks.
 const STALL_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long after the most recent state-change event the pane waits
+/// before flushing browser state to disk. A short window groups bursts
+/// of events into a single atomic write.
+const PERSIST_DEBOUNCE: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -565,6 +624,13 @@ pub struct BrowserView {
     stall_watchers: HashMap<TabId, (u64, SpawnedFutureHandle)>,
     #[cfg(not(target_family = "wasm"))]
     next_stall_generation: u64,
+    /// Pending debounced browser-state persistence.
+    #[cfg(not(target_family = "wasm"))]
+    pending_persist: Option<SpawnedFutureHandle>,
+    /// Generation token used to invalidate stale delayed writes on close
+    /// or when a newer state-change schedules a replacement write.
+    #[cfg(not(target_family = "wasm"))]
+    persist_generation: Arc<AtomicU64>,
 }
 
 impl BrowserView {
@@ -697,6 +763,10 @@ impl BrowserView {
             stall_watchers: HashMap::new(),
             #[cfg(not(target_family = "wasm"))]
             next_stall_generation: 0,
+            #[cfg(not(target_family = "wasm"))]
+            pending_persist: None,
+            #[cfg(not(target_family = "wasm"))]
+            persist_generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -762,6 +832,41 @@ impl BrowserView {
     #[cfg(target_family = "wasm")]
     fn disarm_stall_watch(&mut self, _tab_id: TabId) {}
 
+    /// Schedule a debounced browser-state flush. Newer calls invalidate
+    /// older delayed writes, and `close()` invalidates any still-running
+    /// open=true write before it persists open=false synchronously.
+    #[cfg(not(target_family = "wasm"))]
+    fn schedule_persist(&mut self, ctx: &mut ViewContext<Self>) {
+        if let Some(handle) = self.pending_persist.take() {
+            handle.abort();
+        }
+
+        let generation = self.persist_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let generation_guard = Arc::clone(&self.persist_generation);
+        let state = self.model.snapshot(true);
+        let handle = ctx.spawn(
+            async move {
+                Timer::after(PERSIST_DEBOUNCE).await;
+                if generation_guard.load(Ordering::Acquire) != generation {
+                    return None;
+                }
+                Some(persistence::save_to_default_dir(&state))
+            },
+            move |this, result, _ctx| {
+                if this.persist_generation.load(Ordering::Acquire) == generation {
+                    this.pending_persist = None;
+                }
+                if let Some(Err(err)) = result {
+                    log::warn!("failed to persist browser state: {err}");
+                }
+            },
+        );
+        self.pending_persist = Some(handle);
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn schedule_persist(&mut self, _ctx: &mut ViewContext<Self>) {}
+
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
         let raw_text = self.url_editor.as_ref(ctx).buffer_text(ctx);
         let engine = *GeneralSettings::as_ref(ctx).default_search_engine;
@@ -788,6 +893,7 @@ impl BrowserView {
             // Optimistic: wry's PageLoadEvent::Started may not race us, so
             // start the strip immediately. set_loading is idempotent.
             self.loading_strip.set_loading(true);
+            self.schedule_persist(ctx);
             ctx.notify();
         }
     }
@@ -804,6 +910,7 @@ impl BrowserView {
             self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
             self.loading_strip.set_loading(true);
+            self.schedule_persist(ctx);
             ctx.notify();
         }
     }
@@ -820,6 +927,7 @@ impl BrowserView {
             self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
             self.loading_strip.set_loading(true);
+            self.schedule_persist(ctx);
             ctx.notify();
         }
     }
@@ -863,6 +971,7 @@ impl BrowserView {
 
         self.sync_active_tab_into_editor(ctx);
         self.sync_pane_title(ctx);
+        self.schedule_persist(ctx);
         ctx.notify();
     }
 
@@ -915,6 +1024,7 @@ impl BrowserView {
             self.sync_pane_title(ctx);
         }
 
+        self.schedule_persist(ctx);
         ctx.notify();
     }
 
@@ -935,6 +1045,7 @@ impl BrowserView {
         self.sync_pane_title(ctx);
         self.loading_strip
             .set_loading(self.model.active_tab().is_loading());
+        self.schedule_persist(ctx);
         ctx.notify();
     }
 
@@ -974,6 +1085,7 @@ impl BrowserView {
                     if self.model.active_tab().id() == tab_id {
                         self.sync_pane_title(ctx);
                     }
+                    self.schedule_persist(ctx);
                     ctx.notify();
                 }
             }
@@ -1005,6 +1117,7 @@ impl BrowserView {
                         self.sync_active_tab_into_editor(ctx);
                         self.sync_pane_title(ctx);
                     }
+                    self.schedule_persist(ctx);
                     ctx.notify();
                 }
                 self.arm_stall_watch(tab_id, stalled_url, ctx);
@@ -1698,6 +1811,10 @@ impl BackingView for BrowserView {
         #[cfg(not(target_family = "wasm"))]
         {
             for (_, (_, handle)) in self.stall_watchers.drain() {
+                handle.abort();
+            }
+            self.persist_generation.fetch_add(1, Ordering::AcqRel);
+            if let Some(handle) = self.pending_persist.take() {
                 handle.abort();
             }
             // Detach every native webview before the pane group shadow-closes
