@@ -1,6 +1,8 @@
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
+#[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(not(target_family = "wasm"))]
 use std::{cell::RefCell, rc::Rc};
 
@@ -47,6 +49,9 @@ pub(crate) enum NativeWebViewEvent {
 
 #[cfg(not(target_family = "wasm"))]
 pub(crate) type SharedWebContext = Rc<RefCell<wry::WebContext>>;
+
+#[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
+static NON_MACOS_ATTACH_WARNING_LOGGED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) struct NativeBrowserWebView {
     tab_id: TabId,
@@ -389,13 +394,12 @@ impl NativeBrowserWebView {
         #[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
         {
             let _ = (window_id, bounds, app);
-            if !self.attach_error_logged {
+            if !NON_MACOS_ATTACH_WARNING_LOGGED.swap(true, Ordering::AcqRel) {
                 log::warn!(
                     "browser pane: native webview attach is not implemented on this platform yet \
                      (needs a cross-platform `active_window_handle()` API in warpui_core to reach \
                      wry's `new_as_child`). Pane will render chrome only."
                 );
-                self.attach_error_logged = true;
             }
         }
 
