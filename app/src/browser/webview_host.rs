@@ -327,13 +327,19 @@ impl NativeBrowserWebView {
                     // body from a (hypothetical) future sender doesn't take
                     // down the channel.
                     let body = request.body();
-                    if let Ok(msg) = serde_json::from_str::<FindResultsMessage>(body) {
-                        if msg.kind == "find_results" {
-                            let _ = ipc_tx.try_send(NativeWebViewEvent::FindResults(
-                                tab_id,
-                                msg.current,
-                                msg.total,
-                            ));
+                    // Guard against large payloads from arbitrary pages before
+                    // paying the JSON parse cost. 8 KB is far more than any
+                    // legitimate find-results message will ever need.
+                    const IPC_MAX_BYTES: usize = 8 * 1024;
+                    if body.len() <= IPC_MAX_BYTES {
+                        if let Ok(msg) = serde_json::from_str::<FindResultsMessage>(body) {
+                            if msg.kind == "find_results" {
+                                let _ = ipc_tx.try_send(NativeWebViewEvent::FindResults(
+                                    tab_id,
+                                    msg.current,
+                                    msg.total,
+                                ));
+                            }
                         }
                     }
                 });
