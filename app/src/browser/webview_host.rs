@@ -334,7 +334,20 @@ impl NativeBrowserWebView {
             }
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
+        {
+            let _ = (window_id, bounds, app);
+            if !self.attach_error_logged {
+                log::warn!(
+                    "browser pane: native webview attach is not implemented on this platform yet \
+                     (needs a cross-platform `active_window_handle()` API in warpui_core to reach \
+                     wry's `new_as_child`). Pane will render chrome only."
+                );
+                self.attach_error_logged = true;
+            }
+        }
+
+        #[cfg(target_family = "wasm")]
         let _ = (window_id, bounds, app);
     }
 }
