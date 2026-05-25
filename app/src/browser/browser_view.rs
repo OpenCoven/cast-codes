@@ -26,6 +26,7 @@ use crate::{
         EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
         TextOptions,
     },
+    menu::{MenuItem, MenuItemFields},
     pane_group::{
         focus_state::PaneFocusHandle,
         pane::view::{self, HeaderContent, StandardHeader, StandardHeaderOptions},
@@ -245,6 +246,9 @@ pub enum BrowserViewAction {
     FindPrev,
     /// Close the find overlay and clear all highlights in the page.
     CloseFind,
+    /// Toggle the WebKit DevTools / Inspector for the active tab. No-op
+    /// if the `browser.devtools_enabled` setting is false.
+    ToggleDevTools,
 }
 
 #[derive(Default, Clone)]
@@ -1547,6 +1551,18 @@ impl TypedActionView for BrowserView {
                     webview.borrow().find_prev();
                 }
             }
+            BrowserViewAction::ToggleDevTools => {
+                if !*GeneralSettings::as_ref(ctx).browser_devtools_enabled {
+                    log::info!(
+                        "browser pane: DevTools toggle ignored: `browser.devtools_enabled` setting is false"
+                    );
+                    return;
+                }
+                #[cfg(not(target_family = "wasm"))]
+                if let Some(webview) = self.active_webview() {
+                    webview.borrow().toggle_devtools();
+                }
+            }
         }
     }
 }
@@ -1555,6 +1571,25 @@ impl BackingView for BrowserView {
     type PaneHeaderOverflowMenuAction = BrowserViewAction;
     type CustomAction = BrowserViewAction;
     type AssociatedData = ();
+
+    fn pane_header_overflow_menu_items(
+        &self,
+        ctx: &AppContext,
+    ) -> Vec<MenuItem<BrowserViewAction>> {
+        let modifier = if cfg!(target_os = "macos") {
+            "Cmd+Opt+I"
+        } else {
+            "Ctrl+Shift+I"
+        };
+        let label = if *GeneralSettings::as_ref(ctx).browser_devtools_enabled {
+            "Toggle DevTools".to_string()
+        } else {
+            "Toggle DevTools (disabled: set browser.devtools_enabled = true)".to_string()
+        };
+        vec![MenuItemFields::new_with_label(label.as_str(), modifier)
+            .with_on_select_action(BrowserViewAction::ToggleDevTools)
+            .into_item()]
+    }
 
     fn handle_pane_header_overflow_menu_action(
         &mut self,
