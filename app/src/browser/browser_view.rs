@@ -24,6 +24,7 @@ use crate::{
         EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
         TextOptions,
     },
+    menu::{MenuItem, MenuItemFields},
     pane_group::{
         focus_state::PaneFocusHandle,
         pane::view::{self, HeaderContent, StandardHeader, StandardHeaderOptions},
@@ -124,6 +125,30 @@ const LOADING_STRIP_HEIGHT: f32 = 2.0;
 /// Size of the SSL/security indicator rendered inside the URL bar.
 const SECURITY_ICON_SIZE: f32 = 14.0;
 
+/// Zoom levels, mirroring Chrome's stepping. Indices are stored per tab
+/// in `BrowserView::tab_zoom_steps`; `ZOOM_STEPS[level]` gives the
+/// multiplier passed to `wry::WebView::zoom`.
+const ZOOM_STEPS: &[f32] = &[
+    0.50, 0.67, 0.75, 0.80, 0.90, 1.00, 1.10, 1.25, 1.50, 1.75, 2.00,
+];
+/// Index of the 1.00 (100%) step. New tabs start here.
+const DEFAULT_ZOOM_STEP: u8 = 5;
+
+fn zoom_level_for_step(step: u8) -> f32 {
+    let idx = (step as usize).min(ZOOM_STEPS.len() - 1);
+    ZOOM_STEPS[idx]
+}
+
+fn zoom_step_in(current: u8) -> u8 {
+    let next = (current as usize).saturating_add(1);
+    let max = (ZOOM_STEPS.len() - 1) as u8;
+    (next as u8).min(max)
+}
+
+fn zoom_step_out(current: u8) -> u8 {
+    current.saturating_sub(1)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
     Pane(PaneEvent),
@@ -147,6 +172,12 @@ pub enum BrowserViewAction {
     FindPrev,
     /// Close the find overlay and clear all highlights in the page.
     CloseFind,
+    /// Step the active tab's zoom up (toward larger).
+    ZoomIn,
+    /// Step the active tab's zoom down (toward smaller).
+    ZoomOut,
+    /// Reset the active tab's zoom to 100%.
+    ZoomReset,
 }
 
 #[derive(Default, Clone)]
@@ -261,6 +292,9 @@ pub struct BrowserView {
     find_editor: ViewHandle<EditorView>,
     /// `Some` while the find overlay is visible.
     find_state: Option<FindState>,
+    /// Per-tab zoom step index (transient — not persisted). Stable
+    /// across renders; cleared when a tab closes.
+    tab_zoom_steps: HashMap<TabId, u8>,
 }
 
 impl BrowserView {
@@ -375,7 +409,63 @@ impl BrowserView {
             find_close_button_mouse_state: MouseStateHandle::default(),
             find_editor,
             find_state: None,
+            tab_zoom_steps: {
+                let mut map = HashMap::new();
+                map.insert(initial_tab_id, DEFAULT_ZOOM_STEP);
+                map
+            },
         }
+    }
+
+    /// Apply the active tab's zoom step to its native webview.
+    /// Idempotent — safe to call after every transition that might leave
+    /// the visible webview at a different zoom than the model says.
+    fn apply_active_tab_zoom(&self) {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let tab_id = self.model.active_tab().id();
+            let step = *self
+                .tab_zoom_steps
+                .get(&tab_id)
+                .unwrap_or(&DEFAULT_ZOOM_STEP);
+            if let Some(webview) = self.active_webview() {
+                webview.borrow().set_zoom(zoom_level_for_step(step));
+            }
+        }
+    }
+
+    fn zoom_in(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_id = self.model.active_tab().id();
+        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let next = zoom_step_in(cur);
+        if next == cur {
+            return;
+        }
+        self.tab_zoom_steps.insert(tab_id, next);
+        self.apply_active_tab_zoom();
+        ctx.notify();
+    }
+
+    fn zoom_out(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_id = self.model.active_tab().id();
+        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let next = zoom_step_out(cur);
+        if next == cur {
+            return;
+        }
+        self.tab_zoom_steps.insert(tab_id, next);
+        self.apply_active_tab_zoom();
+        ctx.notify();
+    }
+
+    fn zoom_reset(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_id = self.model.active_tab().id();
+        if self.tab_zoom_steps.get(&tab_id) == Some(&DEFAULT_ZOOM_STEP) {
+            return;
+        }
+        self.tab_zoom_steps.insert(tab_id, DEFAULT_ZOOM_STEP);
+        self.apply_active_tab_zoom();
+        ctx.notify();
     }
 
     pub fn pane_configuration(&self) -> ModelHandle<PaneConfiguration> {
@@ -477,6 +567,7 @@ impl BrowserView {
         )));
         self.webviews.push(webview);
         self.tab_ui_states.insert(tab_id, TabUiState::default());
+        self.tab_zoom_steps.insert(tab_id, DEFAULT_ZOOM_STEP);
 
         self.sync_active_tab_into_editor(ctx);
         self.sync_pane_title(ctx);
@@ -499,7 +590,9 @@ impl BrowserView {
 
         // Also clean up its UI state.
         if let Some(removed_tab_id) = self.tab_ui_states_remove_for_index(result.removed_index) {
-            let _ = removed_tab_id;
+            // Drop the zoom state too — keep the map aligned with the live
+            // tab set so memory doesn't leak across tab churn.
+            self.tab_zoom_steps.remove(&removed_tab_id);
         }
 
         // If we replaced the last tab with a fresh default tab, create a matching webview.
@@ -514,6 +607,7 @@ impl BrowserView {
             )));
             self.webviews.push(webview);
             self.tab_ui_states.insert(new_tab_id, TabUiState::default());
+            self.tab_zoom_steps.insert(new_tab_id, DEFAULT_ZOOM_STEP);
         }
 
         // If the active tab changed, surface the new tab's URL & title; if the
@@ -526,6 +620,7 @@ impl BrowserView {
             }
             self.sync_active_tab_into_editor(ctx);
             self.sync_pane_title(ctx);
+            self.apply_active_tab_zoom();
         }
 
         ctx.notify();
@@ -546,6 +641,11 @@ impl BrowserView {
 
         self.sync_active_tab_into_editor(ctx);
         self.sync_pane_title(ctx);
+        // Re-apply the new active tab's stored zoom so the webview matches
+        // our model state. wry's WebView keeps its zoom across visibility
+        // toggles, but this also covers the lazy-attach case where the
+        // webview was rebuilt at 100% after a pane close+restore cycle.
+        self.apply_active_tab_zoom();
         ctx.notify();
     }
 
@@ -1197,6 +1297,9 @@ impl TypedActionView for BrowserView {
                     webview.borrow().find_prev();
                 }
             }
+            BrowserViewAction::ZoomIn => self.zoom_in(ctx),
+            BrowserViewAction::ZoomOut => self.zoom_out(ctx),
+            BrowserViewAction::ZoomReset => self.zoom_reset(ctx),
         }
     }
 }
@@ -1205,6 +1308,32 @@ impl BackingView for BrowserView {
     type PaneHeaderOverflowMenuAction = BrowserViewAction;
     type CustomAction = BrowserViewAction;
     type AssociatedData = ();
+
+    fn pane_header_overflow_menu_items(
+        &self,
+        _ctx: &AppContext,
+    ) -> Vec<MenuItem<BrowserViewAction>> {
+        let tab_id = self.model.active_tab().id();
+        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let pct = (zoom_level_for_step(cur) * 100.0).round() as i32;
+        let reset_label = format!("Reset zoom ({pct}%)");
+        let modifier = if cfg!(target_os = "macos") {
+            "⌘"
+        } else {
+            "Ctrl"
+        };
+        vec![
+            MenuItemFields::new_with_label("Zoom in", &format!("{modifier}+"))
+                .with_on_select_action(BrowserViewAction::ZoomIn)
+                .into_item(),
+            MenuItemFields::new_with_label("Zoom out", &format!("{modifier}−"))
+                .with_on_select_action(BrowserViewAction::ZoomOut)
+                .into_item(),
+            MenuItemFields::new_with_label(&reset_label, &format!("{modifier}0"))
+                .with_on_select_action(BrowserViewAction::ZoomReset)
+                .into_item(),
+        ]
+    }
 
     fn handle_pane_header_overflow_menu_action(
         &mut self,
@@ -1268,7 +1397,9 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_security, SecurityState, TAB_STRIP_HEIGHT};
+    use super::{classify_security, zoom_level_for_step, zoom_step_in, zoom_step_out, SecurityState, TAB_STRIP_HEIGHT,
+        DEFAULT_ZOOM_STEP, ZOOM_STEPS,
+    };
 
     #[test]
     fn https_is_secure() {
@@ -1344,5 +1475,78 @@ mod tests {
         // intentionally change the token, update this test in the same
         // PR so the divergence is reviewed.
         assert_eq!(TAB_STRIP_HEIGHT, 34.0);
+    }
+
+    #[test]
+    fn default_zoom_step_is_100_percent() {
+        assert_eq!(
+            (zoom_level_for_step(DEFAULT_ZOOM_STEP) * 100.0).round() as i32,
+            100,
+            "default step should be the 1.00 index"
+        );
+    }
+
+    #[test]
+    fn zoom_step_in_advances_toward_max() {
+        let mut s = DEFAULT_ZOOM_STEP;
+        let mut _levels = Vec::new();
+        for _ in 0..10 {
+            let next = zoom_step_in(s);
+            assert!(next >= s);
+            s = next;
+            _levels.push(zoom_level_for_step(s));
+        }
+        // Hit the ceiling — final step is the top of ZOOM_STEPS.
+        assert_eq!(s, (ZOOM_STEPS.len() - 1) as u8);
+        assert_eq!(zoom_level_for_step(s), *ZOOM_STEPS.last().unwrap());
+    }
+
+    #[test]
+    fn zoom_step_in_saturates_at_max() {
+        let max = (ZOOM_STEPS.len() - 1) as u8;
+        assert_eq!(zoom_step_in(max), max);
+        assert_eq!(zoom_step_in(max + 5), max);
+    }
+
+    #[test]
+    fn zoom_step_out_retreats_toward_zero() {
+        let mut s = DEFAULT_ZOOM_STEP;
+        for _ in 0..10 {
+            let next = zoom_step_out(s);
+            assert!(next <= s);
+            s = next;
+        }
+        assert_eq!(s, 0);
+    }
+
+    #[test]
+    fn zoom_step_out_saturates_at_zero() {
+        assert_eq!(zoom_step_out(0), 0);
+    }
+
+    #[test]
+    fn zoom_step_round_trip() {
+        // In then out should return to original step.
+        let s = DEFAULT_ZOOM_STEP;
+        assert_eq!(zoom_step_out(zoom_step_in(s)), s);
+    }
+
+    #[test]
+    fn zoom_level_for_oob_step_clamps() {
+        // Index past the end clamps to max instead of panicking — the
+        // step is a u8 from user-driven state, defensive guard.
+        let last = ZOOM_STEPS.last().copied().unwrap();
+        assert_eq!(zoom_level_for_step(255), last);
+    }
+
+    #[test]
+    fn zoom_steps_are_monotonic() {
+        // Each step should be strictly larger than the previous so the
+        // UI feels coherent. Catches a typo'd table swap.
+        for w in ZOOM_STEPS.windows(2) {
+            assert!(w[0] < w[1], "ZOOM_STEPS not monotonic: {:?}", w);
+        }
+        // And the table contains 1.00 exactly at DEFAULT_ZOOM_STEP.
+        assert_eq!(ZOOM_STEPS[DEFAULT_ZOOM_STEP as usize], 1.00);
     }
 }
