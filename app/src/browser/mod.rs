@@ -3,6 +3,8 @@ pub(crate) mod browser_model;
 mod browser_view;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod data_dir;
+#[cfg(not(target_family = "wasm"))]
+pub(crate) mod downloads;
 pub(crate) mod find;
 pub(crate) mod persistence;
 pub(crate) mod popup_policy;

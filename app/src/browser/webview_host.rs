@@ -8,6 +8,8 @@ use pathfinder_geometry::rect::RectF;
 use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
+#[cfg(target_os = "macos")]
+use super::downloads;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
 #[cfg(not(target_family = "wasm"))]
@@ -251,6 +253,44 @@ impl NativeBrowserWebView {
                 .with_on_page_load_handler(move |event, _url| {
                     let loading = matches!(event, wry::PageLoadEvent::Started);
                     let _ = load_tx.try_send(NativeWebViewEvent::LoadingChanged(tab_id, loading));
+                })
+                // Route downloads to ~/Downloads with a collision suffix
+                // (e.g. report.pdf → report (1).pdf). If the user has no
+                // Downloads dir or it can't be created, we return false
+                // to cancel rather than let WKWebView silently drop the
+                // bytes into a temp file. The `started` handler runs on
+                // the same thread wry uses for navigation callbacks; the
+                // path resolution is sync and cheap.
+                .with_download_started_handler(|url, target_path| {
+                    let log_url = downloads::url_for_log(&url);
+                    let Some(base_dir) = downloads::default_base_dir() else {
+                        log::warn!("download cancelled: no usable downloads directory ({log_url})");
+                        return false;
+                    };
+                    // wry hands us a `&mut PathBuf` that the handler may
+                    // populate with the destination. It may also already
+                    // contain a suggested filename (server-provided
+                    // Content-Disposition) — use that if present.
+                    let suggested = if target_path.as_os_str().is_empty() {
+                        downloads::filename_from_url(&url)
+                    } else {
+                        target_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| downloads::filename_from_url(&url))
+                    };
+                    let resolved = downloads::resolve_destination(&base_dir, &suggested);
+                    log::info!("download started: {log_url} → {resolved:?}");
+                    *target_path = resolved;
+                    true
+                })
+                .with_download_completed_handler(|url, saved_path, success| {
+                    let log_url = downloads::url_for_log(&url);
+                    if success {
+                        log::info!("download completed: {log_url} → {saved_path:?}");
+                    } else {
+                        log::warn!("download failed: {log_url} (path={saved_path:?})");
+                    }
                 })
                 .with_new_window_req_handler(move |url| {
                     // Classify popups via our policy and dispatch through the
