@@ -5,7 +5,7 @@ use std::{ffi::c_void, ptr::NonNull};
 use std::{cell::RefCell, rc::Rc};
 
 use pathfinder_geometry::rect::RectF;
-use warpui::{AppContext, WindowId};
+use warpui::{AppContext, SingletonEntity, WindowId};
 
 use super::browser_model::TabId;
 #[cfg(not(target_family = "wasm"))]
@@ -119,6 +119,30 @@ impl NativeBrowserWebView {
                 log::warn!("failed to reload browser pane: {err}");
             }
         }
+    }
+
+    /// Toggle the WebKit Inspector / DevTools panel. No-op if the
+    /// webview was built with `with_devtools(false)`.
+    #[cfg(not(target_family = "wasm"))]
+    #[cfg(debug_assertions)]
+    pub(crate) fn toggle_devtools(&self) {
+        if let Some(webview) = &self.webview {
+            if webview.is_devtools_open() {
+                webview.close_devtools();
+            } else {
+                webview.open_devtools();
+            }
+        }
+    }
+
+    /// Stub used in release builds without the `devtools` feature so
+    /// callers don't have to duplicate wry's compile-time gate.
+    #[cfg(not(target_family = "wasm"))]
+    #[cfg(not(debug_assertions))]
+    pub(crate) fn toggle_devtools(&self) {
+        log::info!(
+            "browser pane DevTools toggle skipped: release build without `devtools` feature"
+        );
     }
 
     /// Inject the find script and search for `query`. Idempotent: the
@@ -238,12 +262,15 @@ impl NativeBrowserWebView {
             let load_tx = self.event_tx.clone();
             let popup_tx = self.event_tx.clone();
             let ipc_tx = self.event_tx.clone();
+            let devtools_enabled = *crate::terminal::general_settings::GeneralSettings::as_ref(app)
+                .browser_devtools_enabled;
 
             let mut builder = wry::WebViewBuilder::new_as_child(&parent)
                 .with_url(url)
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
+                .with_devtools(devtools_enabled)
                 // Install the alert/confirm/prompt shim before any page
                 // script runs. wry 0.38 has no native JS-dialog handler
                 // API on macOS, so pages that call these can otherwise
