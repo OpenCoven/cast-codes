@@ -149,6 +149,18 @@ impl NativeBrowserWebView {
         }
     }
 
+    /// Apply a zoom level to the underlying webview. `1.0` is 100%. Per
+    /// wry docs this requires macOS 11+ / iOS 14+; on older systems the
+    /// call returns an error which we log and otherwise ignore.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn set_zoom(&self, level: f32) {
+        if let Some(webview) = &self.webview {
+            if let Err(err) = webview.zoom(level as f64) {
+                log::warn!("failed to set browser pane zoom to {level}: {err}");
+            }
+        }
+    }
+
     pub(crate) fn set_visibility(&mut self, visible: bool) {
         self.desired_visible = visible;
 
