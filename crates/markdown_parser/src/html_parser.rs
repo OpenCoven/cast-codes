@@ -25,8 +25,8 @@ const TOP_LEVEL_ELEMENT_TAGS_TO_SKIP: &[&str] = &[
     "head", "body", "html", "meta", "b", "div", "ul", "ol", "li", "input",
 ];
 const PHRASING_ELEMENT_TAGS: &[&str] = &[
-    "span", "i", "code", "strong", "em", "br", "a", "s", "u", "ins",
-    "del", "kbd", "sub", "sup", "mark", "small", "q",
+    "span", "i", "code", "strong", "em", "br", "a", "s", "u", "ins", "del", "kbd", "sub", "sup",
+    "mark", "small", "q",
 ];
 
 pub const WARP_EMBED_ATTRIBUTE_NAME: &str = "data-warp-embedded-item";
@@ -697,30 +697,45 @@ fn build_table_from_html(rows: &[Rc<Node>]) -> FormattedTextLine {
         body_rows: &mut Vec<Vec<FormattedTextInline>>,
     ) {
         for node in nodes {
-            let NodeData::Element { name, .. } = &node.data else { continue };
+            let NodeData::Element { name, .. } = &node.data else {
+                continue;
+            };
             match name.local.as_ref() {
                 "thead" => {
                     for tr in node.children.borrow().iter() {
-                        let NodeData::Element { name, .. } = &tr.data else { continue };
-                        if name.local.as_ref() != "tr" { continue }
+                        let NodeData::Element { name, .. } = &tr.data else {
+                            continue;
+                        };
+                        if name.local.as_ref() != "tr" {
+                            continue;
+                        }
                         for cell in tr.children.borrow().iter() {
-                            let NodeData::Element { name, .. } = &cell.data else { continue };
+                            let NodeData::Element { name, .. } = &cell.data else {
+                                continue;
+                            };
                             if name.local.as_ref() != "th" && name.local.as_ref() != "td" {
                                 continue;
                             }
                             let cell_children: Vec<Rc<Node>> =
                                 cell.children.borrow().iter().cloned().collect();
-                            headers.push(parse_phrasing_content(&cell_children, Styling::default()));
+                            headers
+                                .push(parse_phrasing_content(&cell_children, Styling::default()));
                         }
                     }
                 }
                 "tbody" | "tfoot" => {
                     for tr in node.children.borrow().iter() {
-                        let NodeData::Element { name, .. } = &tr.data else { continue };
-                        if name.local.as_ref() != "tr" { continue }
+                        let NodeData::Element { name, .. } = &tr.data else {
+                            continue;
+                        };
+                        if name.local.as_ref() != "tr" {
+                            continue;
+                        }
                         let mut row: Vec<FormattedTextInline> = Vec::new();
                         for cell in tr.children.borrow().iter() {
-                            let NodeData::Element { name, .. } = &cell.data else { continue };
+                            let NodeData::Element { name, .. } = &cell.data else {
+                                continue;
+                            };
                             if name.local.as_ref() != "th" && name.local.as_ref() != "td" {
                                 continue;
                             }
@@ -735,7 +750,9 @@ fn build_table_from_html(rows: &[Rc<Node>]) -> FormattedTextLine {
                     // <table> with no <thead>/<tbody> wrapper: first <tr> is header.
                     let mut row: Vec<FormattedTextInline> = Vec::new();
                     for cell in node.children.borrow().iter() {
-                        let NodeData::Element { name, .. } = &cell.data else { continue };
+                        let NodeData::Element { name, .. } = &cell.data else {
+                            continue;
+                        };
                         if name.local.as_ref() != "th" && name.local.as_ref() != "td" {
                             continue;
                         }
@@ -756,7 +773,9 @@ fn build_table_from_html(rows: &[Rc<Node>]) -> FormattedTextLine {
 
     walk(rows, &mut headers, &mut body_rows);
 
-    let col_count = headers.len().max(body_rows.iter().map(Vec::len).max().unwrap_or(0));
+    let col_count = headers
+        .len()
+        .max(body_rows.iter().map(Vec::len).max().unwrap_or(0));
     let mut table = FormattedTable {
         headers,
         alignments: vec![TableAlignment::Left; col_count],

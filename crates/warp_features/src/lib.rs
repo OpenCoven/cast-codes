@@ -762,6 +762,11 @@ pub enum FeatureFlag {
     /// Enables vertical tab layout as an alternative to the horizontal tab bar.
     VerticalTabs,
 
+    /// Enables the Worktree Manager panel for creating, listing, and switching
+    /// git worktrees from within CastCodes.
+    /// CastCodes-only; never enabled in upstream Warp builds.
+    WorktreeManager,
+
     /// Enables attaching code review comments, diff hunk, and attach as context
     /// from code review + code editor for House Of Agents work
     HoaCodeReview,
@@ -949,6 +954,7 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::DragTabsToWindows,
     FeatureFlag::NamedAgents,
     FeatureFlag::GitCredentialRefresh,
+    FeatureFlag::WorktreeManager,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Warp).

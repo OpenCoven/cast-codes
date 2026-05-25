@@ -416,6 +416,118 @@ impl BrowserView {
         }
     }
 
+    /// Construct a BrowserView from previously-persisted tab state.
+    #[cfg(not(target_family = "wasm"))]
+    pub fn from_state(
+        state: super::browser_model::BrowserState,
+        ctx: &mut ViewContext<Self>,
+    ) -> Self {
+        let model = BrowserModel::restore(state);
+        let pane_configuration =
+            ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
+        let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
+
+        let web_context: Option<SharedWebContext> = {
+            let dir = data_dir::browser_data_dir();
+            Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
+        };
+
+        let active_idx = model.active_index();
+        let mut webviews = Vec::with_capacity(model.tabs().len());
+        let mut tab_ui_states = HashMap::new();
+        let mut tab_zoom_steps = HashMap::new();
+        for (idx, tab) in model.tabs().iter().enumerate() {
+            let tab_id = tab.id();
+            webviews.push(Rc::new(RefCell::new(NativeBrowserWebView::new(
+                tab_id,
+                webview_url_for(tab.current_url()),
+                event_tx.clone(),
+                web_context.clone(),
+                idx == active_idx,
+            ))));
+            tab_ui_states.insert(tab_id, TabUiState::default());
+            tab_zoom_steps.insert(tab_id, DEFAULT_ZOOM_STEP);
+        }
+
+        let current_url = model.current_url().to_string();
+
+        let url_editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let mut editor = EditorView::single_line(
+                SingleLineEditorOptions {
+                    text: TextOptions::ui_text(Some(12.0), appearance),
+                    select_all_on_focus: true,
+                    clear_selections_on_blur: true,
+                    propagate_and_no_op_vertical_navigation_keys:
+                        PropagateAndNoOpNavigationKeys::Always,
+                    ..Default::default()
+                },
+                ctx,
+            );
+            editor.set_placeholder_text(URL_BAR_PLACEHOLDER, ctx);
+            editor.set_buffer_text_with_base_buffer(&current_url, ctx);
+            editor
+        });
+
+        ctx.subscribe_to_view(&url_editor, move |view, _, event, ctx| {
+            if matches!(event, EditorEvent::Enter) {
+                view.navigate_to_editor_url(ctx);
+            }
+        });
+        ctx.spawn_stream_local(event_rx, Self::handle_webview_event, |_, _| {});
+
+        let find_editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let mut editor = EditorView::single_line(
+                SingleLineEditorOptions {
+                    text: TextOptions::ui_text(Some(12.0), appearance),
+                    select_all_on_focus: true,
+                    clear_selections_on_blur: false,
+                    propagate_and_no_op_vertical_navigation_keys:
+                        PropagateAndNoOpNavigationKeys::Always,
+                    ..Default::default()
+                },
+                ctx,
+            );
+            editor.set_placeholder_text("Find in page", ctx);
+            editor
+        });
+
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
+            match event {
+                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+                _ => {}
+            }
+        });
+
+        Self {
+            model,
+            window_id: ctx.window_id(),
+            url_editor,
+            pane_configuration,
+            focus_handle: None,
+            webviews,
+            event_tx,
+            web_context,
+            tab_ui_states,
+            back_button_mouse_state: MouseStateHandle::default(),
+            forward_button_mouse_state: MouseStateHandle::default(),
+            reload_button_mouse_state: MouseStateHandle::default(),
+            new_tab_button_mouse_state: MouseStateHandle::default(),
+            collapse_button_mouse_state: MouseStateHandle::default(),
+            open_external_button_mouse_state: MouseStateHandle::default(),
+            find_toggle_button_mouse_state: MouseStateHandle::default(),
+            find_next_button_mouse_state: MouseStateHandle::default(),
+            find_prev_button_mouse_state: MouseStateHandle::default(),
+            find_close_button_mouse_state: MouseStateHandle::default(),
+            find_editor,
+            find_state: None,
+            tab_zoom_steps,
+        }
+    }
+
     /// Apply the active tab's zoom step to its native webview.
     /// Idempotent — safe to call after every transition that might leave
     /// the visible webview at a different zoom than the model says.

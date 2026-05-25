@@ -3,17 +3,41 @@
 <head>
   <meta charset="utf-8" />
   <title>New Tab</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'" />
   <style>
     :root {
-      color-scheme: dark;
+      /* Honor the system appearance. The webview itself doesn't know
+         the app's runtime theme, but `prefers-color-scheme` matches
+         the macOS / Linux desktop setting, which is what users expect
+         from a browser pane start page. */
+      color-scheme: light dark;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+      /* Dark-mode tokens (match the CastCodes theme registry: see
+         `AGENTS.md` Phase 1 contract). Default values are dark so the
+         page never flashes white in a dark UI before the media query
+         resolves. */
+      --bg: #0f0f12;
+      --fg: #e8e8ed;
     }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        /* Light tokens. CastCodes doesn't yet ship a light theme, so
+           these are reasonable neutrals chosen to match typical light
+           system UI rather than a specific design token. */
+        --bg: #fafafa;
+        --fg: #1a1a1a;
+      }
+    }
+
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      background: #0e0e10;
-      color: #e8e8ea;
+      background: var(--bg);
+      color: var(--fg);
     }
     main {
       display: flex;

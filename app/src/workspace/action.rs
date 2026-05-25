@@ -729,6 +729,21 @@ pub enum WorkspaceAction {
     NavigateBrowserPane {
         url: String,
     },
+    /// Palette entry shim — handler opens the WorktreePicker modal,
+    /// which on select dispatches the existing `OpenWorktreeInRepo`.
+    OpenWorktreePicker,
+    /// Palette entry shim — handler emits a "coming in a follow-up"
+    /// toast. Real removal flow ships in a follow-up PR.
+    OpenWorktreeRemoveStub,
+    /// Remove a git worktree (optionally with --force).
+    RemoveWorktree {
+        worktree_path: std::path::PathBuf,
+        force: bool,
+    },
+    /// Prune stale administrative files for a git worktree.
+    PruneWorktree {
+        worktree_path: std::path::PathBuf,
+    },
 }
 
 impl From<&WorkspaceAction> for LoginGatedFeature {
@@ -821,7 +836,9 @@ impl WorkspaceAction {
             | SummarizeAIConversation { .. }
             | OpenRepository { .. }
             | SelectTabConfig(_)
-            | ToggleVerticalTabsPanel => true, // actions that actually change a state of the state of user's
+            | ToggleVerticalTabsPanel
+            | RemoveWorktree { .. }
+            | PruneWorktree { .. } => true, // actions that actually change a state of the state of user's
             // workspace would most likely require a save, so that if the app gets
             // restarted, the user can continue working
             #[cfg(not(target_family = "wasm"))]
@@ -1037,6 +1054,8 @@ impl WorkspaceAction {
             #[cfg(feature = "local_fs")]
             FileDeleted { .. } => false, // File deletion doesn't change workspace state
             OpenEnvironmentManagementPane => false,
+            OpenWorktreePicker => false,
+            OpenWorktreeRemoveStub => false,
             #[cfg(target_os = "linux")]
             DismissWaylandCrashRecoveryBannerAndOpenLink => false,
             #[cfg(target_family = "wasm")]

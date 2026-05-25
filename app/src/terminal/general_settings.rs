@@ -183,4 +183,24 @@ define_settings_group!(GeneralSettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: true,
     },
+    // Browser-pane DevTools. Off by default so a user has to opt in
+    // before remote sites can be inspected from the embedded webview.
+    // When this is false, `with_devtools(false)` is passed to wry and
+    // the `ToggleDevTools` action no-ops with a log line. When true,
+    // the overflow-menu item can toggle the inspector for newly built
+    // webviews.
+    //
+    // Note: on macOS release builds wry requires its `devtools` cargo
+    // feature for `with_devtools(true)` to wire private-API calls.
+    // Debug builds work either way. Release builds without that feature
+    // compile a stub toggle that logs and returns without calling wry.
+    browser_devtools_enabled: BrowserDevToolsEnabled {
+        type: bool,
+        default: false,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+        private: false,
+        toml_path: "browser.devtools_enabled",
+        description: "Whether the embedded browser pane allows opening WebKit DevTools. Off by default; opt in to inspect remote pages.",
+    },
 ]);

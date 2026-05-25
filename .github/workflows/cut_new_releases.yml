@@ -22,6 +22,8 @@ jobs:
   get_config:
     name: Get release configuration
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       CHANNEL: ${{ inputs.channel || 'oss' }}
     outputs:

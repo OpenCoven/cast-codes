@@ -79,3 +79,28 @@ fn pane_name_actions_save_workspace_state() {
     // `rename_pane` which mutates `pane_configuration`.
     assert!(WorkspaceAction::RenameActivePane.should_save_app_state_on_action());
 }
+
+// --- Worktree Manager action tests ---
+
+#[test]
+fn remove_worktree_round_trip() {
+    // Verify save-state opt-in for RemoveWorktree and PruneWorktree.
+    assert!(WorkspaceAction::RemoveWorktree {
+        worktree_path: std::path::PathBuf::from("/tmp/feature-a"),
+        force: false,
+    }
+    .should_save_app_state_on_action());
+
+    assert!(WorkspaceAction::PruneWorktree {
+        worktree_path: std::path::PathBuf::from("/tmp/gone"),
+    }
+    .should_save_app_state_on_action());
+}
+
+#[test]
+fn sentinel_variants_do_not_save_workspace_state() {
+    // OpenWorktreePicker and OpenWorktreeRemoveStub are UI-only triggers —
+    // they must NOT cause a workspace-state save.
+    assert!(!WorkspaceAction::OpenWorktreePicker.should_save_app_state_on_action());
+    assert!(!WorkspaceAction::OpenWorktreeRemoveStub.should_save_app_state_on_action());
+}

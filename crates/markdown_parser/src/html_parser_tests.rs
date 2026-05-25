@@ -576,13 +576,22 @@ fn test_parse_html_details_with_summary() {
     match lines.first() {
         Some(FormattedTextLine::Line(fragments)) => {
             let joined: String = fragments.iter().map(|f| f.text.clone()).collect();
-            assert!(joined.starts_with("▾ "), "expected disclosure glyph, got {joined:?}");
-            assert!(joined.contains("Click me"), "expected summary text, got {joined:?}");
+            assert!(
+                joined.starts_with("▾ "),
+                "expected disclosure glyph, got {joined:?}"
+            );
+            assert!(
+                joined.contains("Click me"),
+                "expected summary text, got {joined:?}"
+            );
         }
         other => panic!("expected first line to be Line(_), got {other:?}"),
     }
     // The body must follow.
-    assert!(lines.len() >= 2, "expected details body line, got {lines:?}");
+    assert!(
+        lines.len() >= 2,
+        "expected details body line, got {lines:?}"
+    );
 }
 
 #[test]

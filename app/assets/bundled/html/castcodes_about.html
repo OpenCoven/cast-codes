@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>About CastCodes</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --bg: #0f0f12;
+      --fg: #e8e8ed;
+      --fg-muted: #8e8e9a;
+      --accent: #7c3aed;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #fafafa;
+        --fg: #1a1a1a;
+        --fg-muted: #6a6a72;
+      }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    main {
+      max-width: 36rem;
+      margin: 0 auto;
+      padding: 4rem 2rem;
+    }
+    h1 { margin: 0 0 0.5rem 0; font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+    .subtitle { margin: 0 0 2rem 0; color: var(--fg-muted); font-size: 16px; }
+    .grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1.5rem; }
+    .label { color: var(--fg-muted); font-size: 13px; align-self: center; }
+    .value { font-size: 13px; font-variant-numeric: tabular-nums; word-break: break-all; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul { padding-left: 1.25rem; }
+    li { font-size: 13px; margin: 0.25rem 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CastCodes</h1>
+    <p class="subtitle">The open-source agentic terminal and code workspace.</p>
+
+    <div class="grid">
+      <div class="label">Version</div>
+      <div class="value">{{VERSION}}</div>
+      <div class="label">Bundle</div>
+      <div class="value">{{APP_ID}}</div>
+      <div class="label">Scheme</div>
+      <div class="value"><code>{{SCHEME}}://</code></div>
+    </div>
+
+    <h2 style="font-size: 16px; margin: 2.5rem 0 0.75rem 0;">Known routes</h2>
+    <ul>
+      <li><code>{{SCHEME}}://about</code> — this page.</li>
+    </ul>
+  </main>
+</body>
+</html>
