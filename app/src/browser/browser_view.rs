@@ -1,19 +1,10 @@
 use std::collections::HashMap;
-#[cfg(not(target_family = "wasm"))]
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
-use std::time::{Duration, Instant};
 use std::{cell::RefCell, rc::Rc};
 
-use pathfinder_color::ColorU;
 use pathfinder_geometry::{
     rect::RectF,
     vector::{vec2f, Vector2F},
 };
-#[cfg(not(target_family = "wasm"))]
-use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::{
     elements::{
         AfterLayoutContext, Align, Border, ChildView, Clipped, ConstrainedBox, Container,
@@ -112,182 +103,51 @@ const URL_BAR_MIN_WIDTH: f32 = 160.0;
 // previous 48pt left ~16pt of dead space around a 32pt input and made the
 // browser chrome look bulky relative to neighboring panes.
 const TOOLBAR_HEIGHT: f32 = 36.0;
-const TAB_STRIP_HEIGHT: f32 = 32.0;
+// Matches the global `--tabbar-height` design token in
+// `resources/design-tokens.css` (2.125rem = 34px). Bumped from 32pt
+// after audit finding A2 — keeping the browser tab strip in lock-step
+// with the workspace tab bar makes nested panes visually consistent.
+const TAB_STRIP_HEIGHT: f32 = 34.0;
 const TAB_MAX_WIDTH: f32 = 200.0;
 const TAB_MIN_WIDTH: f32 = 80.0;
 const TAB_HEIGHT: f32 = 26.0;
 const TAB_CHIP_PADDING: f32 = 8.0;
 const TAB_CLOSE_BUTTON_SIZE: f32 = 16.0;
-const TAB_CLOSE_BUTTON_GAP: f32 = 4.0;
 const TOOLBAR_HORIZONTAL_PADDING: f32 = 10.0;
 const TOOLBAR_BUTTON_GAP: f32 = 6.0;
 const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
 const URL_BAR_PLACEHOLDER: &str = "URL or search the web";
-/// Height of the page-load progress strip below the toolbar. Renders an
-/// animated accent-colored fill while the active tab is loading.
+/// Height of the page-load progress strip below the toolbar. Renders
+/// accent-colored when the active tab is loading; transparent otherwise.
 const LOADING_STRIP_HEIGHT: f32 = 2.0;
 /// Size of the SSL/security indicator rendered inside the URL bar.
 const SECURITY_ICON_SIZE: f32 = 14.0;
 
-/// Size of the per-tab icon (letter circle or globe) rendered in the
-/// left of the tab chip.
-const TAB_ICON_SIZE: f32 = 14.0;
-const TAB_ICON_GAP: f32 = 6.0;
-
-/// Palette for letter-circle tab icons. Hand-picked saturation +
-/// lightness so white text reads on every entry. Indexed by hashing
-/// the hostname, so the same site gets the same color across sessions.
-const TAB_ICON_PALETTE: &[ColorU] = &[
-    ColorU {
-        r: 0xe5,
-        g: 0x5a,
-        b: 0x5a,
-        a: 0xff,
-    }, // red
-    ColorU {
-        r: 0xff,
-        g: 0x9f,
-        b: 0x40,
-        a: 0xff,
-    }, // orange
-    ColorU {
-        r: 0xe6,
-        g: 0xb4,
-        b: 0x3c,
-        a: 0xff,
-    }, // amber
-    ColorU {
-        r: 0x4e,
-        g: 0xc9,
-        b: 0x76,
-        a: 0xff,
-    }, // green
-    ColorU {
-        r: 0x37,
-        g: 0xb3,
-        b: 0xc3,
-        a: 0xff,
-    }, // teal
-    ColorU {
-        r: 0x49,
-        g: 0x91,
-        b: 0xe5,
-        a: 0xff,
-    }, // blue
-    ColorU {
-        r: 0x7c,
-        g: 0x77,
-        b: 0xe5,
-        a: 0xff,
-    }, // indigo
-    ColorU {
-        r: 0x9b,
-        g: 0x59,
-        b: 0xb6,
-        a: 0xff,
-    }, // purple
-    ColorU {
-        r: 0xd1,
-        g: 0x6a,
-        b: 0xa9,
-        a: 0xff,
-    }, // pink
-    ColorU {
-        r: 0x88,
-        g: 0x8b,
-        b: 0x9a,
-        a: 0xff,
-    }, // slate
+/// Zoom levels, mirroring Chrome's stepping. Indices are stored per tab
+/// in `BrowserView::tab_zoom_steps`; `ZOOM_STEPS[level]` gives the
+/// multiplier passed to `wry::WebView::zoom`.
+const ZOOM_STEPS: &[f32] = &[
+    0.50, 0.67, 0.75, 0.80, 0.90, 1.00, 1.10, 1.25, 1.50, 1.75, 2.00,
 ];
+/// Index of the 1.00 (100%) step. New tabs start here.
+const DEFAULT_ZOOM_STEP: u8 = 5;
 
-/// Per-tab icon decision: render a colored letter circle (for normal
-/// http(s) URLs) or fall back to the globe icon for special schemes
-/// and unparseable URLs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TabIcon {
-    /// Filled circle with `letter` centered, painted in `color`.
-    Letter { letter: char, color: ColorU },
-    /// Plain globe — same affordance as the pane header icon.
-    Globe,
+fn zoom_level_for_step(step: u8) -> f32 {
+    let idx = (step as usize).min(ZOOM_STEPS.len() - 1);
+    ZOOM_STEPS[idx]
 }
 
-fn tab_icon_for_url(raw_url: &str) -> TabIcon {
-    let trimmed = raw_url.trim();
-    if trimmed.is_empty() {
-        return TabIcon::Globe;
-    }
-    let parsed = match url::Url::parse(trimmed) {
-        Ok(u) => u,
-        Err(_) => return TabIcon::Globe,
-    };
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return TabIcon::Globe;
-    }
-    let host = match parsed.host() {
-        Some(url::Host::Domain(host)) => host,
-        Some(url::Host::Ipv4(_) | url::Host::Ipv6(_)) | None => return TabIcon::Globe,
-    };
-    // Strip a leading `www.` so `www.example.com` and `example.com`
-    // render identically — the user perceives them as the same site.
-    let key = host.strip_prefix("www.").unwrap_or(host);
-    let Some(letter) = host_initial(key) else {
-        return TabIcon::Globe;
-    };
-    let idx = (fnv1a32(key) as usize) % TAB_ICON_PALETTE.len();
-    TabIcon::Letter {
-        letter,
-        color: TAB_ICON_PALETTE[idx],
-    }
+fn zoom_step_in(current: u8) -> u8 {
+    let next = (current as usize).saturating_add(1);
+    let max = (ZOOM_STEPS.len() - 1) as u8;
+    (next as u8).min(max)
 }
 
-/// First ASCII alphanumeric character of the first DNS label, uppercased.
-/// `news.ycombinator.com` → `N`. Returns `None` for hosts with no
-/// ASCII-alphanumeric content.
-fn host_initial(host_no_www: &str) -> Option<char> {
-    let label = host_no_www.split('.').next().unwrap_or(host_no_www);
-    label
-        .chars()
-        .find(|c| c.is_ascii_alphanumeric())
-        .map(|c| c.to_ascii_uppercase())
+fn zoom_step_out(current: u8) -> u8 {
+    current.saturating_sub(1)
 }
-
-/// FNV-1a 32-bit hash. Used to pick a stable color from
-/// `TAB_ICON_PALETTE` for a given hostname. Deterministic and tiny — no
-/// std::hash::DefaultHasher randomization to worry about.
-fn fnv1a32(input: &str) -> u32 {
-    let mut h: u32 = 0x811c9dc5;
-    for byte in input.bytes() {
-        h ^= byte as u32;
-        h = h.wrapping_mul(0x01000193);
-    }
-    h
-}
-
-/// Time constant for the indeterminate progress ramp. The fill follows
-/// `0.9 * (1 - exp(-elapsed / tau))`, so it reaches ~57% at one tau,
-/// ~86% at three tau, and asymptotes to 90% — leaving headroom for the
-/// completion snap. wry exposes no real load-progress percentage, so
-/// this is an indeterminate visual cue, not a measurement.
-const LOADING_RAMP_TAU_SECS: f32 = 2.0;
-/// Time the fill takes to snap from its `Ramping` value up to 100% on
-/// load complete. Short enough to feel instant, long enough to read.
-const LOADING_SNAP_SECS: f32 = 0.08;
-/// Time the strip takes to fade out after hitting 100%.
-const LOADING_FADE_SECS: f32 = 0.30;
-/// Target animation frame interval (~60fps). The strip element schedules
-/// the next paint via `PaintContext::repaint_after` while animating.
-const LOADING_FRAME_INTERVAL: Duration = Duration::from_millis(16);
-/// How long a tab can spend loading before the native stall watchdog
-/// logs a warning. This is a hung-load signal, not true renderer crash
-/// detection; wry 0.38 does not bridge WKWebView process-termination
-/// callbacks.
-const STALL_TIMEOUT: Duration = Duration::from_secs(30);
-/// How long after the most recent state-change event the pane waits
-/// before flushing browser state to disk. A short window groups bursts
-/// of events into a single atomic write.
-const PERSIST_DEBOUNCE: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserViewEvent {
@@ -312,203 +172,18 @@ pub enum BrowserViewAction {
     FindPrev,
     /// Close the find overlay and clear all highlights in the page.
     CloseFind,
-    /// Toggle the WebKit DevTools / Inspector for the active tab. No-op
-    /// if the `browser.devtools_enabled` setting is false.
-    ToggleDevTools,
+    /// Step the active tab's zoom up (toward larger).
+    ZoomIn,
+    /// Step the active tab's zoom down (toward smaller).
+    ZoomOut,
+    /// Reset the active tab's zoom to 100%.
+    ZoomReset,
 }
 
 #[derive(Default, Clone)]
 struct TabUiState {
     chip_mouse: MouseStateHandle,
     close_mouse: MouseStateHandle,
-}
-
-/// Animation phase for the page-load progress strip. The strip is
-/// indeterminate (wry doesn't surface a real progress %), so on nav start
-/// we begin a slow exponential ramp toward 90%; on load complete we snap
-/// from the current fill to 100% and fade out.
-#[derive(Clone, Copy, Debug)]
-enum LoadingStripPhase {
-    /// Not visible. The element paints nothing and stops scheduling frames.
-    Idle,
-    /// Loading is in progress; fill rises from 0 toward 0.9 asymptotically.
-    Ramping { started: Instant },
-    /// Loading has finished; the strip first snaps from `fill_at_complete`
-    /// to 1.0 over `LOADING_SNAP_SECS`, then fades alpha to 0 over
-    /// `LOADING_FADE_SECS`, then transitions to `Idle`.
-    Complete {
-        started: Instant,
-        fill_at_complete: f32,
-    },
-}
-
-impl LoadingStripPhase {
-    /// Returns (fill width fraction in [0,1], alpha multiplier in [0,1]).
-    fn fill_and_alpha(&self) -> (f32, f32) {
-        match *self {
-            Self::Idle => (0.0, 0.0),
-            Self::Ramping { started } => {
-                let t = started.elapsed().as_secs_f32();
-                let fill = 0.9 * (1.0 - (-t / LOADING_RAMP_TAU_SECS).exp());
-                (fill, 1.0)
-            }
-            Self::Complete {
-                started,
-                fill_at_complete,
-            } => {
-                let t = started.elapsed().as_secs_f32();
-                if t < LOADING_SNAP_SECS {
-                    let s = t / LOADING_SNAP_SECS;
-                    let fill = fill_at_complete + (1.0 - fill_at_complete) * s;
-                    (fill, 1.0)
-                } else {
-                    let f = (t - LOADING_SNAP_SECS) / LOADING_FADE_SECS;
-                    let alpha = (1.0 - f).max(0.0);
-                    (1.0, alpha)
-                }
-            }
-        }
-    }
-
-    fn is_expired(&self) -> bool {
-        match self {
-            Self::Idle => true,
-            Self::Ramping { .. } => false,
-            Self::Complete { started, .. } => {
-                started.elapsed().as_secs_f32() >= LOADING_SNAP_SECS + LOADING_FADE_SECS
-            }
-        }
-    }
-
-    fn is_animating(&self) -> bool {
-        !matches!(self, Self::Idle)
-    }
-}
-
-/// Shared loading-strip state. Cloned cheaply (Rc<RefCell<_>>) into both
-/// the BrowserView and each `LoadingStripElement` so the element can read
-/// and transition the phase from within `paint`.
-#[derive(Default, Clone)]
-struct LoadingStrip {
-    phase: Rc<RefCell<LoadingStripPhase>>,
-}
-
-impl Default for LoadingStripPhase {
-    fn default() -> Self {
-        Self::Idle
-    }
-}
-
-impl LoadingStrip {
-    /// Update the phase based on a `loading` flag change for the active
-    /// tab. Idempotent — calling `set_loading(true)` while already
-    /// ramping does nothing.
-    fn set_loading(&self, loading: bool) {
-        let now = Instant::now();
-        let mut phase = self.phase.borrow_mut();
-        match (*phase, loading) {
-            (LoadingStripPhase::Idle, true) | (LoadingStripPhase::Complete { .. }, true) => {
-                *phase = LoadingStripPhase::Ramping { started: now };
-            }
-            (LoadingStripPhase::Ramping { .. }, false) => {
-                let fill = phase.fill_and_alpha().0;
-                *phase = LoadingStripPhase::Complete {
-                    started: now,
-                    fill_at_complete: fill,
-                };
-            }
-            // Already in the target phase (Ramping+true, Idle+false,
-            // Complete+false) — no transition.
-            _ => {}
-        }
-    }
-}
-
-struct LoadingStripElement {
-    state: LoadingStrip,
-    color: warp_core::ui::theme::Fill,
-    size: Option<Vector2F>,
-    origin: Option<Point>,
-}
-
-impl LoadingStripElement {
-    fn new(state: LoadingStrip, color: warp_core::ui::theme::Fill) -> Self {
-        Self {
-            state,
-            color,
-            size: None,
-            origin: None,
-        }
-    }
-}
-
-impl Element for LoadingStripElement {
-    fn layout(
-        &mut self,
-        constraint: SizeConstraint,
-        _ctx: &mut LayoutContext,
-        _app: &AppContext,
-    ) -> Vector2F {
-        let width = if constraint.max.x().is_infinite() {
-            constraint.min.x()
-        } else {
-            constraint.max.x()
-        };
-        let size = vec2f(width, LOADING_STRIP_HEIGHT);
-        self.size = Some(size);
-        size
-    }
-
-    fn after_layout(&mut self, _ctx: &mut AfterLayoutContext, _app: &AppContext) {}
-
-    fn paint(&mut self, origin: Vector2F, ctx: &mut PaintContext, _app: &AppContext) {
-        self.origin = Some(Point::from_vec2f(origin, ctx.scene.z_index()));
-        let size = self.size.unwrap_or_default();
-
-        let (fill, alpha) = {
-            let mut phase = self.state.phase.borrow_mut();
-            // Drain finished Complete animations back to Idle so we stop
-            // scheduling frames once the fade ends.
-            if phase.is_expired() && !matches!(*phase, LoadingStripPhase::Idle) {
-                *phase = LoadingStripPhase::Idle;
-            }
-            phase.fill_and_alpha()
-        };
-
-        if fill > 0.0 && alpha > 0.0 {
-            let fill_width = (size.x() * fill).max(0.0);
-            // u8 opacity: clamp to 0..=255 from float alpha.
-            let opacity = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
-            let tinted = self.color.with_opacity(opacity);
-            ctx.scene
-                .draw_rect_with_hit_recording(RectF::new(origin, vec2f(fill_width, size.y())))
-                .with_background(tinted);
-        }
-
-        // Keep the frame pump alive while there's any animation in flight.
-        // (Equivalent to repainting at ~60fps; the framework collapses
-        // multiple repaint_after calls to the earliest one.)
-        if self.state.phase.borrow().is_animating() {
-            ctx.repaint_after(LOADING_FRAME_INTERVAL);
-        }
-    }
-
-    fn dispatch_event(
-        &mut self,
-        _event: &warpui::event::DispatchedEvent,
-        _ctx: &mut EventContext,
-        _app: &AppContext,
-    ) -> bool {
-        false
-    }
-
-    fn size(&self) -> Option<Vector2F> {
-        self.size
-    }
-
-    fn origin(&self) -> Option<Point> {
-        self.origin
-    }
 }
 
 struct NativeWebViewElement {
@@ -617,20 +292,9 @@ pub struct BrowserView {
     find_editor: ViewHandle<EditorView>,
     /// `Some` while the find overlay is visible.
     find_state: Option<FindState>,
-    /// Shared animation state for the page-load progress strip.
-    loading_strip: LoadingStrip,
-    /// Per-tab native load-stall watchers.
-    #[cfg(not(target_family = "wasm"))]
-    stall_watchers: HashMap<TabId, (u64, SpawnedFutureHandle)>,
-    #[cfg(not(target_family = "wasm"))]
-    next_stall_generation: u64,
-    /// Pending debounced browser-state persistence.
-    #[cfg(not(target_family = "wasm"))]
-    pending_persist: Option<SpawnedFutureHandle>,
-    /// Generation token used to invalidate stale delayed writes on close
-    /// or when a newer state-change schedules a replacement write.
-    #[cfg(not(target_family = "wasm"))]
-    persist_generation: Arc<AtomicU64>,
+    /// Per-tab zoom step index (transient — not persisted). Stable
+    /// across renders; cleared when a tab closes.
+    tab_zoom_steps: HashMap<TabId, u8>,
 }
 
 impl BrowserView {
@@ -643,19 +307,7 @@ impl BrowserView {
 
 impl BrowserView {
     pub fn new(initial_url: Option<String>, ctx: &mut ViewContext<Self>) -> Self {
-        Self::build(BrowserModel::new(initial_url.unwrap_or_default()), ctx)
-    }
-
-    /// Construct a BrowserView from previously-persisted tab state.
-    #[cfg(not(target_family = "wasm"))]
-    pub fn from_state(
-        state: super::browser_model::BrowserState,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
-        Self::build(BrowserModel::restore(state), ctx)
-    }
-
-    fn build(model: BrowserModel, ctx: &mut ViewContext<Self>) -> Self {
+        let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
         let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
@@ -668,20 +320,134 @@ impl BrowserView {
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
         };
 
+        let initial_tab_id = model.active_tab().id();
+        let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
+            initial_tab_id,
+            webview_url_for(model.current_url()),
+            event_tx.clone(),
+            #[cfg(not(target_family = "wasm"))]
+            web_context.clone(),
+            true,
+        )));
+
+        let mut tab_ui_states = HashMap::new();
+        tab_ui_states.insert(initial_tab_id, TabUiState::default());
+
+        let current_url = model.current_url().to_string();
+
+        let url_editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let mut editor = EditorView::single_line(
+                SingleLineEditorOptions {
+                    text: TextOptions::ui_text(Some(12.0), appearance),
+                    select_all_on_focus: true,
+                    clear_selections_on_blur: true,
+                    propagate_and_no_op_vertical_navigation_keys:
+                        PropagateAndNoOpNavigationKeys::Always,
+                    ..Default::default()
+                },
+                ctx,
+            );
+            editor.set_placeholder_text(URL_BAR_PLACEHOLDER, ctx);
+            editor.set_buffer_text_with_base_buffer(&current_url, ctx);
+            editor
+        });
+
+        ctx.subscribe_to_view(&url_editor, move |view, _, event, ctx| {
+            if matches!(event, EditorEvent::Enter) {
+                view.navigate_to_editor_url(ctx);
+            }
+        });
+        ctx.spawn_stream_local(event_rx, Self::handle_webview_event, |_, _| {});
+
+        let find_editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let mut editor = EditorView::single_line(
+                SingleLineEditorOptions {
+                    text: TextOptions::ui_text(Some(12.0), appearance),
+                    select_all_on_focus: true,
+                    clear_selections_on_blur: false,
+                    propagate_and_no_op_vertical_navigation_keys:
+                        PropagateAndNoOpNavigationKeys::Always,
+                    ..Default::default()
+                },
+                ctx,
+            );
+            editor.set_placeholder_text("Find in page", ctx);
+            editor
+        });
+
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
+            match event {
+                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+                _ => {}
+            }
+        });
+
+        Self {
+            model,
+            window_id: ctx.window_id(),
+            url_editor,
+            pane_configuration,
+            focus_handle: None,
+            webviews: vec![native_webview],
+            event_tx,
+            #[cfg(not(target_family = "wasm"))]
+            web_context,
+            tab_ui_states,
+            back_button_mouse_state: MouseStateHandle::default(),
+            forward_button_mouse_state: MouseStateHandle::default(),
+            reload_button_mouse_state: MouseStateHandle::default(),
+            new_tab_button_mouse_state: MouseStateHandle::default(),
+            collapse_button_mouse_state: MouseStateHandle::default(),
+            open_external_button_mouse_state: MouseStateHandle::default(),
+            find_toggle_button_mouse_state: MouseStateHandle::default(),
+            find_next_button_mouse_state: MouseStateHandle::default(),
+            find_prev_button_mouse_state: MouseStateHandle::default(),
+            find_close_button_mouse_state: MouseStateHandle::default(),
+            find_editor,
+            find_state: None,
+            tab_zoom_steps: {
+                let mut map = HashMap::new();
+                map.insert(initial_tab_id, DEFAULT_ZOOM_STEP);
+                map
+            },
+        }
+    }
+
+    /// Construct a BrowserView from previously-persisted tab state.
+    #[cfg(not(target_family = "wasm"))]
+    pub fn from_state(
+        state: super::browser_model::BrowserState,
+        ctx: &mut ViewContext<Self>,
+    ) -> Self {
+        let model = BrowserModel::restore(state);
+        let pane_configuration =
+            ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
+        let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
+
+        let web_context: Option<SharedWebContext> = {
+            let dir = data_dir::browser_data_dir();
+            Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
+        };
+
         let active_idx = model.active_index();
         let mut webviews = Vec::with_capacity(model.tabs().len());
         let mut tab_ui_states = HashMap::new();
+        let mut tab_zoom_steps = HashMap::new();
         for (idx, tab) in model.tabs().iter().enumerate() {
             let tab_id = tab.id();
             webviews.push(Rc::new(RefCell::new(NativeBrowserWebView::new(
                 tab_id,
                 webview_url_for(tab.current_url()),
                 event_tx.clone(),
-                #[cfg(not(target_family = "wasm"))]
                 web_context.clone(),
                 idx == active_idx,
             ))));
             tab_ui_states.insert(tab_id, TabUiState::default());
+            tab_zoom_steps.insert(tab_id, DEFAULT_ZOOM_STEP);
         }
 
         let current_url = model.current_url().to_string();
@@ -728,11 +494,13 @@ impl BrowserView {
             editor
         });
 
-        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| match event {
-            EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
-            EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
-            EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
-            _ => {}
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
+            match event {
+                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+                _ => {}
+            }
         });
 
         Self {
@@ -743,7 +511,6 @@ impl BrowserView {
             focus_handle: None,
             webviews,
             event_tx,
-            #[cfg(not(target_family = "wasm"))]
             web_context,
             tab_ui_states,
             back_button_mouse_state: MouseStateHandle::default(),
@@ -758,16 +525,59 @@ impl BrowserView {
             find_close_button_mouse_state: MouseStateHandle::default(),
             find_editor,
             find_state: None,
-            loading_strip: LoadingStrip::default(),
-            #[cfg(not(target_family = "wasm"))]
-            stall_watchers: HashMap::new(),
-            #[cfg(not(target_family = "wasm"))]
-            next_stall_generation: 0,
-            #[cfg(not(target_family = "wasm"))]
-            pending_persist: None,
-            #[cfg(not(target_family = "wasm"))]
-            persist_generation: Arc::new(AtomicU64::new(0)),
+            tab_zoom_steps,
         }
+    }
+
+    /// Apply the active tab's zoom step to its native webview.
+    /// Idempotent — safe to call after every transition that might leave
+    /// the visible webview at a different zoom than the model says.
+    fn apply_active_tab_zoom(&self) {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let tab_id = self.model.active_tab().id();
+            let step = *self
+                .tab_zoom_steps
+                .get(&tab_id)
+                .unwrap_or(&DEFAULT_ZOOM_STEP);
+            if let Some(webview) = self.active_webview() {
+                webview.borrow().set_zoom(zoom_level_for_step(step));
+            }
+        }
+    }
+
+    fn zoom_in(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_id = self.model.active_tab().id();
+        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let next = zoom_step_in(cur);
+        if next == cur {
+            return;
+        }
+        self.tab_zoom_steps.insert(tab_id, next);
+        self.apply_active_tab_zoom();
+        ctx.notify();
+    }
+
+    fn zoom_out(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_id = self.model.active_tab().id();
+        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let next = zoom_step_out(cur);
+        if next == cur {
+            return;
+        }
+        self.tab_zoom_steps.insert(tab_id, next);
+        self.apply_active_tab_zoom();
+        ctx.notify();
+    }
+
+    fn zoom_reset(&mut self, ctx: &mut ViewContext<Self>) {
+        let tab_id = self.model.active_tab().id();
+        if self.tab_zoom_steps.get(&tab_id) == Some(&DEFAULT_ZOOM_STEP) {
+            return;
+        }
+        self.tab_zoom_steps.insert(tab_id, DEFAULT_ZOOM_STEP);
+        self.apply_active_tab_zoom();
+        ctx.notify();
     }
 
     pub fn pane_configuration(&self) -> ModelHandle<PaneConfiguration> {
@@ -785,87 +595,6 @@ impl BrowserView {
     fn active_webview(&self) -> Option<&Rc<RefCell<NativeBrowserWebView>>> {
         self.webviews.get(self.model.active_index())
     }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn arm_stall_watch(&mut self, tab_id: TabId, url: String, ctx: &mut ViewContext<Self>) {
-        if let Some((_, handle)) = self.stall_watchers.remove(&tab_id) {
-            handle.abort();
-        }
-
-        self.next_stall_generation = self.next_stall_generation.wrapping_add(1);
-        let generation = self.next_stall_generation;
-        let handle = ctx.spawn(
-            async move {
-                Timer::after(STALL_TIMEOUT).await;
-                (tab_id, generation, url)
-            },
-            move |this, (tab_id, generation, url), _ctx| {
-                let Some((current_generation, _)) = this.stall_watchers.get(&tab_id) else {
-                    return;
-                };
-                if *current_generation != generation {
-                    return;
-                }
-                log::warn!(
-                    "browser pane: tab {tab_id} load stalled (no completion in {:?}): {url}",
-                    STALL_TIMEOUT
-                );
-                this.stall_watchers.remove(&tab_id);
-            },
-        );
-        self.stall_watchers.insert(tab_id, (generation, handle));
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn arm_stall_watch(&mut self, _tab_id: TabId, _url: String, _ctx: &mut ViewContext<Self>) {
-        // The current embedded browser host is native-only; keep the
-        // load-stall watchdog scoped to native webviews.
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn disarm_stall_watch(&mut self, tab_id: TabId) {
-        if let Some((_, handle)) = self.stall_watchers.remove(&tab_id) {
-            handle.abort();
-        }
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn disarm_stall_watch(&mut self, _tab_id: TabId) {}
-
-    /// Schedule a debounced browser-state flush. Newer calls invalidate
-    /// older delayed writes, and `close()` invalidates any still-running
-    /// open=true write before it persists open=false synchronously.
-    #[cfg(not(target_family = "wasm"))]
-    fn schedule_persist(&mut self, ctx: &mut ViewContext<Self>) {
-        if let Some(handle) = self.pending_persist.take() {
-            handle.abort();
-        }
-
-        let generation = self.persist_generation.fetch_add(1, Ordering::AcqRel) + 1;
-        let generation_guard = Arc::clone(&self.persist_generation);
-        let state = self.model.snapshot(true);
-        let handle = ctx.spawn(
-            async move {
-                Timer::after(PERSIST_DEBOUNCE).await;
-                if generation_guard.load(Ordering::Acquire) != generation {
-                    return None;
-                }
-                Some(persistence::save_to_default_dir(&state))
-            },
-            move |this, result, _ctx| {
-                if this.persist_generation.load(Ordering::Acquire) == generation {
-                    this.pending_persist = None;
-                }
-                if let Some(Err(err)) = result {
-                    log::warn!("failed to persist browser state: {err}");
-                }
-            },
-        );
-        self.pending_persist = Some(handle);
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn schedule_persist(&mut self, _ctx: &mut ViewContext<Self>) {}
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
         let raw_text = self.url_editor.as_ref(ctx).buffer_text(ctx);
@@ -887,13 +616,7 @@ impl BrowserView {
             if let Some(webview) = self.active_webview() {
                 webview.borrow_mut().load_url(&webview_url_for(&url));
             }
-            let tab_id = self.model.active_tab().id();
-            self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
-            // Optimistic: wry's PageLoadEvent::Started may not race us, so
-            // start the strip immediately. set_loading is idempotent.
-            self.loading_strip.set_loading(true);
-            self.schedule_persist(ctx);
             ctx.notify();
         }
     }
@@ -906,11 +629,7 @@ impl BrowserView {
             if let Some(webview) = self.active_webview() {
                 webview.borrow().go_back();
             }
-            let tab_id = self.model.active_tab().id();
-            self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
-            self.loading_strip.set_loading(true);
-            self.schedule_persist(ctx);
             ctx.notify();
         }
     }
@@ -923,11 +642,7 @@ impl BrowserView {
             if let Some(webview) = self.active_webview() {
                 webview.borrow().go_forward();
             }
-            let tab_id = self.model.active_tab().id();
-            self.arm_stall_watch(tab_id, url.clone(), ctx);
             self.sync_pane_title(ctx);
-            self.loading_strip.set_loading(true);
-            self.schedule_persist(ctx);
             ctx.notify();
         }
     }
@@ -937,11 +652,7 @@ impl BrowserView {
         if let Some(webview) = self.active_webview() {
             webview.borrow().reload();
         }
-        let tab_id = self.model.active_tab().id();
-        let url = self.model.current_url().to_string();
-        self.arm_stall_watch(tab_id, url, ctx);
         self.sync_pane_title(ctx);
-        self.loading_strip.set_loading(true);
         ctx.notify();
     }
 
@@ -968,16 +679,15 @@ impl BrowserView {
         )));
         self.webviews.push(webview);
         self.tab_ui_states.insert(tab_id, TabUiState::default());
+        self.tab_zoom_steps.insert(tab_id, DEFAULT_ZOOM_STEP);
 
         self.sync_active_tab_into_editor(ctx);
         self.sync_pane_title(ctx);
-        self.schedule_persist(ctx);
         ctx.notify();
     }
 
     fn close_tab(&mut self, idx: usize, ctx: &mut ViewContext<Self>) {
         let prior_active_idx = self.model.active_index();
-        let removed_tab_id = self.model.tabs().get(idx).map(|tab| tab.id());
         let Some(result) = self.model.close_tab(idx) else {
             return;
         };
@@ -992,10 +702,9 @@ impl BrowserView {
 
         // Also clean up its UI state.
         if let Some(removed_tab_id) = self.tab_ui_states_remove_for_index(result.removed_index) {
-            let _ = removed_tab_id;
-        }
-        if let Some(removed_tab_id) = removed_tab_id {
-            self.disarm_stall_watch(removed_tab_id);
+            // Drop the zoom state too — keep the map aligned with the live
+            // tab set so memory doesn't leak across tab churn.
+            self.tab_zoom_steps.remove(&removed_tab_id);
         }
 
         // If we replaced the last tab with a fresh default tab, create a matching webview.
@@ -1010,6 +719,7 @@ impl BrowserView {
             )));
             self.webviews.push(webview);
             self.tab_ui_states.insert(new_tab_id, TabUiState::default());
+            self.tab_zoom_steps.insert(new_tab_id, DEFAULT_ZOOM_STEP);
         }
 
         // If the active tab changed, surface the new tab's URL & title; if the
@@ -1022,9 +732,9 @@ impl BrowserView {
             }
             self.sync_active_tab_into_editor(ctx);
             self.sync_pane_title(ctx);
+            self.apply_active_tab_zoom();
         }
 
-        self.schedule_persist(ctx);
         ctx.notify();
     }
 
@@ -1043,9 +753,11 @@ impl BrowserView {
 
         self.sync_active_tab_into_editor(ctx);
         self.sync_pane_title(ctx);
-        self.loading_strip
-            .set_loading(self.model.active_tab().is_loading());
-        self.schedule_persist(ctx);
+        // Re-apply the new active tab's stored zoom so the webview matches
+        // our model state. wry's WebView keeps its zoom across visibility
+        // toggles, but this also covers the lazy-attach case where the
+        // webview was rebuilt at 100% after a pane close+restore cycle.
+        self.apply_active_tab_zoom();
         ctx.notify();
     }
 
@@ -1085,30 +797,15 @@ impl BrowserView {
                     if self.model.active_tab().id() == tab_id {
                         self.sync_pane_title(ctx);
                     }
-                    self.schedule_persist(ctx);
                     ctx.notify();
                 }
             }
             NativeWebViewEvent::LoadingChanged(tab_id, loading) => {
-                let model_changed = self.model.set_loading_for(tab_id, loading);
-                // The progress strip mirrors only the active tab's load
-                // state; background-tab load events update the model but
-                // don't drive the visible animation. Sync unconditionally
-                // (set_loading is idempotent) so the strip catches up even
-                // when the model flag is already in sync — e.g. when the
-                // optimistic `navigate` flip beat the wry event.
-                if self.model.active_tab().id() == tab_id {
-                    self.loading_strip.set_loading(loading);
-                }
-                if !loading {
-                    self.disarm_stall_watch(tab_id);
-                }
-                if model_changed {
+                if self.model.set_loading_for(tab_id, loading) {
                     ctx.notify();
                 }
             }
             NativeWebViewEvent::NavigationStarted(tab_id, url) => {
-                let stalled_url = url.clone();
                 // Catches HTTP redirects (the user-typed URL was already set
                 // optimistically by `navigate`; same URL → no-op). In-page
                 // `history.pushState` doesn't reach this handler.
@@ -1117,10 +814,8 @@ impl BrowserView {
                         self.sync_active_tab_into_editor(ctx);
                         self.sync_pane_title(ctx);
                     }
-                    self.schedule_persist(ctx);
                     ctx.notify();
                 }
-                self.arm_stall_watch(tab_id, stalled_url, ctx);
             }
             NativeWebViewEvent::PopupOpenTab(url) => {
                 self.open_tab(url, ctx);
@@ -1379,10 +1074,15 @@ impl BrowserView {
 
     fn render_loading_strip(&self, app: &AppContext) -> Box<dyn Element> {
         let theme = Appearance::as_ref(app).theme();
-        // The strip element reserves height itself and self-schedules
-        // repaints via `PaintContext::repaint_after` while animating;
-        // when idle it produces zero paint commands.
-        LoadingStripElement::new(self.loading_strip.clone(), theme.accent()).finish()
+        // Always reserve the height so the webview area doesn't reflow when
+        // loading toggles. Background switches to accent while loading.
+        let mut container = Container::new(Flex::row().finish());
+        if self.model.is_loading() {
+            container = container.with_background(theme.accent());
+        }
+        ConstrainedBox::new(container.finish())
+            .with_height(LOADING_STRIP_HEIGHT)
+            .finish()
     }
 
     fn render_find_overlay(&self, app: &AppContext) -> Option<Box<dyn Element>> {
@@ -1392,10 +1092,12 @@ impl BrowserView {
         let font_family = appearance.ui_font_family();
 
         let input = Container::new(
-            ConstrainedBox::new(Clipped::new(ChildView::new(&self.find_editor).finish()).finish())
-                .with_height(URL_BAR_HEIGHT)
-                .with_min_width(URL_BAR_MIN_WIDTH)
-                .finish(),
+            ConstrainedBox::new(
+                Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+            )
+            .with_height(URL_BAR_HEIGHT)
+            .with_min_width(URL_BAR_MIN_WIDTH)
+            .finish(),
         )
         .with_horizontal_padding(10.0)
         .with_background(theme.surface_1())
@@ -1481,11 +1183,10 @@ impl BrowserView {
             .with_main_axis_size(MainAxisSize::Max);
 
         for (idx, tab) in self.model.tabs().iter().enumerate() {
-            let title = tab.display_title();
-            let url = tab.current_url();
+            let title = tab.display_title().to_string();
             let tab_id = tab.id();
             let ui_state = self.tab_ui_states.get(&tab_id).cloned().unwrap_or_default();
-            let chip = self.render_tab_chip(idx, tab_id, title, url, idx == active, ui_state, app);
+            let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
             let chip_with_margin = if idx == 0 {
                 chip
             } else {
@@ -1517,7 +1218,6 @@ impl BrowserView {
         idx: usize,
         _tab_id: TabId,
         title: &str,
-        url: &str,
         is_active: bool,
         ui_state: TabUiState,
         app: &AppContext,
@@ -1559,68 +1259,20 @@ impl BrowserView {
         .on_click(move |ctx, _, _| ctx.dispatch_typed_action(BrowserViewAction::CloseTab(idx)))
         .finish();
 
-        // Tab icon: a colored letter circle for known http(s) hosts, or
-        // a globe glyph for special schemes / unparseable URLs. Real
-        // favicons (fetched via injected JS + image cache) are a
-        // follow-up — this gives visual variety without the network /
-        // image-decode complexity.
-        let icon_element: Box<dyn Element> = match tab_icon_for_url(url) {
-            TabIcon::Letter { letter, color } => {
-                let glyph = Container::new(
-                    Align::new(
-                        Text::new_inline(letter.to_string(), font_family.clone(), 9.0)
-                            .with_color(ColorU::new(255, 255, 255, 255))
-                            .finish(),
-                    )
-                    .finish(),
-                )
-                .with_background(color)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(TAB_ICON_SIZE / 2.0)))
-                .finish();
-                ConstrainedBox::new(glyph)
-                    .with_width(TAB_ICON_SIZE)
-                    .with_height(TAB_ICON_SIZE)
-                    .finish()
-            }
-            TabIcon::Globe => {
-                ConstrainedBox::new(Icon::Globe.to_warpui_icon(chip_text_color.into()).finish())
-                    .with_width(TAB_ICON_SIZE)
-                    .with_height(TAB_ICON_SIZE)
-                    .finish()
-            }
-        };
-
-        // Subtract the icon's footprint from the title's max width so
-        // the chip's MAX_WIDTH budget stays the same.
-        let title_max_width = TAB_MAX_WIDTH
-            - TAB_CLOSE_BUTTON_SIZE
-            - TAB_CHIP_PADDING * 2.0
-            - TAB_CLOSE_BUTTON_GAP
-            - TAB_ICON_SIZE
-            - TAB_ICON_GAP;
         let title_element = ConstrainedBox::new(
             Text::new_inline(title_text, font_family, 12.0)
                 .with_color(chip_text_color.into())
                 .with_clip(ClipConfig::end())
                 .finish(),
         )
-        .with_max_width(title_max_width.max(20.0))
+        .with_max_width(TAB_MAX_WIDTH - TAB_CLOSE_BUTTON_SIZE - TAB_CHIP_PADDING * 2.0 - 4.0)
         .finish();
 
         let row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Min)
-            .with_child(icon_element)
-            .with_child(
-                Container::new(Expanded::new(1.0, title_element).finish())
-                    .with_margin_left(TAB_ICON_GAP)
-                    .finish(),
-            )
-            .with_child(
-                Container::new(close_button)
-                    .with_margin_left(TAB_CLOSE_BUTTON_GAP)
-                    .finish(),
-            )
+            .with_child(Expanded::new(1.0, title_element).finish())
+            .with_child(Container::new(close_button).with_margin_left(4.0).finish())
             .finish();
 
         let chip_mouse = ui_state.chip_mouse.clone();
@@ -1745,32 +1397,21 @@ impl TypedActionView for BrowserView {
             }
             BrowserViewAction::ToggleFind => self.toggle_find(ctx),
             BrowserViewAction::CloseFind => self.close_find(ctx),
-            BrowserViewAction::FindNext =>
-            {
+            BrowserViewAction::FindNext => {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_next();
                 }
             }
-            BrowserViewAction::FindPrev =>
-            {
+            BrowserViewAction::FindPrev => {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_prev();
                 }
             }
-            BrowserViewAction::ToggleDevTools => {
-                if !*GeneralSettings::as_ref(ctx).browser_devtools_enabled {
-                    log::info!(
-                        "browser pane: DevTools toggle ignored: `browser.devtools_enabled` setting is false"
-                    );
-                    return;
-                }
-                #[cfg(not(target_family = "wasm"))]
-                if let Some(webview) = self.active_webview() {
-                    webview.borrow().toggle_devtools();
-                }
-            }
+            BrowserViewAction::ZoomIn => self.zoom_in(ctx),
+            BrowserViewAction::ZoomOut => self.zoom_out(ctx),
+            BrowserViewAction::ZoomReset => self.zoom_reset(ctx),
         }
     }
 }
@@ -1782,21 +1423,28 @@ impl BackingView for BrowserView {
 
     fn pane_header_overflow_menu_items(
         &self,
-        ctx: &AppContext,
+        _ctx: &AppContext,
     ) -> Vec<MenuItem<BrowserViewAction>> {
+        let tab_id = self.model.active_tab().id();
+        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let pct = (zoom_level_for_step(cur) * 100.0).round() as i32;
+        let reset_label = format!("Reset zoom ({pct}%)");
         let modifier = if cfg!(target_os = "macos") {
-            "Cmd+Opt+I"
+            "⌘"
         } else {
-            "Ctrl+Shift+I"
+            "Ctrl"
         };
-        let label = if *GeneralSettings::as_ref(ctx).browser_devtools_enabled {
-            "Toggle DevTools".to_string()
-        } else {
-            "Toggle DevTools (disabled: set browser.devtools_enabled = true)".to_string()
-        };
-        vec![MenuItemFields::new_with_label(label.as_str(), modifier)
-            .with_on_select_action(BrowserViewAction::ToggleDevTools)
-            .into_item()]
+        vec![
+            MenuItemFields::new_with_label("Zoom in", &format!("{modifier}+"))
+                .with_on_select_action(BrowserViewAction::ZoomIn)
+                .into_item(),
+            MenuItemFields::new_with_label("Zoom out", &format!("{modifier}−"))
+                .with_on_select_action(BrowserViewAction::ZoomOut)
+                .into_item(),
+            MenuItemFields::new_with_label(&reset_label, &format!("{modifier}0"))
+                .with_on_select_action(BrowserViewAction::ZoomReset)
+                .into_item(),
+        ]
     }
 
     fn handle_pane_header_overflow_menu_action(
@@ -1810,13 +1458,6 @@ impl BackingView for BrowserView {
     fn close(&mut self, ctx: &mut ViewContext<Self>) {
         #[cfg(not(target_family = "wasm"))]
         {
-            for (_, (_, handle)) in self.stall_watchers.drain() {
-                handle.abort();
-            }
-            self.persist_generation.fetch_add(1, Ordering::AcqRel);
-            if let Some(handle) = self.pending_persist.take() {
-                handle.abort();
-            }
             // Detach every native webview before the pane group shadow-closes
             // us. `UndoClosedPanes` keeps `BrowserView` alive, so Drop on
             // `NativeBrowserWebView` won't run on its own; without this the
@@ -1868,11 +1509,9 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        classify_security, fnv1a32, host_initial, tab_icon_for_url, LoadingStrip,
-        LoadingStripPhase, SecurityState, TabIcon, TAB_ICON_PALETTE,
+    use super::{classify_security, zoom_level_for_step, zoom_step_in, zoom_step_out, SecurityState, TAB_STRIP_HEIGHT,
+        DEFAULT_ZOOM_STEP, ZOOM_STEPS,
     };
-    use std::time::{Duration, Instant};
 
     #[test]
     fn https_is_secure() {
@@ -1942,232 +1581,84 @@ mod tests {
     }
 
     #[test]
-    fn host_initial_strips_to_first_alphanumeric() {
-        assert_eq!(host_initial("github.com"), Some('G'));
-        assert_eq!(host_initial("YCombinator.com"), Some('Y'));
-        assert_eq!(host_initial("9to5mac"), Some('9'));
-        assert_eq!(host_initial("x"), Some('X'));
-        // Multi-label hosts use the FIRST label (www stripping is the
-        // caller's job).
-        assert_eq!(host_initial("api.openai.com"), Some('A'));
+    fn tab_strip_height_matches_global_design_token() {
+        // Locks the constant to the `--tabbar-height` token in
+        // `resources/design-tokens.css` (2.125rem = 34px). If you
+        // intentionally change the token, update this test in the same
+        // PR so the divergence is reviewed.
+        assert_eq!(TAB_STRIP_HEIGHT, 34.0);
     }
 
     #[test]
-    fn host_initial_returns_none_when_no_ascii_alnum() {
-        assert_eq!(host_initial(""), None);
-        assert_eq!(host_initial("..."), None);
-        // IDN label with no ASCII letters anywhere → None (globe).
-        assert_eq!(host_initial("中文.com"), None);
+    fn default_zoom_step_is_100_percent() {
+        assert_eq!(
+            (zoom_level_for_step(DEFAULT_ZOOM_STEP) * 100.0).round() as i32,
+            100,
+            "default step should be the 1.00 index"
+        );
     }
 
     #[test]
-    fn host_initial_skips_leading_non_ascii_to_find_letter() {
-        // `über` starts with `ü` (non-ASCII) but `b` is the first
-        // usable initial. Documents the "first ASCII alnum found"
-        // contract, not "first character if ASCII".
-        assert_eq!(host_initial("über"), Some('B'));
-    }
-
-    #[test]
-    fn fnv1a_is_deterministic() {
-        let a = fnv1a32("github.com");
-        let b = fnv1a32("github.com");
-        assert_eq!(a, b, "FNV-1a must be deterministic");
-        // Sanity check: different input → likely different hash.
-        assert_ne!(fnv1a32("github.com"), fnv1a32("gitlab.com"));
-    }
-
-    #[test]
-    fn tab_icon_for_url_special_schemes_are_globe() {
-        for u in [
-            "",
-            "about:home",
-            "ABOUT:home",
-            "about:blank",
-            "file:///tmp/x.html",
-            "FILE:///tmp/x.html",
-            "data:text/html,<h1>x</h1>",
-            "castcodes://about",
-            "CASTCODES://about",
-        ] {
-            assert_eq!(
-                tab_icon_for_url(u),
-                TabIcon::Globe,
-                "expected Globe for {u}"
-            );
+    fn zoom_step_in_advances_toward_max() {
+        let mut s = DEFAULT_ZOOM_STEP;
+        let mut _levels = Vec::new();
+        for _ in 0..10 {
+            let next = zoom_step_in(s);
+            assert!(next >= s);
+            s = next;
+            _levels.push(zoom_level_for_step(s));
         }
+        // Hit the ceiling — final step is the top of ZOOM_STEPS.
+        assert_eq!(s, (ZOOM_STEPS.len() - 1) as u8);
+        assert_eq!(zoom_level_for_step(s), *ZOOM_STEPS.last().unwrap());
     }
 
     #[test]
-    fn tab_icon_for_url_unparseable_falls_back_to_globe() {
-        // `:` without scheme content is not a valid URL.
-        assert_eq!(tab_icon_for_url("not a url"), TabIcon::Globe);
-        assert_eq!(tab_icon_for_url("http://"), TabIcon::Globe);
+    fn zoom_step_in_saturates_at_max() {
+        let max = (ZOOM_STEPS.len() - 1) as u8;
+        assert_eq!(zoom_step_in(max), max);
+        assert_eq!(zoom_step_in(max + 5), max);
     }
 
     #[test]
-    fn tab_icon_for_url_https_returns_letter() {
-        let icon = tab_icon_for_url("https://news.ycombinator.com");
-        match icon {
-            TabIcon::Letter { letter, .. } => assert_eq!(letter, 'N'),
-            TabIcon::Globe => panic!("expected Letter, got Globe"),
+    fn zoom_step_out_retreats_toward_zero() {
+        let mut s = DEFAULT_ZOOM_STEP;
+        for _ in 0..10 {
+            let next = zoom_step_out(s);
+            assert!(next <= s);
+            s = next;
         }
+        assert_eq!(s, 0);
     }
 
     #[test]
-    fn tab_icon_for_url_ip_hosts_are_globe() {
-        for u in ["http://127.0.0.1", "https://[::1]"] {
-            assert_eq!(
-                tab_icon_for_url(u),
-                TabIcon::Globe,
-                "expected Globe for {u}"
-            );
+    fn zoom_step_out_saturates_at_zero() {
+        assert_eq!(zoom_step_out(0), 0);
+    }
+
+    #[test]
+    fn zoom_step_round_trip() {
+        // In then out should return to original step.
+        let s = DEFAULT_ZOOM_STEP;
+        assert_eq!(zoom_step_out(zoom_step_in(s)), s);
+    }
+
+    #[test]
+    fn zoom_level_for_oob_step_clamps() {
+        // Index past the end clamps to max instead of panicking — the
+        // step is a u8 from user-driven state, defensive guard.
+        let last = ZOOM_STEPS.last().copied().unwrap();
+        assert_eq!(zoom_level_for_step(255), last);
+    }
+
+    #[test]
+    fn zoom_steps_are_monotonic() {
+        // Each step should be strictly larger than the previous so the
+        // UI feels coherent. Catches a typo'd table swap.
+        for w in ZOOM_STEPS.windows(2) {
+            assert!(w[0] < w[1], "ZOOM_STEPS not monotonic: {:?}", w);
         }
-    }
-
-    #[test]
-    fn tab_icon_for_url_strips_www_for_color_and_letter() {
-        // `github.com` and `www.github.com` should produce the same
-        // (letter, color) pair — same site from a user perspective.
-        let a = tab_icon_for_url("https://github.com");
-        let b = tab_icon_for_url("https://www.github.com");
-        assert_eq!(a, b, "www-stripping should be idempotent");
-    }
-
-    #[test]
-    fn tab_icon_for_url_color_is_in_palette() {
-        // Whatever color we pick must be one of the palette entries —
-        // catches an indexing bug that would produce off-palette colors.
-        match tab_icon_for_url("https://example.com") {
-            TabIcon::Letter { color, .. } => {
-                assert!(
-                    TAB_ICON_PALETTE.contains(&color),
-                    "color {color:?} not in palette"
-                );
-            }
-            TabIcon::Globe => panic!("expected Letter for https://example.com"),
-        }
-    }
-
-    #[test]
-    fn tab_icon_for_url_color_is_stable_across_calls() {
-        let a = tab_icon_for_url("https://example.com");
-        let b = tab_icon_for_url("https://example.com");
-        assert_eq!(a, b, "icon decision must be deterministic");
-    }
-
-    #[test]
-    fn loading_strip_starts_idle() {
-        let strip = LoadingStrip::default();
-        let phase = *strip.phase.borrow();
-        assert!(matches!(phase, LoadingStripPhase::Idle));
-        assert_eq!(phase.fill_and_alpha(), (0.0, 0.0));
-        assert!(phase.is_expired());
-        assert!(!phase.is_animating());
-    }
-
-    #[test]
-    fn loading_strip_transitions_idle_to_ramping_to_complete() {
-        let strip = LoadingStrip::default();
-        strip.set_loading(true);
-        assert!(matches!(
-            *strip.phase.borrow(),
-            LoadingStripPhase::Ramping { .. }
-        ));
-        strip.set_loading(false);
-        assert!(matches!(
-            *strip.phase.borrow(),
-            LoadingStripPhase::Complete { .. }
-        ));
-    }
-
-    #[test]
-    fn loading_strip_set_loading_is_idempotent_while_ramping() {
-        let strip = LoadingStrip::default();
-        strip.set_loading(true);
-        let started_first = if let LoadingStripPhase::Ramping { started } = *strip.phase.borrow() {
-            started
-        } else {
-            panic!("expected Ramping");
-        };
-        // A second true call should NOT reset the start time.
-        std::thread::sleep(Duration::from_millis(5));
-        strip.set_loading(true);
-        let started_second = if let LoadingStripPhase::Ramping { started } = *strip.phase.borrow() {
-            started
-        } else {
-            panic!("expected Ramping after second set");
-        };
-        assert_eq!(started_first, started_second);
-    }
-
-    #[test]
-    fn loading_strip_complete_then_true_restarts_ramp() {
-        let strip = LoadingStrip::default();
-        strip.set_loading(true);
-        strip.set_loading(false);
-        assert!(matches!(
-            *strip.phase.borrow(),
-            LoadingStripPhase::Complete { .. }
-        ));
-        strip.set_loading(true);
-        assert!(matches!(
-            *strip.phase.borrow(),
-            LoadingStripPhase::Ramping { .. }
-        ));
-    }
-
-    #[test]
-    fn loading_strip_ramping_fill_grows_with_time() {
-        let now = Instant::now();
-        let early = LoadingStripPhase::Ramping {
-            started: now - Duration::from_millis(100),
-        };
-        let later = LoadingStripPhase::Ramping {
-            started: now - Duration::from_secs(2),
-        };
-        let (f_early, a_early) = early.fill_and_alpha();
-        let (f_later, a_later) = later.fill_and_alpha();
-        assert!(f_early < f_later, "{f_early} < {f_later}");
-        assert_eq!(a_early, 1.0);
-        assert_eq!(a_later, 1.0);
-        // Asymptote is 0.9, never above.
-        let way_later = LoadingStripPhase::Ramping {
-            started: now - Duration::from_secs(30),
-        };
-        let (f_way_later, _) = way_later.fill_and_alpha();
-        assert!(f_way_later < 0.9 + 1e-3);
-    }
-
-    #[test]
-    fn loading_strip_complete_snaps_then_fades() {
-        let now = Instant::now();
-        // Mid-snap: t=0.04s in, fill_at_complete=0.5 → fill should be halfway to 1.0.
-        let mid_snap = LoadingStripPhase::Complete {
-            started: now - Duration::from_millis(40),
-            fill_at_complete: 0.5,
-        };
-        let (fill, alpha) = mid_snap.fill_and_alpha();
-        assert!((fill - 0.75).abs() < 0.05, "got fill={fill}");
-        assert_eq!(alpha, 1.0);
-
-        // Mid-fade: snap+half-fade in, alpha should be ~0.5.
-        let mid_fade = LoadingStripPhase::Complete {
-            started: now - Duration::from_millis(80 + 150),
-            fill_at_complete: 0.5,
-        };
-        let (fill, alpha) = mid_fade.fill_and_alpha();
-        assert_eq!(fill, 1.0);
-        assert!(alpha > 0.0 && alpha < 1.0, "got alpha={alpha}");
-    }
-
-    #[test]
-    fn loading_strip_complete_is_expired_after_full_fade() {
-        let started = Instant::now() - Duration::from_secs(2);
-        let phase = LoadingStripPhase::Complete {
-            started,
-            fill_at_complete: 0.8,
-        };
-        assert!(phase.is_expired());
+        // And the table contains 1.00 exactly at DEFAULT_ZOOM_STEP.
+        assert_eq!(ZOOM_STEPS[DEFAULT_ZOOM_STEP as usize], 1.00);
     }
 }
