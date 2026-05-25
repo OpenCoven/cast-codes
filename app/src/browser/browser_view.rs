@@ -140,9 +140,8 @@ fn zoom_level_for_step(step: u8) -> f32 {
 }
 
 fn zoom_step_in(current: u8) -> u8 {
-    let next = (current as usize).saturating_add(1);
     let max = (ZOOM_STEPS.len() - 1) as u8;
-    (next as u8).min(max)
+    current.saturating_add(1).min(max)
 }
 
 fn zoom_step_out(current: u8) -> u8 {
@@ -1397,8 +1396,9 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_security, zoom_level_for_step, zoom_step_in, zoom_step_out, SecurityState, TAB_STRIP_HEIGHT,
-        DEFAULT_ZOOM_STEP, ZOOM_STEPS,
+    use super::{
+        classify_security, zoom_level_for_step, zoom_step_in, zoom_step_out, SecurityState,
+        DEFAULT_ZOOM_STEP, TAB_STRIP_HEIGHT, ZOOM_STEPS,
     };
 
     #[test]
