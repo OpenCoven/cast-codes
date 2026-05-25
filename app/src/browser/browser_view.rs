@@ -565,7 +565,19 @@ impl BrowserView {
 
 impl BrowserView {
     pub fn new(initial_url: Option<String>, ctx: &mut ViewContext<Self>) -> Self {
-        let model = BrowserModel::new(initial_url.unwrap_or_default());
+        Self::build(BrowserModel::new(initial_url.unwrap_or_default()), ctx)
+    }
+
+    /// Construct a BrowserView from previously-persisted tab state.
+    #[cfg(not(target_family = "wasm"))]
+    pub fn from_state(
+        state: super::browser_model::BrowserState,
+        ctx: &mut ViewContext<Self>,
+    ) -> Self {
+        Self::build(BrowserModel::restore(state), ctx)
+    }
+
+    fn build(model: BrowserModel, ctx: &mut ViewContext<Self>) -> Self {
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
         let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
@@ -578,18 +590,21 @@ impl BrowserView {
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
         };
 
-        let initial_tab_id = model.active_tab().id();
-        let native_webview = Rc::new(RefCell::new(NativeBrowserWebView::new(
-            initial_tab_id,
-            webview_url_for(model.current_url()),
-            event_tx.clone(),
-            #[cfg(not(target_family = "wasm"))]
-            web_context.clone(),
-            true,
-        )));
-
+        let active_idx = model.active_index();
+        let mut webviews = Vec::with_capacity(model.tabs().len());
         let mut tab_ui_states = HashMap::new();
-        tab_ui_states.insert(initial_tab_id, TabUiState::default());
+        for (idx, tab) in model.tabs().iter().enumerate() {
+            let tab_id = tab.id();
+            webviews.push(Rc::new(RefCell::new(NativeBrowserWebView::new(
+                tab_id,
+                webview_url_for(tab.current_url()),
+                event_tx.clone(),
+                #[cfg(not(target_family = "wasm"))]
+                web_context.clone(),
+                idx == active_idx,
+            ))));
+            tab_ui_states.insert(tab_id, TabUiState::default());
+        }
 
         let current_url = model.current_url().to_string();
 
@@ -648,7 +663,7 @@ impl BrowserView {
             url_editor,
             pane_configuration,
             focus_handle: None,
-            webviews: vec![native_webview],
+            webviews,
             event_tx,
             #[cfg(not(target_family = "wasm"))]
             web_context,

@@ -13466,8 +13466,7 @@ impl Workspace {
     }
 
     /// At workspace init: if the user last quit with the browser pane open,
-    /// reopen it. v1 reopens with a fresh default tab; restoring the
-    /// previously-open tab list is a follow-up.
+    /// reopen it with the persisted tab list and active index.
     #[cfg(not(target_family = "wasm"))]
     pub(crate) fn restore_browser_state_on_init(&mut self, ctx: &mut ViewContext<Self>) {
         let Some(dir) = warp_core::paths::warp_home_config_dir() else {
@@ -13477,8 +13476,25 @@ impl Workspace {
             return;
         };
         if state.open {
-            self.open_browser_pane(None, ctx);
+            self.open_browser_pane_with_state(state, ctx);
         }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn open_browser_pane_with_state(
+        &mut self,
+        state: crate::pane_group::pane::browser::browser_model::BrowserState,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let pane = BrowserPane::new_from_state(state, ctx);
+        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+            pane_group.add_pane_with_direction(
+                Direction::Right,
+                pane,
+                true, /* focus_new_pane */
+                ctx,
+            );
+        });
     }
 
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]

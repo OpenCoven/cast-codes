@@ -37,6 +37,15 @@ impl BrowserPane {
         Self::from_view(view, ctx)
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    pub fn new_from_state<V: View>(
+        state: super::browser::browser_model::BrowserState,
+        ctx: &mut ViewContext<V>,
+    ) -> Self {
+        let view = ctx.add_typed_action_view(move |ctx| BrowserView::from_state(state, ctx));
+        Self::from_view(view, ctx)
+    }
+
     pub fn browser_view(&self, ctx: &AppContext) -> ViewHandle<BrowserView> {
         self.view.as_ref(ctx).child(ctx)
     }
