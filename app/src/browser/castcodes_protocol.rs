@@ -50,11 +50,7 @@ pub(crate) fn handle(request: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>>
     // write either `castcodes://about` or `castcodes:///about`.
     let host = uri.host().unwrap_or("");
     let path = uri.path();
-    let raw = if !host.is_empty() {
-        format!("{host}{path}")
-    } else {
-        path.to_string()
-    };
+    let raw = route_key(host, path);
 
     let route = route(&raw);
     match route {
@@ -72,6 +68,7 @@ fn render_about() -> String {
 
 fn render_not_found(requested: &str) -> String {
     // Inline 404 — small enough to not need its own asset.
+    let scheme = warp_core::brand::PUBLIC_URL_SCHEME;
     let escaped = html_escape(requested);
     format!(
         "<!doctype html>\n\
@@ -80,10 +77,20 @@ fn render_not_found(requested: &str) -> String {
 <style>:root{{color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; --bg:#0f0f12; --fg:#e8e8ed;}}@media (prefers-color-scheme: light){{:root{{--bg:#fafafa;--fg:#1a1a1a;}}}}html,body{{margin:0;padding:0;height:100%;background:var(--bg);color:var(--fg);}}main{{max-width:36rem;margin:0 auto;padding:4rem 2rem;}}h1{{margin:0 0 1rem 0;font-size:28px;}}p{{font-size:14px;opacity:0.7;}}code{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;}}</style></head>\n\
 <body><main>\n\
 <h1>Unknown route</h1>\n\
-<p>No handler for <code>castcodes://{escaped}</code>.</p>\n\
-<p>Known routes: <code>castcodes://about</code>.</p>\n\
+<p>No handler for <code>{scheme}://{escaped}</code>.</p>\n\
+<p>Known routes: <code>{scheme}://about</code>.</p>\n\
 </main></body></html>\n"
     )
+}
+
+fn route_key(host: &str, path: &str) -> String {
+    if host.is_empty() {
+        path.to_string()
+    } else if path == "/" {
+        host.to_string()
+    } else {
+        format!("{host}{path}")
+    }
 }
 
 fn respond_html(status: StatusCode, body: String) -> Response<Cow<'static, [u8]>> {
@@ -153,6 +160,7 @@ mod tests {
         let body = std::str::from_utf8(response.body().as_ref()).expect("utf-8");
         assert!(body.contains("CastCodes"));
         assert!(body.contains(env!("CARGO_PKG_VERSION")));
+        assert!(body.contains(&format!("{}://about", warp_core::brand::PUBLIC_URL_SCHEME)));
         // Templates were interpolated, not left as placeholders.
         assert!(!body.contains("{{VERSION}}"));
         assert!(!body.contains("{{APP_ID}}"));
@@ -176,6 +184,22 @@ mod tests {
         // spot typos.
         assert!(body.contains("settings"));
         assert!(body.contains("Known routes"));
+    }
+
+    #[test]
+    fn handle_unknown_authority_form_echoes_without_synthetic_slash() {
+        let response = handle(&req("castcodes://settings"));
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = std::str::from_utf8(response.body().as_ref()).expect("utf-8");
+        assert!(body.contains("castcodes://settings"));
+        assert!(!body.contains("castcodes://settings/"));
+    }
+
+    #[test]
+    fn route_key_keeps_real_host_paths() {
+        assert_eq!(route_key("downloads", "/active"), "downloads/active");
+        assert_eq!(route_key("settings", "/"), "settings");
+        assert_eq!(route_key("", "/about"), "/about");
     }
 
     #[test]
