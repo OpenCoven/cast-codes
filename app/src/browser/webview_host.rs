@@ -8,15 +8,15 @@ use pathfinder_geometry::rect::RectF;
 use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "macos")]
 use super::castcodes_protocol;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "macos")]
 use super::dialogs;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "macos")]
 use super::permissions;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "macos")]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
@@ -259,7 +259,7 @@ impl NativeBrowserWebView {
                 // instead of erroring out as "scheme not supported". Our
                 // URL normalizer already passes it through to the
                 // webview; the handler here defines the route table.
-                .with_custom_protocol("castcodes".to_string(), |request| {
+                .with_custom_protocol(warp_core::brand::PUBLIC_URL_SCHEME.to_string(), |request| {
                     castcodes_protocol::handle(&request)
                 })
                 .with_document_title_changed_handler(move |title| {
