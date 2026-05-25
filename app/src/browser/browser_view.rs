@@ -102,7 +102,11 @@ const URL_BAR_MIN_WIDTH: f32 = 160.0;
 // previous 48pt left ~16pt of dead space around a 32pt input and made the
 // browser chrome look bulky relative to neighboring panes.
 const TOOLBAR_HEIGHT: f32 = 36.0;
-const TAB_STRIP_HEIGHT: f32 = 32.0;
+// Matches the global `--tabbar-height` design token in
+// `resources/design-tokens.css` (2.125rem = 34px). Bumped from 32pt
+// after audit finding A2 — keeping the browser tab strip in lock-step
+// with the workspace tab bar makes nested panes visually consistent.
+const TAB_STRIP_HEIGHT: f32 = 34.0;
 const TAB_MAX_WIDTH: f32 = 200.0;
 const TAB_MIN_WIDTH: f32 = 80.0;
 const TAB_HEIGHT: f32 = 26.0;
@@ -1264,7 +1268,7 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_security, SecurityState};
+    use super::{classify_security, SecurityState, TAB_STRIP_HEIGHT};
 
     #[test]
     fn https_is_secure() {
@@ -1331,5 +1335,14 @@ mod tests {
     #[test]
     fn empty_input_is_neutral() {
         assert_eq!(classify_security(""), SecurityState::Neutral);
+    }
+
+    #[test]
+    fn tab_strip_height_matches_global_design_token() {
+        // Locks the constant to the `--tabbar-height` token in
+        // `resources/design-tokens.css` (2.125rem = 34px). If you
+        // intentionally change the token, update this test in the same
+        // PR so the divergence is reviewed.
+        assert_eq!(TAB_STRIP_HEIGHT, 34.0);
     }
 }
