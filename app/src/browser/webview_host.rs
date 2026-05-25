@@ -1,24 +1,18 @@
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
-#[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
-use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(not(target_family = "wasm"))]
 use std::{cell::RefCell, rc::Rc};
 
 use pathfinder_geometry::rect::RectF;
-use warpui::{AppContext, SingletonEntity, WindowId};
+use warpui::{AppContext, WindowId};
 
 use super::browser_model::TabId;
 #[cfg(target_os = "macos")]
-use super::castcodes_protocol;
-#[cfg(target_os = "macos")]
-use super::dialogs;
+use super::downloads;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
-#[cfg(target_os = "macos")]
-use super::permissions;
-#[cfg(target_os = "macos")]
+#[cfg(not(target_family = "wasm"))]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
@@ -50,9 +44,6 @@ pub(crate) enum NativeWebViewEvent {
 #[cfg(not(target_family = "wasm"))]
 pub(crate) type SharedWebContext = Rc<RefCell<wry::WebContext>>;
 
-#[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
-static NON_MACOS_ATTACH_WARNING_LOGGED: AtomicBool = AtomicBool::new(false);
-
 pub(crate) struct NativeBrowserWebView {
     tab_id: TabId,
     #[cfg(not(target_family = "wasm"))]
@@ -64,10 +55,6 @@ pub(crate) struct NativeBrowserWebView {
     bounds: Option<RectF>,
     desired_visible: bool,
     attach_error_logged: bool,
-    #[cfg(not(target_family = "wasm"))]
-    last_sent_rect: Option<(i32, i32, u32, u32)>,
-    #[cfg(not(target_family = "wasm"))]
-    last_sent_visible: Option<bool>,
 }
 
 impl NativeBrowserWebView {
@@ -89,10 +76,6 @@ impl NativeBrowserWebView {
             bounds: None,
             desired_visible,
             attach_error_logged: false,
-            #[cfg(not(target_family = "wasm"))]
-            last_sent_rect: None,
-            #[cfg(not(target_family = "wasm"))]
-            last_sent_visible: None,
         }
     }
 
@@ -134,30 +117,6 @@ impl NativeBrowserWebView {
         }
     }
 
-    /// Toggle the WebKit Inspector / DevTools panel. No-op if the
-    /// webview was built with `with_devtools(false)`.
-    #[cfg(not(target_family = "wasm"))]
-    #[cfg(debug_assertions)]
-    pub(crate) fn toggle_devtools(&self) {
-        if let Some(webview) = &self.webview {
-            if webview.is_devtools_open() {
-                webview.close_devtools();
-            } else {
-                webview.open_devtools();
-            }
-        }
-    }
-
-    /// Stub used in release builds without the `devtools` feature so
-    /// callers don't have to duplicate wry's compile-time gate.
-    #[cfg(not(target_family = "wasm"))]
-    #[cfg(not(debug_assertions))]
-    pub(crate) fn toggle_devtools(&self) {
-        log::info!(
-            "browser pane DevTools toggle skipped: release build without `devtools` feature"
-        );
-    }
-
     /// Inject the find script and search for `query`. Idempotent: the
     /// script clears any prior state on every call.
     #[cfg(not(target_family = "wasm"))]
@@ -190,19 +149,26 @@ impl NativeBrowserWebView {
         }
     }
 
+    /// Apply a zoom level to the underlying webview. `1.0` is 100%. Per
+    /// wry docs this requires macOS 11+ / iOS 14+; on older systems the
+    /// call returns an error which we log and otherwise ignore.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn set_zoom(&self, level: f32) {
+        if let Some(webview) = &self.webview {
+            if let Err(err) = webview.zoom(level as f64) {
+                log::warn!("failed to set browser pane zoom to {level}: {err}");
+            }
+        }
+    }
+
     pub(crate) fn set_visibility(&mut self, visible: bool) {
         self.desired_visible = visible;
 
         #[cfg(not(target_family = "wasm"))]
         if let Some(webview) = &self.webview {
-            if self.last_sent_visible == Some(visible) {
-                return;
-            }
             if let Err(err) = webview.set_visible(visible) {
                 log::warn!("failed to update browser pane visibility: {err}");
-                return;
             }
-            self.last_sent_visible = Some(visible);
         }
     }
 
@@ -225,8 +191,6 @@ impl NativeBrowserWebView {
             }
             // Allow a fresh attach if the pane is ever re-painted.
             self.attach_error_logged = false;
-            self.last_sent_rect = None;
-            self.last_sent_visible = None;
         }
     }
 
@@ -237,23 +201,13 @@ impl NativeBrowserWebView {
         #[cfg(not(target_family = "wasm"))]
         if let Some(webview) = &self.webview {
             let rect = Self::wry_rect(bounds);
-            let rect_key = (rect.x, rect.y, rect.width, rect.height);
 
-            if self.last_sent_rect != Some(rect_key) {
-                if let Err(err) = webview.set_bounds(rect) {
-                    log::warn!("failed to resize browser pane webview: {err}");
-                } else {
-                    self.last_sent_rect = Some(rect_key);
-                }
+            if let Err(err) = webview.set_bounds(rect) {
+                log::warn!("failed to resize browser pane webview: {err}");
             }
             if self.desired_visible {
-                if self.last_sent_visible == Some(true) {
-                    return;
-                }
                 if let Err(err) = webview.set_visible(true) {
                     log::warn!("failed to show browser pane webview: {err}");
-                } else {
-                    self.last_sent_visible = Some(true);
                 }
             }
         }
@@ -292,33 +246,12 @@ impl NativeBrowserWebView {
             let load_tx = self.event_tx.clone();
             let popup_tx = self.event_tx.clone();
             let ipc_tx = self.event_tx.clone();
-            let devtools_enabled = *crate::terminal::general_settings::GeneralSettings::as_ref(app)
-                .browser_devtools_enabled;
 
             let mut builder = wry::WebViewBuilder::new_as_child(&parent)
                 .with_url(url)
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
-                .with_devtools(devtools_enabled)
-                // Install the alert/confirm/prompt shim before any page
-                // script runs. wry 0.38 has no native JS-dialog handler
-                // API on macOS, so pages that call these can otherwise
-                // hang. See `dialogs.rs` for the full reasoning.
-                .with_initialization_script(dialogs::INIT_SCRIPT)
-                // Deny camera / microphone / geolocation / notification
-                // permission requests at the JS layer. wry 0.38 hardcodes
-                // `WKPermissionDecisionGrant` on macOS with no override
-                // hook, so this is the only reachable defense without
-                // forking wry. See `permissions.rs`.
-                .with_initialization_script(permissions::INIT_SCRIPT)
-                // Make the `castcodes://` scheme actually load something
-                // instead of erroring out as "scheme not supported". Our
-                // URL normalizer already passes it through to the
-                // webview; the handler here defines the route table.
-                .with_custom_protocol(warp_core::brand::PUBLIC_URL_SCHEME.to_string(), |request| {
-                    castcodes_protocol::handle(&request)
-                })
                 .with_document_title_changed_handler(move |title| {
                     let _ = title_tx.try_send(NativeWebViewEvent::TitleChanged(tab_id, title));
                 })
@@ -332,6 +265,44 @@ impl NativeBrowserWebView {
                 .with_on_page_load_handler(move |event, _url| {
                     let loading = matches!(event, wry::PageLoadEvent::Started);
                     let _ = load_tx.try_send(NativeWebViewEvent::LoadingChanged(tab_id, loading));
+                })
+                // Route downloads to ~/Downloads with a collision suffix
+                // (e.g. report.pdf → report (1).pdf). If the user has no
+                // Downloads dir or it can't be created, we return false
+                // to cancel rather than let WKWebView silently drop the
+                // bytes into a temp file. The `started` handler runs on
+                // the same thread wry uses for navigation callbacks; the
+                // path resolution is sync and cheap.
+                .with_download_started_handler(|url, target_path| {
+                    let log_url = downloads::url_for_log(&url);
+                    let Some(base_dir) = downloads::default_base_dir() else {
+                        log::warn!("download cancelled: no usable downloads directory ({log_url})");
+                        return false;
+                    };
+                    // wry hands us a `&mut PathBuf` that the handler may
+                    // populate with the destination. It may also already
+                    // contain a suggested filename (server-provided
+                    // Content-Disposition) — use that if present.
+                    let suggested = if target_path.as_os_str().is_empty() {
+                        downloads::filename_from_url(&url)
+                    } else {
+                        target_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| downloads::filename_from_url(&url))
+                    };
+                    let resolved = downloads::resolve_destination(&base_dir, &suggested);
+                    log::info!("download started: {log_url} → {resolved:?}");
+                    *target_path = resolved;
+                    true
+                })
+                .with_download_completed_handler(|url, saved_path, success| {
+                    let log_url = downloads::url_for_log(&url);
+                    if success {
+                        log::info!("download completed: {log_url} → {saved_path:?}");
+                    } else {
+                        log::warn!("download failed: {log_url} (path={saved_path:?})");
+                    }
                 })
                 .with_new_window_req_handler(move |url| {
                     // Classify popups via our policy and dispatch through the
@@ -391,19 +362,7 @@ impl NativeBrowserWebView {
             }
         }
 
-        #[cfg(all(not(target_family = "wasm"), not(target_os = "macos")))]
-        {
-            let _ = (window_id, bounds, app);
-            if !NON_MACOS_ATTACH_WARNING_LOGGED.swap(true, Ordering::AcqRel) {
-                log::warn!(
-                    "browser pane: native webview attach is not implemented on this platform yet \
-                     (needs a cross-platform `active_window_handle()` API in warpui_core to reach \
-                     wry's `new_as_child`). Pane will render chrome only."
-                );
-            }
-        }
-
-        #[cfg(target_family = "wasm")]
+        #[cfg(not(target_os = "macos"))]
         let _ = (window_id, bounds, app);
     }
 }
