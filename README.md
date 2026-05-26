@@ -1,6 +1,10 @@
 # CastCodes
 
-CastCodes is an open-source terminal and code workspace fork. This repository is being rebranded externally as **CastCodes** while preserving upstream internal crate and module names such as `warp_core`, `warpui`, and `warp_terminal` for now.
+CastCodes is a local-first AI coding workspace powered by Coven. It is the product users open: terminal and editor substrate, agent panels and lanes, local project context, and review workflows in one desktop workspace.
+
+Coven powers CastCodes with project-scoped harness sessions, local runtime boundaries, logs, artifacts, handoffs, policy, and orchestration. The public CastCodes build remains local-only by default; Coven is invisible until you need to trust how work was launched, recorded, verified, or cleaned up.
+
+This repository is still a staged external rebrand. Internal Rust crate/module names such as `warp_core`, `warpui`, and `warp_terminal` remain compatibility details for now.
 
 ## Current Scope
 
@@ -9,8 +13,22 @@ CastCodes is an open-source terminal and code workspace fork. This repository is
 - Public app ID: `dev.castcodes.CastCodes`
 - Public URL scheme: `castcodes://`
 - Local terminal and code workflows are in scope.
+- Coven-powered agent sessions are the core product direction.
+- Cast Agent is the CastCodes integration layer for Coven runtime data and agent panel behavior.
 
 The public CastCodes build is local-only by default. It does not include sign-in, hosted telemetry, hosted crash reporting, billing, shared sessions, upstream release feeds, or upstream feedback flows. Feedback links route to this fork's GitHub issue tracker.
+
+## Coven-Powered Workspace
+
+CastCodes should make autonomous coding work visible and reviewable without asking users to learn the whole OpenCoven history first:
+
+- Run Codex, Claude Code, and future harnesses as visible project-scoped lanes.
+- Inspect their work through terminal output, workspace context, changed files, and diffs.
+- Preserve context, logs, artifacts, and handoff packets through Coven-managed session records.
+- Run verification gates and show results before merge, PR, archive, or cleanup actions.
+- Keep approvals explicit for actions that push, merge, publish, delete, or change external state.
+
+See [`docs/COVEN-POWERED-CASTCODES.md`](docs/COVEN-POWERED-CASTCODES.md) for the direction doc and CastCodes parity milestones.
 
 ## Install on Linux
 
