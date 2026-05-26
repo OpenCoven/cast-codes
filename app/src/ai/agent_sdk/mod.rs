@@ -40,7 +40,7 @@ use warp_cli::{
     task::{MessageCommand, TaskCommand},
     CliCommand, GlobalOptions,
 };
-use warp_core::features::FeatureFlag;
+use warp_core::{channel::ChannelState, features::FeatureFlag};
 use warp_isolation_platform::IsolationPlatformError;
 #[cfg(not(target_family = "wasm"))]
 use warp_logging::log_file_path;
@@ -870,7 +870,7 @@ impl AgentDriverRunner {
                 &mut task,
             )
             .await?
-        } else {
+        } else if should_create_hosted_task_for_local_run() {
             // Extract the prompt text that we'll pass up to the server when we create the task.
             let prompt_for_task_creation = match &prompt {
                 Some(Prompt::PlainText(text)) => text.clone(),
@@ -891,6 +891,8 @@ impl AgentDriverRunner {
                 &mut driver_options,
             )
             .await?;
+            None
+        } else {
             None
         };
         // Resolve environment and cloud providers.
@@ -1352,6 +1354,56 @@ impl AgentDriverRunner {
 
 /// Returns `true` if the given CLI command requires authentication.
 fn command_requires_auth(command: &CliCommand) -> bool {
+    ChannelState::cloud_services_available() && command_requires_hosted_auth(command)
+}
+
+fn should_create_hosted_task_for_local_run() -> bool {
+    ChannelState::cloud_services_available()
+}
+
+/// Returns `true` if the command would require hosted services that are unavailable in
+/// local-only CastCodes builds.
+fn command_requires_cloud_services(command: &CliCommand) -> bool {
+    match command {
+        CliCommand::Agent(agent_cmd) => match agent_cmd {
+            AgentCommand::Run(args) => local_agent_run_uses_cloud_services(args),
+            AgentCommand::RunCloud { .. } => true,
+            AgentCommand::Profile(_) => true,
+            AgentCommand::List(_) => true,
+        },
+        CliCommand::MCP(MCPCommand::List) => false,
+        CliCommand::Model(ModelCommand::List) => false,
+        CliCommand::Login => true,
+        CliCommand::Logout => true,
+        CliCommand::Whoami => true,
+        CliCommand::Environment(_)
+        | CliCommand::Run(_)
+        | CliCommand::Provider(_)
+        | CliCommand::Integration(_)
+        | CliCommand::Schedule(_)
+        | CliCommand::Secret(_)
+        | CliCommand::Federate(_)
+        | CliCommand::HarnessSupport(_)
+        | CliCommand::Artifact(_) => true,
+    }
+}
+
+fn local_agent_run_uses_cloud_services(args: &RunAgentArgs) -> bool {
+    args.prompt_arg.saved_prompt.is_some()
+        || args.share.is_shared()
+        || !args.mcp_servers.is_empty()
+        || args.environment.is_some()
+        || args.task_id.is_some()
+        || args.bedrock_inference_role.is_some()
+        || args.conversation.is_some()
+        || args.profile.is_some()
+        || args.snapshot.no_snapshot
+        || args.snapshot.snapshot_upload_timeout.is_some()
+        || args.snapshot.snapshot_script_timeout.is_some()
+}
+
+/// Returns `true` if the command uses hosted account-scoped services in cloud-enabled builds.
+fn command_requires_hosted_auth(command: &CliCommand) -> bool {
     match command {
         CliCommand::Agent(agent_cmd) => match agent_cmd {
             AgentCommand::Run { .. } => true,
@@ -1404,6 +1456,12 @@ fn launch_command(
     command: CliCommand,
     global_options: GlobalOptions,
 ) -> anyhow::Result<()> {
+    if !ChannelState::cloud_services_available() && command_requires_cloud_services(&command) {
+        return Err(anyhow::anyhow!(
+            "This command is unavailable in local-only CastCodes builds."
+        ));
+    }
+
     let requires_auth = command_requires_auth(&command);
 
     if !requires_auth {

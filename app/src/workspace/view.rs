@@ -24907,6 +24907,18 @@ impl Workspace {
         placeholder_pane_group.update(ctx, |pg, ctx| {
             pg.detach_panes_for_close(&working_directories_model, ctx);
         });
+
+        // The placeholder we just replaced was made active by
+        // `add_tab_with_pane_layout` (via `activate_tab_internal`), but only
+        // the placeholder's pane group received the visible-side notification.
+        // The adopted group came from a source window where `begin_tab_drag`
+        // swapped to an adjacent tab, firing `visibility_changed(false)` on
+        // it; without re-notifying here, a browser pane in the dragged tab
+        // would keep its native WKWebView hidden in the new window.
+        new_pane_group.update(ctx, |pane_group, ctx| {
+            pane_group.notify_workspace_tab_visibility_changed(true, ctx);
+        });
+
         self.pending_pane_group_transfer = false;
         ctx.dispatch_global_action("workspace:save_app", ());
         ctx.notify();

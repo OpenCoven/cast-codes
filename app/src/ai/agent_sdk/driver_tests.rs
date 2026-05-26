@@ -9,9 +9,9 @@ use warp_cli::{
 use warp_core::channel::ChannelState;
 
 use super::{
-    build_secret_env_vars, IdleTimeoutSender, LEGACY_OZ_PARENT_LISTENER_MANAGED_EXTERNALLY_ENV,
-    LEGACY_OZ_PARENT_STATE_ROOT_ENV, OZ_MESSAGE_LISTENER_MANAGED_EXTERNALLY_ENV,
-    OZ_MESSAGE_LISTENER_STATE_ROOT_ENV,
+    build_secret_env_vars, driver_requires_login, IdleTimeoutSender,
+    LEGACY_OZ_PARENT_LISTENER_MANAGED_EXTERNALLY_ENV, LEGACY_OZ_PARENT_STATE_ROOT_ENV,
+    OZ_MESSAGE_LISTENER_MANAGED_EXTERNALLY_ENV, OZ_MESSAGE_LISTENER_STATE_ROOT_ENV,
 };
 use crate::ai::agent::{
     task::TaskId, AIAgentActionResult, AIAgentActionResultType, AIAgentInput, AIAgentOutput,
@@ -20,6 +20,12 @@ use crate::ai::agent::{
 use crate::ai::mcp::parsing::normalize_mcp_json;
 use crate::ai::{agent_sdk::task_env_vars, ambient_agents::AmbientAgentTaskId};
 use warp_managed_secrets::ManagedSecretValue;
+
+#[test]
+fn oss_agent_driver_does_not_require_login() {
+    assert!(!ChannelState::cloud_services_available());
+    assert!(!driver_requires_login());
+}
 
 #[test]
 fn test_normalize_single_cli_server() {

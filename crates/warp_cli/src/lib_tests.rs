@@ -678,6 +678,77 @@ fn run_help_hides_message_when_orchestration_v2_disabled() {
 }
 
 #[test]
+fn local_only_cli_help_hides_hosted_account_commands() {
+    warp_core::features::mark_initialized();
+    assert!(!warp_core::channel::ChannelState::cloud_services_available());
+
+    let mut command = Args::clap_command();
+    command.build();
+
+    let visible_subcommands: Vec<_> = command
+        .get_subcommands()
+        .filter(|subcommand| !subcommand.is_hide_set())
+        .map(|subcommand| subcommand.get_name())
+        .collect();
+
+    assert!(!visible_subcommands.contains(&"login"));
+    assert!(!visible_subcommands.contains(&"logout"));
+    assert!(!visible_subcommands.contains(&"whoami"));
+    assert!(!visible_subcommands.contains(&"run"));
+    assert!(!visible_subcommands.contains(&"environment"));
+    assert!(!visible_subcommands.contains(&"artifact"));
+    assert!(visible_subcommands.contains(&"agent"));
+    assert!(visible_subcommands.contains(&"mcp"));
+}
+
+#[test]
+fn local_only_cli_help_hides_cloud_agent_commands() {
+    warp_core::features::mark_initialized();
+    assert!(!warp_core::channel::ChannelState::cloud_services_available());
+
+    let mut command = Args::clap_command();
+    command.build();
+
+    let agent = command
+        .find_subcommand("agent")
+        .expect("agent subcommand should exist");
+    let visible_subcommands: Vec<_> = agent
+        .get_subcommands()
+        .filter(|subcommand| !subcommand.is_hide_set())
+        .map(|subcommand| subcommand.get_name())
+        .collect();
+
+    assert!(visible_subcommands.contains(&"run"));
+    assert!(visible_subcommands.contains(&"help"));
+    assert!(!visible_subcommands.contains(&"run-cloud"));
+    assert!(!visible_subcommands.contains(&"profile"));
+    assert!(!visible_subcommands.contains(&"list"));
+
+    let run = agent
+        .find_subcommand("run")
+        .expect("agent run subcommand should exist");
+    for arg_name in [
+        "saved_prompt",
+        "share",
+        "mcp_servers",
+        "environment",
+        "task_id",
+        "bedrock_inference_role",
+        "conversation",
+        "profile",
+        "no_snapshot",
+        "snapshot_upload_timeout",
+        "snapshot_script_timeout",
+    ] {
+        let arg = run
+            .get_arguments()
+            .find(|arg| arg.get_id() == arg_name)
+            .unwrap_or_else(|| panic!("expected {arg_name} arg"));
+        assert!(arg.is_hide_set(), "expected {arg_name} to be hidden");
+    }
+}
+
+#[test]
 fn raw_command_keeps_message_visible_before_runtime_help_customization() {
     let mut command = <Args as clap::CommandFactory>::command();
     command.build();

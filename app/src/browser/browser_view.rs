@@ -98,6 +98,9 @@ fn classify_security(url: &str) -> SecurityState {
 }
 
 const URL_BAR_HEIGHT: f32 = 32.0;
+// Caps the editor's intrinsic height so the URL bar can vertically center the
+// text inside URL_BAR_HEIGHT instead of letting the editor element stretch.
+const URL_BAR_TEXT_HEIGHT: f32 = 18.0;
 const URL_BAR_MIN_WIDTH: f32 = 160.0;
 // Toolbar = URL bar height + 4pt total vertical padding (2pt each side). The
 // previous 48pt left ~16pt of dead space around a 32pt input and made the
@@ -114,7 +117,10 @@ const TAB_HEIGHT: f32 = 26.0;
 const TAB_CHIP_PADDING: f32 = 8.0;
 const TAB_CLOSE_BUTTON_SIZE: f32 = 16.0;
 const TOOLBAR_HORIZONTAL_PADDING: f32 = 10.0;
-const TOOLBAR_BUTTON_GAP: f32 = 6.0;
+const TOOLBAR_BUTTON_GAP: f32 = 2.0;
+// Space inserted before/after the URL bar so the nav cluster reads as a group
+// distinct from the address bar rather than as one continuous strip.
+const URL_BAR_OUTER_GAP: f32 = 8.0;
 const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
@@ -1049,7 +1055,15 @@ impl BrowserView {
         url_row.add_child(
             Expanded::new(
                 1.0,
-                Clipped::new(ChildView::new(&self.url_editor).finish()).finish(),
+                Align::new(
+                    ConstrainedBox::new(
+                        Clipped::new(ChildView::new(&self.url_editor).finish()).finish(),
+                    )
+                    .with_height(URL_BAR_TEXT_HEIGHT)
+                    .finish(),
+                )
+                .left()
+                .finish(),
             )
             .finish(),
         );
@@ -1072,7 +1086,7 @@ impl BrowserView {
             Expanded::new(
                 1.0,
                 Container::new(editor)
-                    .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+                    .with_margin_left(URL_BAR_OUTER_GAP)
                     .finish(),
             )
             .finish(),
@@ -1088,7 +1102,7 @@ impl BrowserView {
                 BrowserViewAction::ToggleFind,
                 app,
             ))
-            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .with_margin_left(URL_BAR_OUTER_GAP)
             .finish(),
         );
         toolbar.add_child(
@@ -1136,7 +1150,15 @@ impl BrowserView {
 
         let input = Container::new(
             ConstrainedBox::new(
-                Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+                Align::new(
+                    ConstrainedBox::new(
+                        Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+                    )
+                    .with_height(URL_BAR_TEXT_HEIGHT)
+                    .finish(),
+                )
+                .left()
+                .finish(),
             )
             .with_height(URL_BAR_HEIGHT)
             .with_min_width(URL_BAR_MIN_WIDTH)
@@ -1220,6 +1242,9 @@ impl BrowserView {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
         let active = self.model.active_index();
+        // With a single tab there is no other chip to disambiguate from, so the
+        // accent border just adds chrome. Show it only once tabs have peers.
+        let show_active_border = self.model.tabs().len() > 1;
 
         let mut row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
@@ -1229,7 +1254,15 @@ impl BrowserView {
             let title = tab.display_title().to_string();
             let tab_id = tab.id();
             let ui_state = self.tab_ui_states.get(&tab_id).cloned().unwrap_or_default();
-            let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
+            let chip = self.render_tab_chip(
+                idx,
+                tab_id,
+                &title,
+                idx == active,
+                show_active_border,
+                ui_state,
+                app,
+            );
             let chip_with_margin = if idx == 0 {
                 chip
             } else {
@@ -1262,6 +1295,7 @@ impl BrowserView {
         _tab_id: TabId,
         title: &str,
         is_active: bool,
+        show_active_border: bool,
         ui_state: TabUiState,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -1335,7 +1369,7 @@ impl BrowserView {
             if let Some(bg) = background {
                 container = container.with_background(bg);
             }
-            if is_active {
+            if is_active && show_active_border {
                 container = container.with_border(Border::all(1.0).with_border_fill(accent));
             }
             container.finish()
