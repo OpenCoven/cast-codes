@@ -584,8 +584,12 @@ fn should_run_as_cli(
     standalone_build
         || cli_mode_env_present
         || binary_name.is_some_and(|name| {
-            name.starts_with("cast-codes") && !is_macos_app_bundle_executable(current_exe)
+            name.starts_with("cast-codes") && !is_castcodes_gui_executable(current_exe)
         })
+}
+
+fn is_castcodes_gui_executable(current_exe: Option<&std::path::Path>) -> bool {
+    is_macos_app_bundle_executable(current_exe) || is_windows_app_executable(current_exe)
 }
 
 #[cfg(target_os = "macos")]
@@ -615,6 +619,13 @@ fn is_macos_app_bundle_executable(current_exe: Option<&std::path::Path>) -> bool
 #[cfg(not(target_os = "macos"))]
 fn is_macos_app_bundle_executable(_current_exe: Option<&std::path::Path>) -> bool {
     false
+}
+
+fn is_windows_app_executable(current_exe: Option<&std::path::Path>) -> bool {
+    current_exe.is_some_and(|path| {
+        let path = path.to_string_lossy();
+        path.ends_with(r"\cast-codes.exe") || path.ends_with("/cast-codes.exe")
+    })
 }
 
 /// Runs the app. If a subcommand was requested, it'll be run instead of the main application.
@@ -841,6 +852,16 @@ mod launch_mode_tests {
                 "/Applications/CastCodes.app/Contents/MacOS/cast-codes"
             )),
             true,
+        ));
+    }
+
+    #[test]
+    fn windows_installed_castcodes_exe_launches_gui() {
+        assert!(!should_run_as_cli(
+            false,
+            Some("cast-codes.exe"),
+            Some(Path::new(r"C:\Program Files\CastCodes\cast-codes.exe")),
+            false,
         ));
     }
 }
