@@ -62,6 +62,8 @@ pub enum ImportError {
     InvalidOklch { var: String, raw: String },
     OutOfSrgbGamut { var: String, srgb: ColorU },
     Io(String),
+    InvalidShareUrl(String),
+    Fetch(String),
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -252,6 +254,93 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
         return Err(ImportError::NoColorBlocksFound);
     }
     Ok(blocks)
+}
+
+// ─── Share-link extraction & fetch ─────────────────────────────────────────
+
+/// Extract the tweakcn theme id from a share URL.
+///
+/// Accepts (with or without scheme, with optional `www.`):
+/// - `https://tweakcn.com/themes/<id>` — public theme page
+/// - `https://tweakcn.com/r/themes/<id>.json` — registry JSON endpoint
+/// - `https://tweakcn.com/editor/theme?theme=<id>` — editor with theme param
+pub fn extract_theme_id(input: &str) -> Result<String, ImportError> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(ImportError::InvalidShareUrl(
+            "Paste a tweakcn share link".to_string(),
+        ));
+    }
+
+    let with_scheme = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    };
+
+    let url = url::Url::parse(&with_scheme)
+        .map_err(|e| ImportError::InvalidShareUrl(format!("Not a valid URL: {e}")))?;
+
+    let host = url.host_str().unwrap_or_default().trim_start_matches("www.");
+    if !host.eq_ignore_ascii_case("tweakcn.com") {
+        return Err(ImportError::InvalidShareUrl(format!(
+            "Expected a tweakcn.com link, got `{host}`"
+        )));
+    }
+
+    let segments: Vec<&str> = url
+        .path_segments()
+        .map(|s| s.filter(|seg| !seg.is_empty()).collect())
+        .unwrap_or_default();
+
+    let id = match segments.as_slice() {
+        ["themes", id] => (*id).to_string(),
+        ["r", "themes", file] => file.trim_end_matches(".json").to_string(),
+        ["editor", "theme"] => url
+            .query_pairs()
+            .find_map(|(k, v)| (k == "theme").then(|| v.into_owned()))
+            .ok_or_else(|| {
+                ImportError::InvalidShareUrl(
+                    "Editor URL is missing the `?theme=<id>` parameter".to_string(),
+                )
+            })?,
+        _ => {
+            return Err(ImportError::InvalidShareUrl(
+                "URL doesn't look like a tweakcn share link".to_string(),
+            ))
+        }
+    };
+
+    if id.is_empty() {
+        return Err(ImportError::InvalidShareUrl(
+            "Theme id is empty".to_string(),
+        ));
+    }
+    Ok(id)
+}
+
+/// Build the registry JSON URL for a tweakcn theme id.
+pub fn tweakcn_registry_url(id: &str) -> String {
+    format!("https://tweakcn.com/r/themes/{id}.json")
+}
+
+/// Fetch and parse a tweakcn theme from a share URL.
+pub async fn fetch_share_url(input: &str) -> Result<ParsedBlocks, ImportError> {
+    let id = extract_theme_id(input)?;
+    let url = tweakcn_registry_url(&id);
+
+    let body = reqwest::Client::new()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| ImportError::Fetch(format!("Request failed: {e}")))?
+        .error_for_status()
+        .map_err(|e| ImportError::Fetch(format!("HTTP error: {e}")))?
+        .text()
+        .await
+        .map_err(|e| ImportError::Fetch(format!("Failed to read response: {e}")))?;
+
+    parse_registry_json(&body)
 }
 
 // ─── Mapper: ParsedBlocks → WarpTheme ──────────────────────────────────────
@@ -747,6 +836,64 @@ mod snapshot_tests {
                 .join("\n")
         };
         assert_eq!(strip(&actual), strip(golden));
+    }
+}
+
+#[cfg(test)]
+mod share_url_tests {
+    use super::*;
+
+    #[test]
+    fn extracts_id_from_theme_page_url() {
+        let id = extract_theme_id("https://tweakcn.com/themes/cmcvyowo3000204jtemyy3akj").unwrap();
+        assert_eq!(id, "cmcvyowo3000204jtemyy3akj");
+    }
+
+    #[test]
+    fn extracts_id_from_registry_json_url() {
+        let id =
+            extract_theme_id("https://tweakcn.com/r/themes/cmcvyowo3000204jtemyy3akj.json").unwrap();
+        assert_eq!(id, "cmcvyowo3000204jtemyy3akj");
+    }
+
+    #[test]
+    fn extracts_id_from_editor_url() {
+        let id = extract_theme_id("https://tweakcn.com/editor/theme?theme=vercel").unwrap();
+        assert_eq!(id, "vercel");
+    }
+
+    #[test]
+    fn tolerates_missing_scheme_and_www() {
+        let id = extract_theme_id("www.tweakcn.com/themes/abc123").unwrap();
+        assert_eq!(id, "abc123");
+        let id = extract_theme_id("tweakcn.com/themes/abc123").unwrap();
+        assert_eq!(id, "abc123");
+    }
+
+    #[test]
+    fn rejects_non_tweakcn_host() {
+        let err = extract_theme_id("https://example.com/themes/abc").unwrap_err();
+        assert!(matches!(err, ImportError::InvalidShareUrl(_)));
+    }
+
+    #[test]
+    fn rejects_unrecognized_path() {
+        let err = extract_theme_id("https://tweakcn.com/about").unwrap_err();
+        assert!(matches!(err, ImportError::InvalidShareUrl(_)));
+    }
+
+    #[test]
+    fn rejects_empty_input() {
+        let err = extract_theme_id("   ").unwrap_err();
+        assert!(matches!(err, ImportError::InvalidShareUrl(_)));
+    }
+
+    #[test]
+    fn registry_url_format() {
+        assert_eq!(
+            tweakcn_registry_url("abc123"),
+            "https://tweakcn.com/r/themes/abc123.json"
+        );
     }
 }
 

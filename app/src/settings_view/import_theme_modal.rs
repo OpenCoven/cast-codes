@@ -1,37 +1,27 @@
-//! Import-theme modal for tweakcn CSS and registry JSON exports.
+//! Import-theme modal for tweakcn share links.
 //!
 //! Opens when the user presses "Import theme…" in Appearance settings.
-//! The user pastes tweakcn CSS or registry JSON, optionally edits the theme name, and clicks
-//! Save. The modal calls `write_imported` to write YAML(s) to disk, then
-//! dispatches a theme-reload+select event so the new theme is immediately
-//! active.
-//!
-//! ## Drag-and-drop
-//! The modal body is wrapped in a `FileDropZone` element (inner module) that
-//! intercepts `Event::DragAndDropFiles` from the OS and dispatches a
-//! `ImportThemeBodyAction::FileDropped` action.  Only `.css` and `.json` files are
-//! accepted; anything else is rejected with an inline error.
+//! The user pastes a tweakcn share link (e.g. `https://tweakcn.com/themes/<id>`),
+//! the modal extracts the theme id, fetches the registry JSON, and on Save
+//! writes YAML(s) to disk plus dispatches a theme-reload+select event so the
+//! new theme is immediately active.
 
-use std::any::Any;
 use std::time::Duration;
 
 use crate::appearance::Appearance;
-use crate::editor::{EditorOptions, EditorView, Event as EditorEvent, SingleLineEditorOptions};
+use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions};
 use crate::modal::Modal;
 use crate::themes::theme::{CustomTheme, ThemeKind};
 use crate::themes::tweakcn_import::{
-    parse_blocks_or_json, write_imported, GamutPolicy, ParsedBlocks,
+    extract_theme_id, fetch_share_url, write_imported, GamutPolicy, ImportError, ParsedBlocks,
 };
 #[cfg(feature = "local_fs")]
 use crate::user_config;
-use warpui::elements::Point;
 use warpui::elements::{
-    ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Fill, Flex, MainAxisSize,
-    ParentElement, Radius, Shrinkable, Text,
+    Container, CornerRadius, CrossAxisAlignment, Fill, Flex, MainAxisSize, ParentElement, Radius,
+    Shrinkable, Text,
 };
-use warpui::event::DispatchedEvent;
 use warpui::fonts::Weight;
-use warpui::geometry::vector::Vector2F;
 use warpui::presenter::ChildView;
 use warpui::r#async::Timer;
 use warpui::ui_components::button::ButtonVariant;
@@ -39,113 +29,37 @@ use warpui::ui_components::components::{Coords, UiComponent as _, UiComponentSty
 use warpui::ui_components::text_input::TextInput;
 use warpui::ViewHandle;
 use warpui::{
-    AfterLayoutContext, AppContext, Element, Entity, Event, EventContext, LayoutContext,
-    PaintContext, SingletonEntity as _, SizeConstraint, TypedActionView, View, ViewContext,
+    AppContext, Element, Entity, SingletonEntity as _, TypedActionView, View, ViewContext,
 };
-
-// ─── FileDropZone ─────────────────────────────────────────────────────────────
-//
-// A transparent element wrapper that sits over any child and intercepts OS-level
-// DragAndDropFiles events, forwarding them as a typed action to the view.
-
-struct FileDropZone {
-    child: Box<dyn Element>,
-}
-
-impl FileDropZone {
-    fn new(child: Box<dyn Element>) -> Self {
-        Self { child }
-    }
-}
-
-impl Element for FileDropZone {
-    fn layout(
-        &mut self,
-        constraint: SizeConstraint,
-        ctx: &mut LayoutContext,
-        app: &AppContext,
-    ) -> Vector2F {
-        self.child.layout(constraint, ctx, app)
-    }
-
-    fn after_layout(&mut self, ctx: &mut AfterLayoutContext, app: &AppContext) {
-        self.child.after_layout(ctx, app);
-    }
-
-    fn paint(&mut self, origin: Vector2F, ctx: &mut PaintContext, app: &AppContext) {
-        self.child.paint(origin, ctx, app);
-    }
-
-    fn size(&self) -> Option<Vector2F> {
-        self.child.size()
-    }
-
-    fn origin(&self) -> Option<Point> {
-        self.child.origin()
-    }
-
-    fn parent_data(&self) -> Option<&dyn Any> {
-        self.child.parent_data()
-    }
-
-    fn dispatch_event(
-        &mut self,
-        event: &DispatchedEvent,
-        ctx: &mut EventContext,
-        app: &AppContext,
-    ) -> bool {
-        if let Some(z_index) = self.z_index() {
-            if let Some(inner) = event.at_z_index(z_index, ctx) {
-                if let Event::DragAndDropFiles { paths, location } = inner {
-                    if self.bounds().map_or(false, |b| b.contains_point(*location))
-                        && !paths.is_empty()
-                    {
-                        let paths: Vec<String> = paths.iter().map(ToOwned::to_owned).collect();
-                        ctx.dispatch_typed_action(ImportThemeBodyAction::FileDropped(paths));
-                        return true;
-                    }
-                }
-            }
-        }
-
-        self.child.dispatch_event(event, ctx, app)
-    }
-}
 
 const MODAL_HEADER: &str = "Import theme from tweakcn";
 const MODAL_WIDTH: f32 = 560.;
-const MODAL_HEIGHT: f32 = 520.;
-const CSS_EDITOR_MAX_HEIGHT: f32 = 240.;
-const PARSE_DEBOUNCE: Duration = Duration::from_millis(200);
+const MODAL_HEIGHT: f32 = 360.;
+const FETCH_DEBOUNCE: Duration = Duration::from_millis(300);
+
+// ─── Fetch state ──────────────────────────────────────────────────────────
+
+enum FetchState {
+    Idle,
+    Fetching,
+    Fetched(ParsedBlocks),
+    Error(String),
+}
 
 // ─── ImportThemeBody ─────────────────────────────────────────────────────────
 
 pub struct ImportThemeBody {
-    /// The multi-line editor used for pasting CSS.
-    css_editor: ViewHandle<EditorView>,
-    /// The single-line editor used for the theme name/slug.
-    name_editor: ViewHandle<EditorView>,
-    /// Current raw CSS (mirrors the css_editor buffer).
-    css_text: String,
-    /// Current theme name (mirrors the name_editor buffer).
-    name: String,
-    /// Last parse result (re-computed whenever css_text changes).
-    parse_result: Option<Result<ParsedBlocks, String>>,
-    /// Whether to clamp out-of-gamut colors (default `true`).
-    clamp_out_of_gamut: bool,
-    /// Last save/write error to display in the UI.
+    url_editor: ViewHandle<EditorView>,
+    url_text: String,
+    state: FetchState,
     pub(crate) show_error: Option<String>,
-    pending_parse_token: u64,
+    pending_token: u64,
 }
 
 #[derive(Debug)]
 pub enum ImportThemeBodyAction {
     Save,
     Cancel,
-    ToggleClamp,
-    /// OS-level file-drop: the vec contains the absolute path strings of the
-    /// dropped items (may be multiple; only the first `.css` one is used).
-    FileDropped(Vec<String>),
 }
 
 pub enum ImportThemeBodyEvent {
@@ -156,124 +70,88 @@ pub enum ImportThemeBodyEvent {
 
 impl ImportThemeBody {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
-        let css_editor = {
-            let editor = ctx.add_typed_action_view(|ctx| {
-                EditorView::new(
-                    EditorOptions {
-                        soft_wrap: true,
-                        ..Default::default()
-                    },
-                    ctx,
-                )
-            });
-            ctx.subscribe_to_view(&editor, move |me, _, event, ctx| {
-                me.handle_css_editor_event(event, ctx);
-            });
-            editor
-        };
-
-        let name_editor = {
+        let url_editor = {
             let editor = ctx.add_typed_action_view(|ctx| {
                 EditorView::single_line(SingleLineEditorOptions::default(), ctx)
             });
             ctx.subscribe_to_view(&editor, move |me, _, event, ctx| {
-                me.handle_name_editor_event(event, ctx);
+                me.handle_url_editor_event(event, ctx);
             });
             editor
         };
 
         Self {
-            css_editor,
-            name_editor,
-            css_text: String::new(),
-            name: String::new(),
-            parse_result: None,
-            clamp_out_of_gamut: true,
+            url_editor,
+            url_text: String::new(),
+            state: FetchState::Idle,
             show_error: None,
-            pending_parse_token: 0,
+            pending_token: 0,
         }
     }
 
-    fn handle_css_editor_event(&mut self, event: &EditorEvent, ctx: &mut ViewContext<Self>) {
+    fn handle_url_editor_event(&mut self, event: &EditorEvent, ctx: &mut ViewContext<Self>) {
         if let EditorEvent::Edited(_) = event {
             let text = self
-                .css_editor
+                .url_editor
                 .read(ctx, |editor, app| editor.buffer_text(app));
-            self.on_css_changed(text, ctx);
+            self.on_url_changed(text, ctx);
         }
     }
 
-    fn handle_name_editor_event(&mut self, event: &EditorEvent, ctx: &mut ViewContext<Self>) {
-        if let EditorEvent::Edited(_) = event {
-            let text = self
-                .name_editor
-                .read(ctx, |editor, app| editor.buffer_text(app));
-            self.name = text;
-            ctx.notify();
-        }
-    }
-
-    fn on_css_changed(&mut self, new_text: String, ctx: &mut ViewContext<Self>) {
-        self.css_text = new_text;
+    fn on_url_changed(&mut self, new_text: String, ctx: &mut ViewContext<Self>) {
+        self.url_text = new_text;
         self.show_error = None;
+        self.pending_token = self.pending_token.wrapping_add(1);
 
-        if self.css_text.trim().is_empty() {
-            self.parse_result = None;
-            self.pending_parse_token = self.pending_parse_token.wrapping_add(1);
+        if self.url_text.trim().is_empty() {
+            self.state = FetchState::Idle;
             ctx.notify();
             return;
         }
 
-        self.pending_parse_token = self.pending_parse_token.wrapping_add(1);
-        let token = self.pending_parse_token;
+        // Validate URL synchronously before debouncing the network call so
+        // typos surface immediately.
+        if let Err(e) = extract_theme_id(&self.url_text) {
+            self.state = FetchState::Error(format_error(&e));
+            ctx.notify();
+            return;
+        }
+
+        let token = self.pending_token;
         let _ = ctx.spawn(
-            Timer::after(PARSE_DEBOUNCE),
+            Timer::after(FETCH_DEBOUNCE),
             move |me: &mut Self, _, ctx| {
-                if me.pending_parse_token == token {
-                    me.run_parse(ctx);
+                if me.pending_token == token {
+                    me.run_fetch(ctx);
                 }
             },
         );
-
         ctx.notify();
     }
 
-    fn run_parse(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.css_text.trim().is_empty() {
-            self.parse_result = None;
-            ctx.notify();
-            return;
-        }
-
-        match parse_blocks_or_json(&self.css_text) {
-            Ok(blocks) => {
-                // Auto-fill name from CSS comment hint if the name field is still empty.
-                if self.name.is_empty() {
-                    if let Some(hint) = blocks.name_comment.as_deref() {
-                        self.name = hint.to_string();
-                        let name_clone = self.name.clone();
-                        self.name_editor.update(ctx, |editor, ctx| {
-                            editor.set_buffer_text(&name_clone, ctx);
-                        });
-                    }
-                }
-                self.parse_result = Some(Ok(blocks));
-            }
-            Err(e) => {
-                self.parse_result = Some(Err(format!("{e:?}")));
-            }
-        }
+    fn run_fetch(&mut self, ctx: &mut ViewContext<Self>) {
+        let input = self.url_text.clone();
+        self.state = FetchState::Fetching;
+        let token = self.pending_token;
         ctx.notify();
+
+        ctx.spawn(
+            async move { fetch_share_url(&input).await },
+            move |me, result, ctx| {
+                if me.pending_token != token {
+                    return;
+                }
+                me.state = match result {
+                    Ok(blocks) => FetchState::Fetched(blocks),
+                    Err(e) => FetchState::Error(format_error(&e)),
+                };
+                ctx.notify();
+            },
+        );
     }
 
     pub fn can_save(&self) -> bool {
-        if self.name.trim().is_empty() {
-            return false;
-        }
-        match &self.parse_result {
-            Some(Ok(blocks)) => !blocks.dark.is_empty() || !blocks.light.is_empty(),
-            _ => false,
-        }
+        matches!(&self.state, FetchState::Fetched(blocks) if !blocks.dark.is_empty() || !blocks.light.is_empty())
     }
 
     pub fn save(&mut self, ctx: &mut ViewContext<Self>) {
@@ -283,24 +161,23 @@ impl ImportThemeBody {
 
         #[cfg(feature = "local_fs")]
         {
-            let blocks = match &self.parse_result {
-                Some(Ok(b)) => b,
+            let blocks = match &self.state {
+                FetchState::Fetched(b) => b,
                 _ => return,
             };
 
-            let slug = self.name.trim().to_string();
-            let policy = if self.clamp_out_of_gamut {
-                GamutPolicy::Clamp
-            } else {
-                GamutPolicy::Strict
-            };
+            // Prefer the registry JSON `name`, fall back to the share-link id.
+            let slug = blocks
+                .name_comment
+                .clone()
+                .or_else(|| extract_theme_id(&self.url_text).ok())
+                .unwrap_or_else(|| "imported-theme".to_string());
 
             let base_theme = Appearance::as_ref(ctx).theme().clone();
             let themes_dir = user_config::themes_dir();
 
-            match write_imported(&blocks, &slug, &base_theme, policy, &themes_dir) {
+            match write_imported(blocks, &slug, &base_theme, GamutPolicy::Clamp, &themes_dir) {
                 Ok(paths) if !paths.is_empty() => {
-                    // Use the first written path (dark variant, or light if only light).
                     let path = paths.into_iter().next().unwrap();
                     let display_name = path
                         .file_stem()
@@ -313,11 +190,11 @@ impl ImportThemeBody {
                 }
                 Ok(_) => {
                     self.show_error =
-                        Some("No color blocks were written — check your CSS.".to_string());
+                        Some("No color blocks were found in the theme.".to_string());
                     ctx.notify();
                 }
                 Err(e) => {
-                    self.show_error = Some(format!("Write failed: {e:?}"));
+                    self.show_error = Some(format!("Write failed: {}", format_error(&e)));
                     ctx.emit(ImportThemeBodyEvent::ShowError {
                         message: self.show_error.clone().unwrap(),
                     });
@@ -338,75 +215,16 @@ impl ImportThemeBody {
     pub fn cancel(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.emit(ImportThemeBodyEvent::Close);
     }
+}
 
-    /// Handle a file dropped onto the modal (OS DragAndDropFiles event).
-    ///
-    /// Accepts the first `.css` or `.json` file found in `paths`. Unsupported
-    /// files (or
-    /// an empty list) show an inline error and leave the paste box untouched.
-    ///
-    /// Gated on `local_fs` because the fallback (web) has no filesystem access
-    /// and the event is not reachable there anyway.
-    #[cfg(feature = "local_fs")]
-    pub fn on_file_dropped(&mut self, paths: Vec<String>, ctx: &mut ViewContext<Self>) {
-        use std::path::Path;
-
-        let import_path = paths.iter().map(Path::new).find(|p| {
-            matches!(
-                p.extension().and_then(|e| e.to_str()),
-                Some("css") | Some("json")
-            )
-        });
-
-        let path = match import_path {
-            Some(p) => p,
-            None => {
-                self.show_error = Some("Only .css and .json files are supported.".to_string());
-                ctx.notify();
-                return;
-            }
-        };
-
-        match std::fs::read_to_string(path) {
-            Ok(contents) => {
-                // Use the filename stem as a default slug if the modal name is empty.
-                if self.name.is_empty() {
-                    let stem = path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("imported-theme")
-                        .to_string();
-                    self.name = stem.clone();
-                    self.name_editor.update(ctx, |editor, ctx| {
-                        editor.set_buffer_text(&stem, ctx);
-                    });
-                }
-                // Populate the CSS editor buffer so the user can see what was loaded.
-                let contents_clone = contents.clone();
-                self.css_editor.update(ctx, |editor, ctx| {
-                    editor.set_buffer_text(&contents_clone, ctx);
-                });
-                self.css_text = contents;
-                self.pending_parse_token = self.pending_parse_token.wrapping_add(1);
-                self.run_parse(ctx);
-            }
-            Err(e) => {
-                self.show_error = Some(format!("Read failed: {e}"));
-                ctx.notify();
-            }
-        }
-    }
-
-    #[cfg(not(feature = "local_fs"))]
-    pub fn on_file_dropped(&mut self, _paths: Vec<String>, ctx: &mut ViewContext<Self>) {
-        self.show_error =
-            Some("File drop requires a local filesystem, not available in web mode.".to_string());
-        ctx.notify();
-    }
-
-    pub fn toggle_clamp(&mut self, ctx: &mut ViewContext<Self>) {
-        self.clamp_out_of_gamut = !self.clamp_out_of_gamut;
-        ctx.notify();
+fn format_error(e: &ImportError) -> String {
+    match e {
+        ImportError::InvalidShareUrl(msg) => msg.clone(),
+        ImportError::Fetch(msg) => msg.clone(),
+        ImportError::NoColorBlocksFound => "Theme has no color blocks.".to_string(),
+        ImportError::InvalidOklch { var, raw } => format!("Invalid oklch() for --{var}: {raw}"),
+        ImportError::OutOfSrgbGamut { var, .. } => format!("--{var} is outside the sRGB gamut"),
+        ImportError::Io(msg) => msg.clone(),
     }
 }
 
@@ -423,7 +241,6 @@ impl View for ImportThemeBody {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
 
-        // ── Shared styles ──────────────────────────────────────────────────
         let input_style = UiComponentStyles::default()
             .set_border_color(theme.outline().into())
             .set_font_family_id(appearance.header_font_family())
@@ -463,10 +280,43 @@ impl View for ImportThemeBody {
             ..button_base
         };
 
-        // ── Parse status badges ────────────────────────────────────────────
-        let (has_light, has_dark) = match &self.parse_result {
-            Some(Ok(blocks)) => (!blocks.light.is_empty(), !blocks.dark.is_empty()),
-            _ => (false, false),
+        // ── Status line ───────────────────────────────────────────────────
+        let (status_text, status_color, has_light, has_dark) = match &self.state {
+            FetchState::Idle => (
+                String::new(),
+                theme.disabled_ui_text_color(),
+                false,
+                false,
+            ),
+            FetchState::Fetching => (
+                "Fetching theme…".to_string(),
+                theme.disabled_ui_text_color(),
+                false,
+                false,
+            ),
+            FetchState::Fetched(blocks) => {
+                let name = blocks
+                    .name_comment
+                    .clone()
+                    .unwrap_or_else(|| "Imported theme".to_string());
+                (
+                    format!("Loaded: {name}"),
+                    theme.accent(),
+                    !blocks.light.is_empty(),
+                    !blocks.dark.is_empty(),
+                )
+            }
+            FetchState::Error(msg) => (
+                msg.clone(),
+                warp_core::ui::theme::Fill::Solid(pathfinder_color::ColorU {
+                    r: 220,
+                    g: 50,
+                    b: 50,
+                    a: 255,
+                }),
+                false,
+                false,
+            ),
         };
 
         let light_text = if has_light {
@@ -475,14 +325,6 @@ impl View for ImportThemeBody {
             "Light: –"
         };
         let dark_text = if has_dark { "Dark: ✓" } else { "Dark: –" };
-
-        // ── Clamp toggle text ──────────────────────────────────────────────
-        let clamp_indicator = if self.clamp_out_of_gamut {
-            "☑"
-        } else {
-            "☐"
-        };
-        let clamp_label = format!("{clamp_indicator} Clamp out-of-gamut colors");
 
         // ── Save / Cancel buttons ──────────────────────────────────────────
         let save_button = if self.can_save() {
@@ -518,37 +360,33 @@ impl View for ImportThemeBody {
             })
             .finish();
 
-        // ── CSS editor ────────────────────────────────────────────────────
-        let css_input = Container::new(
-            ConstrainedBox::new(
-                TextInput::new(self.css_editor.clone(), input_style)
-                    .build()
-                    .finish(),
-            )
-            .with_max_height(CSS_EDITOR_MAX_HEIGHT)
-            .finish(),
+        // ── URL input ─────────────────────────────────────────────────────
+        let url_input = Container::new(
+            TextInput::new(self.url_editor.clone(), input_style)
+                .build()
+                .finish(),
         )
         .with_margin_top(6.)
         .finish();
 
-        // ── Name editor ───────────────────────────────────────────────────
-        let name_input = Container::new(
-            TextInput::new(
-                self.name_editor.clone(),
-                UiComponentStyles::default()
-                    .set_border_color(theme.outline().into())
-                    .set_font_family_id(appearance.header_font_family())
-                    .set_font_size(13.)
-                    .set_background(Fill::None)
-                    .set_border_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                    .set_padding(Coords::uniform(8.).top(6.).bottom(6.))
-                    .set_border_width(1.),
+        // ── Status row ────────────────────────────────────────────────────
+        let status_row: Box<dyn Element> = if status_text.is_empty() {
+            Container::new(
+                Text::new_inline("", appearance.ui_font_family(), 12.)
+                    .with_color(theme.disabled_ui_text_color().into())
+                    .finish(),
             )
-            .build()
-            .finish(),
-        )
-        .with_margin_top(6.)
-        .finish();
+            .with_margin_top(10.)
+            .finish()
+        } else {
+            Container::new(
+                Text::new_inline(status_text, appearance.ui_font_family(), 12.)
+                    .with_color(status_color.into())
+                    .finish(),
+            )
+            .with_margin_top(10.)
+            .finish()
+        };
 
         // ── Badge row ─────────────────────────────────────────────────────
         let badge_row = Flex::row()
@@ -575,18 +413,6 @@ impl View for ImportThemeBody {
                 .finish(),
             )
             .finish();
-
-        // ── Clamp toggle ──────────────────────────────────────────────────
-        let clamp_row = warpui::elements::EventHandler::new(
-            Text::new_inline(clamp_label, appearance.ui_font_family(), 12.)
-                .with_color(theme.active_ui_text_color().into())
-                .finish(),
-        )
-        .on_left_mouse_down(|ctx, _, _| {
-            ctx.dispatch_typed_action(ImportThemeBodyAction::ToggleClamp);
-            warpui::elements::DispatchEventResult::StopPropagation
-        })
-        .finish();
 
         // ── Error banner ──────────────────────────────────────────────────
         let maybe_error: Option<Box<dyn Element>> = self.show_error.as_ref().map(|msg| {
@@ -625,47 +451,27 @@ impl View for ImportThemeBody {
         // ── Layout ───────────────────────────────────────────────────────
         let mut layout = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
 
-        // CSS paste label + field
         layout.add_child(
             Text::new_inline(
-                "Paste tweakcn CSS or registry JSON",
+                "Paste a tweakcn share link (e.g. https://tweakcn.com/themes/…)",
                 appearance.ui_font_family(),
                 12.,
             )
             .with_color(theme.active_ui_text_color().into())
             .finish(),
         );
-        layout.add_child(css_input);
+        layout.add_child(url_input);
 
-        // Name label + field
-        layout.add_child(
-            Container::new(
-                Text::new_inline("Theme name (slug)", appearance.ui_font_family(), 12.)
-                    .with_color(theme.active_ui_text_color().into())
-                    .finish(),
-            )
-            .with_margin_top(12.)
-            .finish(),
-        );
-        layout.add_child(name_input);
+        layout.add_child(status_row);
+        layout.add_child(Container::new(badge_row).with_margin_top(8.).finish());
 
-        // Detected blocks row
-        layout.add_child(Container::new(badge_row).with_margin_top(10.).finish());
-
-        // Clamp toggle
-        layout.add_child(Container::new(clamp_row).with_margin_top(8.).finish());
-
-        // Error (conditional)
         if let Some(error_element) = maybe_error {
             layout.add_child(error_element);
         }
 
-        // Button row
         layout.add_child(button_row);
 
-        // Wrap the whole layout in a FileDropZone so OS-level import file drops
-        // are captured and dispatched as ImportThemeBodyAction::FileDropped.
-        Box::new(FileDropZone::new(layout.finish()))
+        layout.finish()
     }
 }
 
@@ -676,10 +482,6 @@ impl TypedActionView for ImportThemeBody {
         match action {
             ImportThemeBodyAction::Save => self.save(ctx),
             ImportThemeBodyAction::Cancel => self.cancel(ctx),
-            ImportThemeBodyAction::ToggleClamp => self.toggle_clamp(ctx),
-            ImportThemeBodyAction::FileDropped(paths) => {
-                self.on_file_dropped(paths.clone(), ctx);
-            }
         }
     }
 }
