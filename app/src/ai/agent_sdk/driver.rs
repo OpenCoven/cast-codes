@@ -84,7 +84,10 @@ use uuid::Uuid;
 use warp_cli::agent::{Harness, OutputFormat};
 use warp_cli::mcp::MCPSpec;
 use warp_cli::share::ShareRequest;
-use warp_core::{features::FeatureFlag, report_error, report_if_error, safe_debug, safe_info};
+use warp_core::{
+    channel::ChannelState, features::FeatureFlag, report_error, report_if_error, safe_debug,
+    safe_info,
+};
 use warp_graphql::ai::AgentTaskState;
 use warp_managed_secrets::ManagedSecretValue;
 use warpui::{
@@ -114,6 +117,11 @@ const SETUP_FAILED_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
 /// If no follow-up status arrives within this window, the driver terminates with the
 /// original error so the CLI does not hang indefinitely.
 const AUTO_RESUME_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn driver_requires_login() -> bool {
+    ChannelState::cloud_services_available()
+}
+
 /// Signals to Claude child-harness hooks that Warp already owns the background
 /// message-listener lifecycle, so the plugin should reuse the shared state
 /// files instead of spawning and cleaning up its own listener.
@@ -530,7 +538,7 @@ impl AgentDriver {
 
         // If we're not logged in, the root view will go to an auth screen, and all subsequent steps will fail.
         // This should be impossible, since we enforce login before reaching this point.
-        if !AuthStateProvider::as_ref(ctx).get().is_logged_in() {
+        if driver_requires_login() && !AuthStateProvider::as_ref(ctx).get().is_logged_in() {
             return Err(AgentDriverError::NotLoggedIn);
         }
 

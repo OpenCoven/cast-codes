@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,6 +10,7 @@ use futures::TryFutureExt;
 use inquire::{InquireError, Select};
 use warp_cli::agent::Harness;
 use warp_cli::environment::{EnvironmentCreateArgs, EnvironmentUpdateArgs};
+use warp_core::channel::ChannelState;
 use warpui::r#async::FutureExt;
 use warpui::{AppContext, GetSingletonModelHandle, SingletonEntity as _, UpdateModel};
 
@@ -120,28 +122,46 @@ pub fn refresh_workspace_metadata<C>(
 where
     C: GetSingletonModelHandle + UpdateModel,
 {
-    let refresh_future = TeamUpdateManager::handle(ctx).update(ctx, |manager, ctx| {
-        manager
-            .refresh_workspace_metadata(ctx)
-            .with_timeout(WORKSPACE_METADATA_REFRESH_TIMEOUT)
+    let refresh_future = should_refresh_workspace_metadata().then(|| {
+        TeamUpdateManager::handle(ctx).update(ctx, |manager, ctx| {
+            manager
+                .refresh_workspace_metadata(ctx)
+                .with_timeout(WORKSPACE_METADATA_REFRESH_TIMEOUT)
+        })
     });
 
     async move {
-        let _ = refresh_future
-            .await
-            .map_err(|_| anyhow::anyhow!("Timed out refreshing team metadata"))?;
+        if let Some(refresh_future) = refresh_future {
+            let _ = refresh_future
+                .await
+                .map_err(|_| anyhow::anyhow!("Timed out refreshing team metadata"))?;
+        }
         Ok(())
     }
+}
+
+fn should_refresh_workspace_metadata() -> bool {
+    ChannelState::cloud_services_available()
 }
 
 /// Refresh Warp Drive before executing an operation.
 pub fn refresh_warp_drive(
     ctx: &AppContext,
-) -> impl Future<Output = anyhow::Result<()>> + Send + 'static {
-    UpdateManager::as_ref(ctx)
-        .initial_load_complete()
-        .with_timeout(WARP_DRIVE_SYNC_TIMEOUT)
-        .map_err(|_| anyhow::anyhow!("Timed out waiting for Cast Drive to sync"))
+) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>> {
+    if !should_wait_for_warp_drive_sync() {
+        return Box::pin(async { Ok(()) });
+    }
+
+    Box::pin(
+        UpdateManager::as_ref(ctx)
+            .initial_load_complete()
+            .with_timeout(WARP_DRIVE_SYNC_TIMEOUT)
+            .map_err(|_| anyhow::anyhow!("Timed out waiting for Cast Drive to sync")),
+    )
+}
+
+fn should_wait_for_warp_drive_sync() -> bool {
+    ChannelState::cloud_services_available()
 }
 
 /// Fetch the conversation's server metadata and validate that its harness matches the caller's
@@ -330,7 +350,9 @@ impl fmt::Display for EnvironmentChoice {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_ambient_task_id;
+    use super::{
+        parse_ambient_task_id, should_refresh_workspace_metadata, should_wait_for_warp_drive_sync,
+    };
 
     #[test]
     fn parse_ambient_task_id_accepts_valid_ids() {
@@ -346,5 +368,15 @@ mod tests {
         let err = parse_ambient_task_id("not-a-run-id", "Invalid run ID").unwrap_err();
 
         assert!(err.to_string().contains("Invalid run ID 'not-a-run-id'"));
+    }
+
+    #[test]
+    fn oss_channel_does_not_wait_for_warp_drive_sync() {
+        assert!(!should_wait_for_warp_drive_sync());
+    }
+
+    #[test]
+    fn oss_channel_does_not_refresh_workspace_metadata() {
+        assert!(!should_refresh_workspace_metadata());
     }
 }

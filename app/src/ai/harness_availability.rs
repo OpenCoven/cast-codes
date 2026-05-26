@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use warp_cli::agent::Harness;
-use warp_core::features::FeatureFlag;
 use warp_core::user_preferences::GetUserPreferences;
+use warp_core::{channel::ChannelState, features::FeatureFlag};
 use warp_managed_secrets::{client::SecretOwner, ManagedSecretManager, ManagedSecretValue};
 use warpui::{Entity, ModelContext, SingletonEntity};
 
@@ -159,6 +159,10 @@ impl HarnessAvailabilityModel {
     }
 
     fn fetch_auth_secrets(&mut self, harness: Harness, ctx: &mut ModelContext<Self>) {
+        if !ChannelState::cloud_services_available() {
+            return;
+        }
+
         let Some(agent_harness) = harness_to_graphql_harness(harness) else {
             return;
         };
@@ -239,6 +243,10 @@ impl HarnessAvailabilityModel {
     }
 
     pub fn refresh(&self, ctx: &mut ModelContext<Self>) {
+        if !ChannelState::cloud_services_available() {
+            return;
+        }
+
         // The endpoint queries `user`, which requires auth.
         if !AuthStateProvider::as_ref(ctx).get().is_logged_in() {
             return;
