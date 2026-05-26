@@ -329,16 +329,24 @@ pub async fn fetch_share_url(input: &str) -> Result<ParsedBlocks, ImportError> {
     let id = extract_theme_id(input)?;
     let url = tweakcn_registry_url(&id);
 
-    let body = reqwest::Client::new()
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| ImportError::Fetch(format!("Request failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ImportError::Fetch(format!("HTTP error: {e}")))?
-        .text()
-        .await
-        .map_err(|e| ImportError::Fetch(format!("Failed to read response: {e}")))?;
+    let fetch_body = async {
+        reqwest::Client::new()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ImportError::Fetch(format!("Request failed: {e}")))?
+            .error_for_status()
+            .map_err(|e| ImportError::Fetch(format!("HTTP error: {e}")))?
+            .text()
+            .await
+            .map_err(|e| ImportError::Fetch(format!("Failed to read response: {e}")))
+    };
+
+    #[cfg(target_family = "wasm")]
+    let body = fetch_body.await?;
+
+    #[cfg(not(target_family = "wasm"))]
+    let body = async_compat::Compat::new(fetch_body).await?;
 
     parse_registry_json(&body)
 }
