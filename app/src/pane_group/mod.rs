@@ -7178,6 +7178,23 @@ impl PaneGroup {
         }
     }
 
+    /// Fires [`PaneContent::on_workspace_tab_visibility_changed`] on every
+    /// pane in this group. Called by `Workspace::set_active_tab_index` when
+    /// the owning workspace tab is swapped in (`visible == true`) or out
+    /// (`visible == false`) so panes with native OS-level views (browser
+    /// pane) can hide or show their native layer. Pure-Rust panes default
+    /// to a no-op and pay nothing.
+    pub fn notify_workspace_tab_visibility_changed(
+        &self,
+        visible: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        for pane in self.pane_contents.values() {
+            pane.as_pane()
+                .on_workspace_tab_visibility_changed(visible, ctx);
+        }
+    }
+
     /// Detach all panes and clean up associated state when closing a tab.
     /// This should be called instead of `detach_panes` when the pane group is being destroyed.
     pub fn detach_panes_for_close(

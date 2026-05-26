@@ -5183,6 +5183,22 @@ impl Workspace {
             index
         };
 
+        // Notify the outgoing tab's panes that they're losing visibility
+        // before we swap. Panes that wrap a native OS view (browser pane's
+        // WKWebView) use this to hide their native layer, which otherwise
+        // keeps painting over the newly-active tab. Guarded on a real
+        // index change to avoid spurious flips when re-selecting the same
+        // tab.
+        let prev_index = self.active_tab_index;
+        if prev_index != index {
+            if let Some(prev_tab) = self.tabs.get(prev_index) {
+                let prev_pane_group = prev_tab.pane_group.clone();
+                prev_pane_group.update(ctx, |pane_group, ctx| {
+                    pane_group.notify_workspace_tab_visibility_changed(false, ctx);
+                });
+            }
+        }
+
         self.active_tab_index = index;
 
         if let Some(tab) = self.tabs.get(index) {
@@ -5219,6 +5235,18 @@ impl Workspace {
                 ctx,
             );
         });
+
+        // Notify the incoming tab's panes that they're now visible. Browser
+        // pane uses this to re-show its WKWebView. Skipped when the index
+        // didn't actually change.
+        if prev_index != index {
+            if let Some(new_tab) = self.tabs.get(index) {
+                let new_pane_group = new_tab.pane_group.clone();
+                new_pane_group.update(ctx, |pane_group, ctx| {
+                    pane_group.notify_workspace_tab_visibility_changed(true, ctx);
+                });
+            }
+        }
 
         let pane_group = self.active_tab_pane_group();
         let focused_terminal_view_id = self

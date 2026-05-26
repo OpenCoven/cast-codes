@@ -697,6 +697,25 @@ pub trait PaneContent: 'static {
     fn min_pane_width(&self, _ctx: &AppContext) -> f32 {
         crate::pane_group::MINIMUM_PANE_SIZE
     }
+
+    /// Callback fired when the workspace tab that owns this pane group
+    /// becomes active (`visible == true`) or inactive (`visible == false`).
+    ///
+    /// Pure-Rust panes (terminals, code editors, etc.) can leave this as
+    /// the default no-op: the workspace's render tree already excludes the
+    /// inactive tab's pane group, so nothing paints.
+    ///
+    /// Panes that wrap a native OS-level view (e.g. `wry::WebView`'s
+    /// `WKWebView` on macOS) MUST override this to toggle their native
+    /// view's visibility. The native view stays attached to the parent
+    /// `NSView` regardless of the Rust render tree, so without this hook it
+    /// keeps painting over whichever workspace tab is now active.
+    fn on_workspace_tab_visibility_changed(
+        &self,
+        _visible: bool,
+        _ctx: &mut ViewContext<PaneGroup>,
+    ) {
+    }
 }
 
 /// Trait for untyped pane contents. This is a workaround for trait upcasting being

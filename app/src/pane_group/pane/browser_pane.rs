@@ -120,4 +120,13 @@ impl PaneContent for BrowserPane {
     fn is_pane_being_dragged(&self, ctx: &AppContext) -> bool {
         self.view.as_ref(ctx).is_being_dragged()
     }
+
+    fn on_workspace_tab_visibility_changed(
+        &self,
+        visible: bool,
+        ctx: &mut ViewContext<PaneGroup>,
+    ) {
+        let browser_view = self.browser_view(ctx);
+        browser_view.update(ctx, |view, _ctx| view.set_workspace_tab_visible(visible));
+    }
 }

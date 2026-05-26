@@ -276,6 +276,7 @@ pub struct BrowserView {
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
+    workspace_tab_visible: bool,
     back_button_mouse_state: MouseStateHandle,
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
@@ -396,6 +397,7 @@ impl BrowserView {
             #[cfg(not(target_family = "wasm"))]
             web_context,
             tab_ui_states,
+            workspace_tab_visible: true,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
@@ -512,6 +514,7 @@ impl BrowserView {
             event_tx,
             web_context,
             tab_ui_states,
+            workspace_tab_visible: true,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
@@ -591,8 +594,36 @@ impl BrowserView {
         ctx.focus(&self.url_editor);
     }
 
+    fn sync_webview_visibility(&mut self) {
+        let active_idx = self.model.active_index();
+        for (idx, webview) in self.webviews.iter().enumerate() {
+            webview
+                .borrow_mut()
+                .set_visibility(self.workspace_tab_visible && idx == active_idx);
+        }
+    }
+
     fn active_webview(&self) -> Option<&Rc<RefCell<NativeBrowserWebView>>> {
         self.webviews.get(self.model.active_index())
+    }
+
+    /// Hide or show the native webview for the currently-active intra-pane
+    /// browser tab. Inactive intra-pane tabs are already kept hidden by
+    /// [`Self::select_tab`], so only the active webview's NSView needs to
+    /// flip when the owning workspace tab changes focus.
+    ///
+    /// Without this, switching workspace tabs leaves the WKWebView NSView
+    /// attached to the parent NSView and painting over whichever tab is
+    /// now active. Mirrors the `detach_native` pattern used by `close()`
+    /// for the same root cause, but reversibly — the webview stays alive
+    /// so navigation/load state survives the round trip.
+    pub(crate) fn set_workspace_tab_visible(&mut self, visible: bool) {
+        if self.workspace_tab_visible == visible {
+            return;
+        }
+
+        self.workspace_tab_visible = visible;
+        self.sync_webview_visibility();
     }
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
@@ -674,7 +705,7 @@ impl BrowserView {
             self.event_tx.clone(),
             #[cfg(not(target_family = "wasm"))]
             self.web_context.clone(),
-            true,
+            self.workspace_tab_visible,
         )));
         self.webviews.push(webview);
         self.tab_ui_states.insert(tab_id, TabUiState::default());
@@ -714,7 +745,7 @@ impl BrowserView {
                 self.event_tx.clone(),
                 #[cfg(not(target_family = "wasm"))]
                 self.web_context.clone(),
-                true,
+                self.workspace_tab_visible,
             )));
             self.webviews.push(webview);
             self.tab_ui_states.insert(new_tab_id, TabUiState::default());
@@ -727,7 +758,9 @@ impl BrowserView {
         if self.model.active_index() != prior_active_idx || result.removed_index == prior_active_idx
         {
             if let Some(webview) = self.active_webview() {
-                webview.borrow_mut().set_visibility(true);
+                webview
+                    .borrow_mut()
+                    .set_visibility(self.workspace_tab_visible);
             }
             self.sync_active_tab_into_editor(ctx);
             self.sync_pane_title(ctx);
@@ -747,7 +780,7 @@ impl BrowserView {
             prev.borrow_mut().set_visibility(false);
         }
         if let Some(next) = self.active_webview() {
-            next.borrow_mut().set_visibility(true);
+            next.borrow_mut().set_visibility(self.workspace_tab_visible);
         }
 
         self.sync_active_tab_into_editor(ctx);
