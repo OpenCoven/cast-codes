@@ -306,7 +306,11 @@ impl BrowserView {
 }
 
 impl BrowserView {
-    pub fn new(initial_url: Option<String>, ctx: &mut ViewContext<Self>) -> Self {
+    pub fn new(
+        initial_url: Option<String>,
+        #[cfg(not(target_family = "wasm"))] session_id: &str,
+        ctx: &mut ViewContext<Self>,
+    ) -> Self {
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
@@ -314,7 +318,12 @@ impl BrowserView {
 
         #[cfg(not(target_family = "wasm"))]
         let web_context: Option<SharedWebContext> = {
-            let dir = data_dir::browser_data_dir();
+            // Per-session data dir isolates cookies/localStorage/IndexedDB
+            // per workspace tab on Linux + Windows. macOS shares the
+            // WKWebsiteDataStore default store regardless (wry 0.38
+            // limitation, see `data_dir`), but creating the directory keeps
+            // the layout consistent for future macOS plumbing.
+            let dir = data_dir::browser_data_dir(session_id);
             // Construct the WebContext even when dir is None — wry handles
             // the missing-dir case internally with its platform default.
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
@@ -422,6 +431,7 @@ impl BrowserView {
     #[cfg(not(target_family = "wasm"))]
     pub fn from_state(
         state: super::browser_model::BrowserState,
+        session_id: &str,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let model = BrowserModel::restore(state);
@@ -430,7 +440,8 @@ impl BrowserView {
         let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
 
         let web_context: Option<SharedWebContext> = {
-            let dir = data_dir::browser_data_dir();
+            // Per-session data dir; see `Self::new` for the platform notes.
+            let dir = data_dir::browser_data_dir(session_id);
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
         };
 

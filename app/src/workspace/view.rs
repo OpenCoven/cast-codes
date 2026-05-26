@@ -13334,7 +13334,11 @@ impl Workspace {
 
     pub(crate) fn open_browser_pane(&mut self, url: Option<String>, ctx: &mut ViewContext<Self>) {
         let url = url.unwrap_or_else(|| DEFAULT_BROWSER_URL.to_string());
-        let pane = BrowserPane::new(Some(url), ctx);
+        // Session id keys the per-tab browser data store — see
+        // `crate::browser::data_dir`. Using the pane group's id gives one
+        // session per workspace tab for the duration of this app launch.
+        let session_id = self.active_tab_pane_group().id().to_string();
+        let pane = BrowserPane::new(Some(url), session_id, ctx);
         self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
             pane_group.add_pane_with_direction(
                 Direction::Right,
@@ -13514,7 +13518,8 @@ impl Workspace {
         state: crate::pane_group::pane::browser::browser_model::BrowserState,
         ctx: &mut ViewContext<Self>,
     ) {
-        let pane = BrowserPane::new_from_state(state, ctx);
+        let session_id = self.active_tab_pane_group().id().to_string();
+        let pane = BrowserPane::new_from_state(state, session_id, ctx);
         self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
             pane_group.add_pane_with_direction(
                 Direction::Right,

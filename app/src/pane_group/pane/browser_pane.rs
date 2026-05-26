@@ -32,17 +32,38 @@ impl BrowserPane {
         }
     }
 
-    pub fn new<V: View>(url: Option<String>, ctx: &mut ViewContext<V>) -> Self {
-        let view = ctx.add_typed_action_view(move |ctx| BrowserView::new(url, ctx));
+    /// `session_id` keys this pane's WebKit data store (per-workspace-tab
+    /// isolation on Linux + Windows; see [`crate::browser::data_dir`] for
+    /// platform notes). It is accepted unconditionally so callers don't
+    /// need to cfg-gate; on wasm it is discarded because there is no
+    /// WebKit data store to scope.
+    pub fn new<V: View>(
+        url: Option<String>,
+        session_id: String,
+        ctx: &mut ViewContext<V>,
+    ) -> Self {
+        let view = ctx.add_typed_action_view(move |ctx| {
+            #[cfg(not(target_family = "wasm"))]
+            {
+                BrowserView::new(url, &session_id, ctx)
+            }
+            #[cfg(target_family = "wasm")]
+            {
+                let _ = session_id;
+                BrowserView::new(url, ctx)
+            }
+        });
         Self::from_view(view, ctx)
     }
 
     #[cfg(not(target_family = "wasm"))]
     pub fn new_from_state<V: View>(
         state: super::browser::browser_model::BrowserState,
+        session_id: String,
         ctx: &mut ViewContext<V>,
     ) -> Self {
-        let view = ctx.add_typed_action_view(move |ctx| BrowserView::from_state(state, ctx));
+        let view = ctx
+            .add_typed_action_view(move |ctx| BrowserView::from_state(state, &session_id, ctx));
         Self::from_view(view, ctx)
     }
 
