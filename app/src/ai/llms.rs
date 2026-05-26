@@ -4,6 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, OnceLock},
 };
+use warp_core::channel::ChannelState;
 use warp_core::ui::icons::Icon;
 use warp_core::user_preferences::GetUserPreferences;
 use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity};
@@ -906,6 +907,10 @@ impl LLMPreferences {
 
     /// Fetches the latest set of models from the server for the currently logged in user, and updates the model.
     pub fn refresh_authed_models(&self, ctx: &mut ModelContext<Self>) {
+        if !ChannelState::cloud_services_available() {
+            return;
+        }
+
         // Don't try to fetch auth'd models if the user is not logged in yet.
         if !AuthStateProvider::as_ref(ctx).get().is_logged_in() {
             return;
@@ -946,6 +951,10 @@ impl LLMPreferences {
     }
 
     pub fn refresh_available_models(&self, ctx: &mut ModelContext<Self>) {
+        if !ChannelState::cloud_services_available() {
+            return;
+        }
+
         if AuthStateProvider::as_ref(ctx).get().is_logged_in() {
             self.refresh_authed_models(ctx);
         } else {

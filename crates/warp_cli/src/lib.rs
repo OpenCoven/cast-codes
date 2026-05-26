@@ -271,6 +271,7 @@ impl Args {
 
         if !ChannelState::cloud_services_available() {
             command = command.mut_arg("api_key", |arg| arg.hide(true));
+            command = hide_hosted_commands_for_local_only(command);
         }
 
         // Hide the environment subcommands and --environment flags from help text
@@ -427,6 +428,53 @@ impl Args {
     pub fn session_sharing_server_url(&self) -> Option<&str> {
         self.session_sharing_server_url.as_deref()
     }
+}
+
+fn hide_hosted_commands_for_local_only(mut command: clap::Command) -> clap::Command {
+    for name in [
+        "environment",
+        "run",
+        "login",
+        "logout",
+        "whoami",
+        "provider",
+        "integration",
+        "schedule",
+        "secret",
+        "federate",
+        "harness-support",
+        "artifact",
+    ] {
+        command = command.mut_subcommand(name, |subcommand| subcommand.hide(true));
+    }
+
+    command.mut_subcommand("agent", |agent_cmd| {
+        agent_cmd
+            .mut_subcommand("run", hide_hosted_agent_run_args_for_local_only)
+            .mut_subcommand("run-cloud", |subcommand| subcommand.hide(true))
+            .mut_subcommand("profile", |subcommand| subcommand.hide(true))
+            .mut_subcommand("list", |subcommand| subcommand.hide(true))
+    })
+}
+
+fn hide_hosted_agent_run_args_for_local_only(mut command: clap::Command) -> clap::Command {
+    for name in [
+        "saved_prompt",
+        "share",
+        "mcp_servers",
+        "environment",
+        "task_id",
+        "bedrock_inference_role",
+        "conversation",
+        "profile",
+        "no_snapshot",
+        "snapshot_upload_timeout",
+        "snapshot_script_timeout",
+    ] {
+        command = command.mut_arg(name, |arg| arg.hide(true));
+    }
+
+    command
 }
 
 #[cfg(not(target_family = "wasm"))]
