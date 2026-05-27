@@ -267,15 +267,12 @@ impl GatewayClient {
         });
         let launch_bytes = serde_json::to_vec(&launch_body)?;
 
-        // Intentionally do NOT log `project_root` — it commonly contains
-        // the user's home directory / username and CodeQL flags it as
-        // workspace-uid cleartext logging. Harness + prompt length is
-        // enough context; the daemon records the full body in its events.
-        log::debug!(
-            "cast_agent: launching daemon session (harness={harness}, prompt_len={})",
-            prompt.len()
-        );
-
+        // No debug log of the launch parameters: `harness` and
+        // `project_root` both flow from user-controlled body fields, and
+        // CodeQL's `rust/cleartext-logging` rule treats anything from
+        // request bodies that lands in a log as sensitive. The daemon
+        // already records the full launch body in its session events,
+        // so any debugging that needs the values has them there.
         let launch_resp = unix_http::request(
             socket,
             "POST",
