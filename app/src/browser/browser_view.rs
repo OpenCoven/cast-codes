@@ -392,13 +392,11 @@ impl BrowserView {
             editor
         });
 
-        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
-            match event {
-                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
-                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
-                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
-                _ => {}
-            }
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| match event {
+            EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+            EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+            EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+            _ => {}
         });
 
         Self {
@@ -512,13 +510,11 @@ impl BrowserView {
             editor
         });
 
-        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
-            match event {
-                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
-                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
-                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
-                _ => {}
-            }
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| match event {
+            EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+            EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+            EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+            _ => {}
         });
 
         Self {
@@ -567,7 +563,10 @@ impl BrowserView {
 
     fn zoom_in(&mut self, ctx: &mut ViewContext<Self>) {
         let tab_id = self.model.active_tab().id();
-        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let cur = *self
+            .tab_zoom_steps
+            .get(&tab_id)
+            .unwrap_or(&DEFAULT_ZOOM_STEP);
         let next = zoom_step_in(cur);
         if next == cur {
             return;
@@ -579,7 +578,10 @@ impl BrowserView {
 
     fn zoom_out(&mut self, ctx: &mut ViewContext<Self>) {
         let tab_id = self.model.active_tab().id();
-        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let cur = *self
+            .tab_zoom_steps
+            .get(&tab_id)
+            .unwrap_or(&DEFAULT_ZOOM_STEP);
         let next = zoom_step_out(cur);
         if next == cur {
             return;
@@ -1474,13 +1476,15 @@ impl TypedActionView for BrowserView {
             }
             BrowserViewAction::ToggleFind => self.toggle_find(ctx),
             BrowserViewAction::CloseFind => self.close_find(ctx),
-            BrowserViewAction::FindNext => {
+            BrowserViewAction::FindNext =>
+            {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_next();
                 }
             }
-            BrowserViewAction::FindPrev => {
+            BrowserViewAction::FindPrev =>
+            {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_prev();
@@ -1503,7 +1507,10 @@ impl BackingView for BrowserView {
         _ctx: &AppContext,
     ) -> Vec<MenuItem<BrowserViewAction>> {
         let tab_id = self.model.active_tab().id();
-        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let cur = *self
+            .tab_zoom_steps
+            .get(&tab_id)
+            .unwrap_or(&DEFAULT_ZOOM_STEP);
         let pct = (zoom_level_for_step(cur) * 100.0).round() as i32;
         let reset_label = format!("Reset zoom ({pct}%)");
         let modifier = if cfg!(target_os = "macos") {
