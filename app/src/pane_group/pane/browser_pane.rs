@@ -37,11 +37,7 @@ impl BrowserPane {
     /// platform notes). It is accepted unconditionally so callers don't
     /// need to cfg-gate; on wasm it is discarded because there is no
     /// WebKit data store to scope.
-    pub fn new<V: View>(
-        url: Option<String>,
-        session_id: String,
-        ctx: &mut ViewContext<V>,
-    ) -> Self {
+    pub fn new<V: View>(url: Option<String>, session_id: String, ctx: &mut ViewContext<V>) -> Self {
         let view = ctx.add_typed_action_view(move |ctx| {
             #[cfg(not(target_family = "wasm"))]
             {
@@ -62,8 +58,8 @@ impl BrowserPane {
         session_id: String,
         ctx: &mut ViewContext<V>,
     ) -> Self {
-        let view = ctx
-            .add_typed_action_view(move |ctx| BrowserView::from_state(state, &session_id, ctx));
+        let view =
+            ctx.add_typed_action_view(move |ctx| BrowserView::from_state(state, &session_id, ctx));
         Self::from_view(view, ctx)
     }
 
@@ -142,11 +138,7 @@ impl PaneContent for BrowserPane {
         self.view.as_ref(ctx).is_being_dragged()
     }
 
-    fn on_workspace_tab_visibility_changed(
-        &self,
-        visible: bool,
-        ctx: &mut ViewContext<PaneGroup>,
-    ) {
+    fn on_workspace_tab_visibility_changed(&self, visible: bool, ctx: &mut ViewContext<PaneGroup>) {
         let browser_view = self.browser_view(ctx);
         browser_view.update(ctx, |view, _ctx| view.set_workspace_tab_visible(visible));
     }

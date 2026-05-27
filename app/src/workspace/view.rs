@@ -25483,28 +25483,6 @@ fn compute_default_panel_widths(
     }
 }
 
-#[cfg(test)]
-mod tab_bar_collapse_tests {
-    use super::*;
-
-    #[test]
-    fn manual_collapse_hides_tab_bar_until_revealed() {
-        assert_eq!(
-            resolve_manual_tab_bar_mode(true, false),
-            Some(ShowTabBar::Hidden)
-        );
-        assert_eq!(
-            resolve_manual_tab_bar_mode(true, true),
-            Some(ShowTabBar::Stacked)
-        );
-    }
-
-    #[test]
-    fn manual_collapse_does_not_override_regular_mode_when_disabled() {
-        assert_eq!(resolve_manual_tab_bar_mode(false, false), None);
-    }
-}
-
 /// Idempotently sets the opencode-warp plugin entry in `~/.config/opencode/opencode.json`.
 /// Removes any existing opencode-warp plugin entries (both local file:// and github:) and adds
 /// the given `new_entry`. Creates the config file with a default structure if it doesn't exist.
@@ -25559,5 +25537,27 @@ fn set_opencode_warp_plugin(new_entry: &str) -> String {
             Err(e) => format!("Failed to write opencode.json: {e}"),
         },
         Err(e) => format!("Failed to serialize opencode.json: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tab_bar_collapse_tests {
+    use super::*;
+
+    #[test]
+    fn manual_collapse_hides_tab_bar_until_revealed() {
+        assert_eq!(
+            resolve_manual_tab_bar_mode(true, false),
+            Some(ShowTabBar::Hidden)
+        );
+        assert_eq!(
+            resolve_manual_tab_bar_mode(true, true),
+            Some(ShowTabBar::Stacked)
+        );
+    }
+
+    #[test]
+    fn manual_collapse_does_not_override_regular_mode_when_disabled() {
+        assert_eq!(resolve_manual_tab_bar_mode(false, false), None);
     }
 }

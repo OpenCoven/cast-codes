@@ -27,6 +27,9 @@ use super::{alacritty_parser::AlacrittyConfig, model::TerminalType};
 #[cfg(target_os = "macos")]
 use super::iterm_parser::ITermProfile;
 
+// Theme imports surface this enum once per UI action, so the size delta
+// between variants isn't a hot-path concern — allow the lint here.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum ThemeType {
     LightAndDark { light: WarpTheme, dark: WarpTheme },

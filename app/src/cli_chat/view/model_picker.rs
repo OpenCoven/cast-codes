@@ -36,7 +36,7 @@ pub fn render(view: &ChatPanelView, app: &AppContext) -> Box<dyn Element> {
 
     // Determine the label for the current agent/model.
     let chat = view.chat_model.as_ref(app);
-    let label = current_agent_model_label(chat.binding(), &chat, app);
+    let label = current_agent_model_label(chat.binding(), chat, app);
 
     let label_element = Text::new(label, font_family, font_size).finish();
 

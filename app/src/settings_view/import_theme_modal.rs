@@ -189,8 +189,7 @@ impl ImportThemeBody {
                     ctx.emit(ImportThemeBodyEvent::Close);
                 }
                 Ok(_) => {
-                    self.show_error =
-                        Some("No color blocks were found in the theme.".to_string());
+                    self.show_error = Some("No color blocks were found in the theme.".to_string());
                     ctx.notify();
                 }
                 Err(e) => {
@@ -282,12 +281,7 @@ impl View for ImportThemeBody {
 
         // ── Status line ───────────────────────────────────────────────────
         let (status_text, status_color, has_light, has_dark) = match &self.state {
-            FetchState::Idle => (
-                String::new(),
-                theme.disabled_ui_text_color(),
-                false,
-                false,
-            ),
+            FetchState::Idle => (String::new(), theme.disabled_ui_text_color(), false, false),
             FetchState::Fetching => (
                 "Fetching theme…".to_string(),
                 theme.disabled_ui_text_color(),

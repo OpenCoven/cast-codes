@@ -26,6 +26,7 @@ pub(crate) const OPENCOVEN_WARNING: ColorU = ColorU {
 
 /// Brand muted text colour (`#5A5A65`) — used for closed-session status
 /// dots and secondary metadata in Coven session rows.
+#[allow(dead_code)]
 pub(crate) const OPENCOVEN_MUTED: ColorU = ColorU {
     r: 90,
     g: 90,

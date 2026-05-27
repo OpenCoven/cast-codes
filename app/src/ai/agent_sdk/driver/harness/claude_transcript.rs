@@ -180,7 +180,6 @@ pub(crate) fn read_envelope(
 /// - `<config_root>/projects/<encoded_cwd>/<uuid>.jsonl` - main transcript
 /// - `<config_root>/projects/<encoded_cwd>/<uuid>/subagents/<stem>.jsonl` - subagents
 /// - `<config_root>/todos/<stem>.json` - per-agent todo lists
-
 fn validated_stem<'a>(stem: &'a str, field_name: &str) -> Result<&'a str> {
     anyhow::ensure!(!stem.is_empty(), "{field_name} stem cannot be empty");
     let path = Path::new(stem);
