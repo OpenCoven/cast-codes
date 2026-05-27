@@ -286,7 +286,9 @@ async fn stream_messages_streams_real_session() {
                     deltas += 1;
                     accumulated.push_str(&content);
                 }
-                MessageChunk::Done { conversation_id: cid } => {
+                MessageChunk::Done {
+                    conversation_id: cid,
+                } => {
                     assert_eq!(cid, conversation_id, "done correlates");
                     saw_done = true;
                     break;
