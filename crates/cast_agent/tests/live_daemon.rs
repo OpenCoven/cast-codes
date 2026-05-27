@@ -161,7 +161,15 @@ async fn send_message_runs_real_session() {
         .await
         .expect("send_message against live daemon");
 
-    println!("daemon session id:  {}", resp.conversation_id);
+    // Print only an 8-char prefix — matches the read-path test's display
+    // pattern and avoids CodeQL `rust/cleartext-logging` flagging the
+    // full session uid even from gated test code.
+    let id_prefix: String = resp
+        .conversation_id
+        .chars()
+        .take(8.min(resp.conversation_id.len()))
+        .collect();
+    println!("daemon session id:  {id_prefix}\u{2026}");
     println!(
         "final status:       {}",
         resp.body

@@ -267,8 +267,12 @@ impl GatewayClient {
         });
         let launch_bytes = serde_json::to_vec(&launch_body)?;
 
+        // Intentionally do NOT log `project_root` — it commonly contains
+        // the user's home directory / username and CodeQL flags it as
+        // workspace-uid cleartext logging. Harness + prompt length is
+        // enough context; the daemon records the full body in its events.
         log::debug!(
-            "cast_agent: launching daemon session (harness={harness}, projectRoot={project_root}, prompt_len={})",
+            "cast_agent: launching daemon session (harness={harness}, prompt_len={})",
             prompt.len()
         );
 
@@ -299,8 +303,11 @@ impl GatewayClient {
                 }),
             }),
             Err(err) => {
+                // Intentionally do NOT log the daemon session id — the
+                // daemon already records it in its events and CodeQL
+                // flags session-uid cleartext logging.
                 log::warn!(
-                    "cast_agent: chat collect failed for {session_id}: {err}; \
+                    "cast_agent: chat collect failed: {err}; \
                      killing session to release the daemon slot"
                 );
                 let kill_path = format!("/api/v1/sessions/{session_id}/kill");
