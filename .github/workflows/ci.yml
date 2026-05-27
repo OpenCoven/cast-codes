@@ -101,7 +101,11 @@ jobs:
 
   tests:
     name: Run ${{ matrix.name }} tests
-    timeout-minutes: 25
+    # Stock GitHub-hosted runners (2-core Linux, 4-core Windows) are roughly
+    # 6× slower than the larger SKUs the upstream Warp workflow assumed, so
+    # the previous 25-minute ceiling was triggering cancellations before
+    # tests finished compiling. 90m leaves headroom on cold caches.
+    timeout-minutes: 90
     env:
       # The public CastCodes repo does not provision hosted SSH test fixtures.
       # Tests that need those fixtures include `_ssh_` in their name.
