@@ -1,8 +1,8 @@
 #![cfg_attr(target_family = "wasm", allow(dead_code))]
 
-use std::{env, fmt, path::Path};
 #[cfg(not(target_family = "wasm"))]
 use std::ffi::OsString;
+use std::{env, fmt, path::Path};
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use url::Url;
