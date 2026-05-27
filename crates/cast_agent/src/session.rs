@@ -136,6 +136,10 @@ impl From<DaemonSessionRecord> for CovenSession {
     }
 }
 
+// Only called from the Unix-transport gateway; gated to avoid
+// `-D dead-code` on Windows/wasm builds. The unit tests below still
+// exercise it via `cfg(test)` on all platforms.
+#[cfg(any(unix, test))]
 pub(crate) fn convert_daemon_sessions(records: Vec<DaemonSessionRecord>) -> Vec<CovenSession> {
     records.into_iter().map(CovenSession::from).collect()
 }

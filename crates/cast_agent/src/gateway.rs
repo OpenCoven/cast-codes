@@ -36,7 +36,11 @@ use std::sync::{
     Arc,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
+// `anyhow!()` only fires inside cfg(unix) branches; importing
+// unconditionally would trip `-D unused-imports` on Windows/wasm.
+#[cfg(unix)]
+use anyhow::anyhow;
 use futures::{SinkExt, Stream, StreamExt};
 #[cfg(unix)]
 use instant::Instant;
