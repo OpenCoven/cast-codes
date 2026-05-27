@@ -19,12 +19,14 @@ pub struct ComuxPane {
     pub active: bool,
 }
 
+#[cfg(unix)]
 #[derive(serde::Serialize)]
 struct ListPanesRequest {
     #[serde(rename = "type")]
     kind: &'static str,
 }
 
+#[cfg(unix)]
 #[derive(serde::Deserialize)]
 struct ListPanesResponse {
     panes: Vec<ComuxPane>,
