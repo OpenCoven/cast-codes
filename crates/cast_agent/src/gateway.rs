@@ -1,33 +1,64 @@
 //! HTTP + WebSocket client for the Coven Gateway.
 //!
-//! Endpoints used:
-//! - `GET  /health`                 — startup probe; populates `is_available()`.
-//! - `POST /v1/messages`            — send a chat message, returns a response body.
-//! - `WS   /v1/messages/stream`     — stream a chat response back as chunks.
-//! - `GET  /v1/sessions`            — list active Coven sessions.
-//! - `POST /v1/sessions`            — open a session by name.
-//! - `DELETE /v1/sessions/:id`      — close a session.
+//! Two transports, chosen by config:
 //!
-//! Substrate is collected client-side (see `crate::substrate`) and is not
-//! fetched from the gateway today. See `CAST-AGENT.md` for the proposed
-//! Runs / Substrate wire contracts.
+//! - **Unix transport** (preferred): `tokio::net::UnixStream` to
+//!   `~/.coven/coven.sock`. Talks `/api/v1/*` to the live `coven` daemon.
+//!   This is what the npm-distributed daemon actually serves. Non-streamed
+//!   chat is driven through the daemon's session lifecycle. WebSocket
+//!   streaming is not supported by the daemon, so `stream_messages` returns
+//!   a clear error in this mode.
+//! - **TCP transport** (legacy): `reqwest` to `gateway_url`. Talks
+//!   `/v1/*` to a hypothetical Coven Gateway that mirrors the schema
+//!   CastCodes originally shipped against. Kept for back-compat with
+//!   environments that have such a gateway in front of (or instead of)
+//!   the daemon.
 //!
-//! Auth header is `Authorization: Bearer <token>` when [`CastAgentConfig::token`] is set.
+//! Endpoints used on Unix:
+//! - `GET  /api/v1/health`                — startup probe.
+//! - `GET  /api/v1/sessions`              — list active Coven sessions.
+//! - `POST /api/v1/sessions`              — open a session.
+//! - `POST /api/v1/sessions/:id/kill`     — close (kill) a session
+//!   (the daemon exposes no DELETE method; kill is the closest analogue).
+//!
+//! Endpoints used on TCP (legacy):
+//! - `GET  /health`, `POST /v1/messages`, `WS /v1/messages/stream`,
+//!   `GET/POST /v1/sessions`, `DELETE /v1/sessions/:id`.
+//!
+//! Auth header is `Authorization: Bearer <token>` when
+//! [`CastAgentConfig::token`] is set on TCP requests. The Unix-transport
+//! daemon currently relies on process-local trust via socket file mode.
 
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use futures::{SinkExt, Stream, StreamExt};
+use instant::Instant;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as WsMessage};
 
 use crate::{
     agent::{AgentMessage, AgentResponse},
     config::CastAgentConfig,
-    session::CovenSession,
+    daemon_chat,
+    session::{convert_daemon_sessions, CovenSession, DaemonSessionRecord},
+    unix_http,
 };
+
+/// Maximum time we wait for a non-interactive daemon session to reach a
+/// terminal status before we give up and kill it. Chat turns through
+/// real harnesses can take a while (Codex exploration, Claude tool use),
+/// but a single non-interactive prompt should not exceed five minutes —
+/// past that, almost certainly stuck.
+const DAEMON_SESSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// Interval between event polls during a chat turn. Short enough for
+/// reasonable interactivity, long enough that a wedged daemon doesn't
+/// turn into a busy loop.
+const DAEMON_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// A chunk of a streamed chat response from `/v1/messages/stream`.
 ///
@@ -51,36 +82,72 @@ pub enum MessageChunk {
     },
 }
 
+enum Transport {
+    Unix { socket: PathBuf },
+    Tcp { http: reqwest::Client },
+}
+
 pub struct GatewayClient {
     config: Arc<CastAgentConfig>,
-    http: reqwest::Client,
+    transport: Transport,
     available: AtomicBool,
 }
 
 impl GatewayClient {
     pub fn new(config: Arc<CastAgentConfig>) -> Self {
-        let http = reqwest::Client::builder()
-            .timeout(config.request_timeout)
-            .build()
-            .expect("cast_agent: failed to build reqwest client (TLS init?)");
+        let transport = match config.socket_path.clone() {
+            Some(socket) => Transport::Unix { socket },
+            None => {
+                let http = reqwest::Client::builder()
+                    .timeout(config.request_timeout)
+                    .build()
+                    .expect("cast_agent: failed to build reqwest client (TLS init?)");
+                Transport::Tcp { http }
+            }
+        };
         Self {
             config,
-            http,
+            transport,
             available: AtomicBool::new(false),
         }
     }
 
-    /// Hit `GET /health` and update `is_available()`. Never panics; logs on
-    /// failure and falls back to `false` (degraded mode).
+    /// Hit `GET /health` (or `/api/v1/health` on Unix) and update
+    /// `is_available()`. Never panics; logs on failure and falls back to
+    /// `false` (degraded mode).
     pub async fn health_probe(&self) {
-        let url = format!("{}/health", self.config.gateway_url.trim_end_matches('/'));
-        let ok = match self.http.get(&url).send().await {
-            Ok(resp) => resp.status().is_success(),
-            Err(err) => {
-                log::warn!(
-                    "cast_agent: Coven Gateway health probe failed for {url}: {err} — running in degraded mode"
-                );
-                false
+        let ok = match &self.transport {
+            Transport::Unix { socket } => {
+                match unix_http::request(
+                    socket,
+                    "GET",
+                    "/api/v1/health",
+                    None,
+                    self.config.request_timeout,
+                )
+                .await
+                {
+                    Ok(resp) => (200..300).contains(&resp.status),
+                    Err(err) => {
+                        log::warn!(
+                            "cast_agent: Coven daemon health probe failed for {}: {err} — running in degraded mode",
+                            socket.display()
+                        );
+                        false
+                    }
+                }
+            }
+            Transport::Tcp { http } => {
+                let url = format!("{}/health", self.config.gateway_url.trim_end_matches('/'));
+                match http.get(&url).send().await {
+                    Ok(resp) => resp.status().is_success(),
+                    Err(err) => {
+                        log::warn!(
+                            "cast_agent: Coven Gateway health probe failed for {url}: {err} — running in degraded mode"
+                        );
+                        false
+                    }
+                }
             }
         };
         self.available.store(ok, Ordering::Release);
@@ -97,66 +164,361 @@ impl GatewayClient {
             .map(|t| ("Authorization", format!("Bearer {t}")))
     }
 
-    fn url(&self, path: &str) -> String {
+    fn tcp_url(&self, path: &str) -> String {
         format!("{}{}", self.config.gateway_url.trim_end_matches('/'), path)
     }
 
+    /// Send a non-streamed chat message.
+    ///
+    /// On the **Unix transport**, this drives the daemon's session
+    /// lifecycle: extract a text prompt from `msg.body`, `POST
+    /// /api/v1/sessions` with `launchMode: "nonInteractive"`, poll the
+    /// `/api/v1/events` stream and `/api/v1/sessions/:id` status until
+    /// the session reaches a terminal status, and return the accumulated
+    /// output as an [`AgentResponse`]. The returned `conversation_id`
+    /// is the daemon's session id (not the input `msg.conversation_id`),
+    /// so callers can join the result back to the session list and
+    /// fetch full event history later. On timeout, the session is killed.
+    ///
+    /// On the **TCP transport**, this falls through to the legacy
+    /// `POST /v1/messages` shape unchanged.
     pub async fn send_message(&self, msg: AgentMessage) -> anyhow::Result<AgentResponse> {
-        let mut req = self.http.post(self.url("/v1/messages")).json(&msg);
-        if let Some((k, v)) = self.auth_header() {
-            req = req.header(k, v);
+        match &self.transport {
+            Transport::Unix { socket } => self.send_message_via_daemon(socket, msg).await,
+            Transport::Tcp { http } => {
+                // /v1/messages is inherently long-running on the bridge —
+                // it create-polls-collects a daemon session. The default
+                // request_timeout (used by /health, /v1/sessions) is too
+                // short for chat. Override per-call to match the Unix
+                // path's `DAEMON_SESSION_TIMEOUT`.
+                let mut req = http
+                    .post(self.tcp_url("/v1/messages"))
+                    .timeout(DAEMON_SESSION_TIMEOUT)
+                    .json(&msg);
+                if let Some((k, v)) = self.auth_header() {
+                    req = req.header(k, v);
+                }
+                let resp = req
+                    .send()
+                    .await
+                    .with_context(|| "POST /v1/messages")?
+                    .error_for_status()?;
+                Ok(resp.json::<AgentResponse>().await?)
+            }
         }
-        let resp = req
-            .send()
+    }
+
+    /// Unix-transport implementation of `send_message`. Pulled out so
+    /// the create-poll-collect dance doesn't bloat the public method.
+    async fn send_message_via_daemon(
+        &self,
+        socket: &std::path::Path,
+        msg: AgentMessage,
+    ) -> anyhow::Result<AgentResponse> {
+        let prompt = daemon_chat::extract_prompt(&msg.body).ok_or_else(|| {
+            anyhow!(
+                "could not extract a prompt from AgentMessage.body; \
+                 expected `prompt`, `text`, `message`, or `messages[].content` \
+                 (got: {})",
+                serde_json::to_string(&msg.body).unwrap_or_default()
+            )
+        })?;
+
+        let project_root = std::env::var("CAST_AGENT_PROJECT_ROOT")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                msg.body
+                    .get("projectRoot")
+                    .and_then(serde_json::Value::as_str)
+                    .map(String::from)
+            })
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .map(|p| p.to_string_lossy().to_string())
+            })
+            .ok_or_else(|| anyhow!("could not determine projectRoot for daemon session"))?;
+
+        let harness = std::env::var("CAST_AGENT_HARNESS")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                msg.body
+                    .get("harness")
+                    .and_then(serde_json::Value::as_str)
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| "claude".into());
+
+        let title = msg
+            .body
+            .get("title")
+            .and_then(serde_json::Value::as_str)
+            .map(String::from)
+            .unwrap_or_else(|| prompt.chars().take(60).collect::<String>());
+
+        let launch_body = serde_json::json!({
+            "projectRoot": project_root,
+            "harness": harness,
+            "prompt": prompt,
+            "launchMode": "nonInteractive",
+            "title": title,
+        });
+        let launch_bytes = serde_json::to_vec(&launch_body)?;
+
+        log::debug!(
+            "cast_agent: launching daemon session (harness={harness}, projectRoot={project_root}, prompt_len={})",
+            prompt.len()
+        );
+
+        let launch_resp = unix_http::request(
+            socket,
+            "POST",
+            "/api/v1/sessions",
+            Some(launch_bytes.as_slice()),
+            self.config.request_timeout,
+        )
+        .await
+        .with_context(|| "POST /api/v1/sessions (unix)")?;
+        let launched = launch_resp.into_json::<DaemonSessionRecord>()?;
+        let session_id = launched.id.clone();
+
+        match self
+            .collect_session_output(socket, &session_id, prompt.len())
             .await
-            .with_context(|| "POST /v1/messages")?
-            .error_for_status()?;
-        Ok(resp.json::<AgentResponse>().await?)
+        {
+            Ok((output, final_status, exit_code)) => Ok(AgentResponse {
+                conversation_id: session_id,
+                body: serde_json::json!({
+                    "text": output,
+                    "status": final_status,
+                    "exit_code": exit_code,
+                    "harness": harness,
+                    "project_root": project_root,
+                }),
+            }),
+            Err(err) => {
+                log::warn!(
+                    "cast_agent: chat collect failed for {session_id}: {err}; \
+                     killing session to release the daemon slot"
+                );
+                let kill_path = format!("/api/v1/sessions/{session_id}/kill");
+                let _ = unix_http::request(
+                    socket,
+                    "POST",
+                    &kill_path,
+                    Some(b"{}"),
+                    self.config.request_timeout,
+                )
+                .await;
+                Err(err)
+            }
+        }
+    }
+
+    /// Poll the daemon for events + status of the given session until it
+    /// reaches a terminal status or the timeout fires. Returns the
+    /// accumulated `output` text, the final status string, and the exit
+    /// code (if any).
+    async fn collect_session_output(
+        &self,
+        socket: &std::path::Path,
+        session_id: &str,
+        _prompt_len: usize,
+    ) -> anyhow::Result<(String, String, Option<i32>)> {
+        let deadline = Instant::now() + DAEMON_SESSION_TIMEOUT;
+        let mut after_seq: u64 = 0;
+        let mut output = String::new();
+
+        loop {
+            if Instant::now() > deadline {
+                return Err(anyhow!(
+                    "session {session_id} did not reach a terminal status within {:?}",
+                    DAEMON_SESSION_TIMEOUT
+                ));
+            }
+
+            // Drain new events.
+            let events_path = format!("/api/v1/events?sessionId={session_id}&afterSeq={after_seq}");
+            let events_resp = unix_http::request(
+                socket,
+                "GET",
+                &events_path,
+                None,
+                self.config.request_timeout,
+            )
+            .await
+            .with_context(|| format!("GET {events_path}"))?;
+            let page = events_resp.into_json::<daemon_chat::DaemonEventsPage>()?;
+            for ev in &page.events {
+                if ev.kind == "output" {
+                    if let Some(data) = daemon_chat::parse_output_data(&ev.payload_json) {
+                        output.push_str(&data);
+                    }
+                }
+                if ev.seq > after_seq {
+                    after_seq = ev.seq;
+                }
+            }
+
+            // Check terminal status. The daemon emits status transitions
+            // as events too, but the session record is the authoritative
+            // source — race conditions where the last output event is
+            // emitted just before the status flip resolve correctly
+            // because we drain events before checking status.
+            let status_path = format!("/api/v1/sessions/{session_id}");
+            let status_resp = unix_http::request(
+                socket,
+                "GET",
+                &status_path,
+                None,
+                self.config.request_timeout,
+            )
+            .await
+            .with_context(|| format!("GET {status_path}"))?;
+            let rec = status_resp.into_json::<DaemonSessionRecord>()?;
+            if daemon_chat::is_terminal_status(&rec.status) {
+                // One final event drain to capture anything emitted in
+                // the gap between our last fetch and the status flip.
+                let final_events_path =
+                    format!("/api/v1/events?sessionId={session_id}&afterSeq={after_seq}");
+                if let Ok(resp) = unix_http::request(
+                    socket,
+                    "GET",
+                    &final_events_path,
+                    None,
+                    self.config.request_timeout,
+                )
+                .await
+                {
+                    if let Ok(page) = resp.into_json::<daemon_chat::DaemonEventsPage>() {
+                        for ev in &page.events {
+                            if ev.kind == "output" {
+                                if let Some(data) = daemon_chat::parse_output_data(&ev.payload_json)
+                                {
+                                    output.push_str(&data);
+                                }
+                            }
+                        }
+                    }
+                }
+                return Ok((output, rec.status, rec.exit_code));
+            }
+
+            tokio::time::sleep(DAEMON_POLL_INTERVAL).await;
+        }
     }
 
     pub async fn list_sessions(&self) -> anyhow::Result<Vec<CovenSession>> {
-        let mut req = self.http.get(self.url("/v1/sessions"));
-        if let Some((k, v)) = self.auth_header() {
-            req = req.header(k, v);
+        match &self.transport {
+            Transport::Unix { socket } => {
+                let resp = unix_http::request(
+                    socket,
+                    "GET",
+                    "/api/v1/sessions",
+                    None,
+                    self.config.request_timeout,
+                )
+                .await
+                .with_context(|| "GET /api/v1/sessions (unix)")?;
+                let records = resp.into_json::<Vec<DaemonSessionRecord>>()?;
+                Ok(convert_daemon_sessions(records))
+            }
+            Transport::Tcp { http } => {
+                let mut req = http.get(self.tcp_url("/v1/sessions"));
+                if let Some((k, v)) = self.auth_header() {
+                    req = req.header(k, v);
+                }
+                let resp = req
+                    .send()
+                    .await
+                    .with_context(|| "GET /v1/sessions")?
+                    .error_for_status()?;
+                Ok(resp.json::<Vec<CovenSession>>().await?)
+            }
         }
-        let resp = req
-            .send()
-            .await
-            .with_context(|| "GET /v1/sessions")?
-            .error_for_status()?;
-        Ok(resp.json::<Vec<CovenSession>>().await?)
     }
 
     pub async fn open_session(&self, name: &str) -> anyhow::Result<CovenSession> {
-        #[derive(serde::Serialize)]
-        struct OpenBody<'a> {
-            name: &'a str,
+        match &self.transport {
+            Transport::Unix { socket } => {
+                // Daemon's POST /api/v1/sessions takes a richer body than
+                // CastCodes' historical `{name}` shape. We map `name` to
+                // `title` and use the current working directory for
+                // projectRoot; harness defaults to `claude` since that's
+                // the typical CastCodes flow.
+                let cwd = std::env::current_dir()
+                    .ok()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let body = serde_json::json!({
+                    "title": name,
+                    "projectRoot": cwd,
+                    "harness": "claude",
+                });
+                let resp = unix_http::request(
+                    socket,
+                    "POST",
+                    "/api/v1/sessions",
+                    Some(serde_json::to_vec(&body)?.as_slice()),
+                    self.config.request_timeout,
+                )
+                .await
+                .with_context(|| "POST /api/v1/sessions (unix)")?;
+                let record = resp.into_json::<DaemonSessionRecord>()?;
+                Ok(CovenSession::from(record))
+            }
+            Transport::Tcp { http } => {
+                #[derive(serde::Serialize)]
+                struct OpenBody<'a> {
+                    name: &'a str,
+                }
+                let mut req = http
+                    .post(self.tcp_url("/v1/sessions"))
+                    .json(&OpenBody { name });
+                if let Some((k, v)) = self.auth_header() {
+                    req = req.header(k, v);
+                }
+                let resp = req
+                    .send()
+                    .await
+                    .with_context(|| "POST /v1/sessions")?
+                    .error_for_status()?;
+                Ok(resp.json::<CovenSession>().await?)
+            }
         }
-        let mut req = self
-            .http
-            .post(self.url("/v1/sessions"))
-            .json(&OpenBody { name });
-        if let Some((k, v)) = self.auth_header() {
-            req = req.header(k, v);
-        }
-        let resp = req
-            .send()
-            .await
-            .with_context(|| "POST /v1/sessions")?
-            .error_for_status()?;
-        Ok(resp.json::<CovenSession>().await?)
     }
 
     pub async fn close_session(&self, id: &str) -> anyhow::Result<()> {
-        let mut req = self.http.delete(self.url(&format!("/v1/sessions/{id}")));
-        if let Some((k, v)) = self.auth_header() {
-            req = req.header(k, v);
+        match &self.transport {
+            Transport::Unix { socket } => {
+                // The daemon exposes session lifecycle via
+                // `POST /api/v1/sessions/:id/kill` rather than DELETE.
+                let path = format!("/api/v1/sessions/{id}/kill");
+                let resp = unix_http::request(
+                    socket,
+                    "POST",
+                    &path,
+                    Some(b"{}"),
+                    self.config.request_timeout,
+                )
+                .await
+                .with_context(|| format!("POST {path} (unix)"))?;
+                resp.ensure_2xx()
+            }
+            Transport::Tcp { http } => {
+                let mut req = http.delete(self.tcp_url(&format!("/v1/sessions/{id}")));
+                if let Some((k, v)) = self.auth_header() {
+                    req = req.header(k, v);
+                }
+                req.send()
+                    .await
+                    .with_context(|| format!("DELETE /v1/sessions/{id}"))?
+                    .error_for_status()?;
+                Ok(())
+            }
         }
-        req.send()
-            .await
-            .with_context(|| format!("DELETE /v1/sessions/{id}"))?
-            .error_for_status()?;
-        Ok(())
     }
 
     /// Build a `ws://` / `wss://` URL for the given path by rewriting the
@@ -177,21 +539,17 @@ impl GatewayClient {
         format!("{scheme_swapped}{path}")
     }
 
-    /// Open a streaming chat session against `/v1/messages/stream`.
-    ///
-    /// Wire protocol: the client sends the [`AgentMessage`] as a single
-    /// JSON text frame, then the server emits one JSON-encoded
-    /// [`MessageChunk`] per text frame and closes the socket when done.
-    /// Binary frames are ignored; ping/pong is handled by tokio-tungstenite.
-    ///
-    /// The returned stream surfaces transport, JSON, and protocol errors as
-    /// `Err` items; a clean server close ends the stream. Callers should
-    /// not assume `MessageChunk::Done` is always the last item — a stream
-    /// can also end on `MessageChunk::Error` or on a transport failure.
-    ///
-    /// Boxed so the returned stream is `Unpin` and callers can drive it
-    /// with `.next().await` without manual pinning.
+    /// Open a streaming chat session against `/v1/messages/stream`. Only
+    /// supported on the TCP transport — the Unix-socket daemon does not
+    /// serve a WebSocket endpoint.
     pub async fn stream_messages(&self, msg: AgentMessage) -> anyhow::Result<MessageStream> {
+        if matches!(self.transport, Transport::Unix { .. }) {
+            return Err(anyhow!(
+                "stream_messages is not supported on the Unix daemon transport \
+                 (daemon does not serve WebSocket endpoints)"
+            ));
+        }
+
         let url = self.ws_url("/v1/messages/stream");
         let mut request = url
             .as_str()
@@ -214,9 +572,6 @@ impl GatewayClient {
             .await
             .with_context(|| "send initial AgentMessage frame")?;
 
-        // Drive the read side as a stream. Each text frame is parsed as a
-        // `MessageChunk`. Non-text frames are skipped (tungstenite already
-        // handles ping/pong internally), and close frames end the stream.
         let stream = futures::stream::unfold(ws, |mut ws| async move {
             loop {
                 match ws.next().await {
@@ -226,7 +581,7 @@ impl GatewayClient {
                         return Some((parsed, ws));
                     }
                     Some(Ok(WsMessage::Close(_))) | None => return None,
-                    Some(Ok(_)) => continue, // ignore binary / ping / pong
+                    Some(Ok(_)) => continue,
                     Some(Err(err)) => return Some((Err(err.into()), ws)),
                 }
             }

@@ -14,10 +14,12 @@
 pub mod agent;
 pub mod comux;
 pub mod config;
+mod daemon_chat;
 pub mod gateway;
 pub mod runtime;
 pub mod session;
 pub mod substrate;
+mod unix_http;
 
 pub use agent::{AgentBackend, AgentMessage, AgentResponse, CastAgent};
 pub use comux::ComuxPane;
