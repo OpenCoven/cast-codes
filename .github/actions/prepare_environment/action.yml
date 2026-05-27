@@ -96,7 +96,14 @@ runs:
           # Try to install warp-channel-config but don't complain if it cannot
           # be installed.
           ./script/install_channel_config || true
-          if ${{ inputs.install_release_deps == 'true' }}; then
+          if ${{ inputs.install_test_deps == 'true' }}; then
+            # Test deps include cargo-nextest (the test harness CI uses).
+            # The linux branch below already handles this; macOS used
+            # to fall through to install_cargo_build_deps, which doesn't
+            # install nextest -- so `cargo nextest run` blew up later
+            # with "no such command: nextest".
+            ./script/install_cargo_test_deps
+          elif ${{ inputs.install_release_deps == 'true' }}; then
             ./script/install_cargo_release_deps
           else
             ./script/install_cargo_build_deps
