@@ -262,6 +262,7 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
 ///
 /// Accepts (with or without scheme, with optional `www.`):
 /// - `https://tweakcn.com/themes/<id>` — public theme page
+/// - `https://tweakcn.com/r/<id>` — share-link redirect path
 /// - `https://tweakcn.com/r/themes/<id>.json` — registry JSON endpoint
 /// - `https://tweakcn.com/editor/theme?theme=<id>` — editor with theme param
 pub fn extract_theme_id(input: &str) -> Result<String, ImportError> {
@@ -281,7 +282,10 @@ pub fn extract_theme_id(input: &str) -> Result<String, ImportError> {
     let url = url::Url::parse(&with_scheme)
         .map_err(|e| ImportError::InvalidShareUrl(format!("Not a valid URL: {e}")))?;
 
-    let host = url.host_str().unwrap_or_default().trim_start_matches("www.");
+    let host = url
+        .host_str()
+        .unwrap_or_default()
+        .trim_start_matches("www.");
     if !host.eq_ignore_ascii_case("tweakcn.com") {
         return Err(ImportError::InvalidShareUrl(format!(
             "Expected a tweakcn.com link, got `{host}`"
@@ -293,9 +297,12 @@ pub fn extract_theme_id(input: &str) -> Result<String, ImportError> {
         .map(|s| s.filter(|seg| !seg.is_empty()).collect())
         .unwrap_or_default();
 
+    let normalize_id = |id: &str| id.trim_end_matches(".json").to_string();
+
     let id = match segments.as_slice() {
-        ["themes", id] => (*id).to_string(),
-        ["r", "themes", file] => file.trim_end_matches(".json").to_string(),
+        ["themes", id] => normalize_id(id),
+        ["r", id] => normalize_id(id),
+        ["r", "themes", file] => normalize_id(file),
         ["editor", "theme"] => url
             .query_pairs()
             .find_map(|(k, v)| (k == "theme").then(|| v.into_owned()))
@@ -859,8 +866,14 @@ mod share_url_tests {
 
     #[test]
     fn extracts_id_from_registry_json_url() {
-        let id =
-            extract_theme_id("https://tweakcn.com/r/themes/cmcvyowo3000204jtemyy3akj.json").unwrap();
+        let id = extract_theme_id("https://tweakcn.com/r/themes/cmcvyowo3000204jtemyy3akj.json")
+            .unwrap();
+        assert_eq!(id, "cmcvyowo3000204jtemyy3akj");
+    }
+
+    #[test]
+    fn extracts_id_from_short_share_path() {
+        let id = extract_theme_id("https://tweakcn.com/r/cmcvyowo3000204jtemyy3akj").unwrap();
         assert_eq!(id, "cmcvyowo3000204jtemyy3akj");
     }
 
