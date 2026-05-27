@@ -11,8 +11,10 @@ use super::browser_model::TabId;
 #[cfg(target_os = "macos")]
 use super::downloads;
 #[cfg(not(target_family = "wasm"))]
-use super::find::{self, FindResultsMessage};
-#[cfg(not(target_family = "wasm"))]
+use super::find;
+#[cfg(target_os = "macos")]
+use super::find::FindResultsMessage;
+#[cfg(target_os = "macos")]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
@@ -21,6 +23,13 @@ use super::popup_policy::{self, Decision};
 /// receiver doesn't need a parallel mapping. Popup events don't carry a
 /// `TabId` — the host treats them as "open a new tab" and the new tab gets
 /// its own id.
+//
+// Variants are constructed only by the macOS-gated `attach_if_needed`
+// path (wry handlers); `browser_view.rs` matches on them cross-platform,
+// so on Linux/Windows builds the variants compile but never get
+// constructed. Allowed at the enum level until the non-macOS wry wiring
+// lands.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) enum NativeWebViewEvent {
     /// Document title changed (raw from WKWebView).
@@ -44,6 +53,11 @@ pub(crate) enum NativeWebViewEvent {
 #[cfg(not(target_family = "wasm"))]
 pub(crate) type SharedWebContext = Rc<RefCell<wry::WebContext>>;
 
+// `tab_id`, `event_tx`, and `web_context` are read only by the macOS
+// `attach_if_needed` path; on Linux/Windows builds they get stored at
+// construction but never read. Allowed at the struct level until the
+// non-macOS wry wiring lands.
+#[allow(dead_code)]
 pub(crate) struct NativeBrowserWebView {
     tab_id: TabId,
     #[cfg(not(target_family = "wasm"))]

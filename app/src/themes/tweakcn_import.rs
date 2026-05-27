@@ -222,8 +222,8 @@ pub fn parse_blocks(css: &str) -> Result<ParsedBlocks, ImportError> {
     blocks.name_comment = name_hint;
 
     fn extract_block<'a>(haystack: &'a str, selector: &str) -> Option<&'a str> {
-        let needle = format!("{}", selector);
-        let start = haystack.find(&needle)?;
+        let needle = selector;
+        let start = haystack.find(needle)?;
         let body_start = haystack[start + needle.len()..].find('{')? + start + needle.len() + 1;
         let mut depth = 1;
         let mut end = body_start;
@@ -523,7 +523,9 @@ fn io_to_import(e: std::io::Error) -> ImportError {
     ImportError::Io(e.to_string())
 }
 
-fn tweakcn_ui_mapping() -> &'static [(&'static str, fn(&mut UiTokens, ColorU))] {
+type UiTokenSetter = fn(&mut UiTokens, ColorU);
+
+fn tweakcn_ui_mapping() -> &'static [(&'static str, UiTokenSetter)] {
     &[
         ("card", |u, c| u.card = Some(c)),
         ("card-foreground", |u, c| u.card_foreground = Some(c)),

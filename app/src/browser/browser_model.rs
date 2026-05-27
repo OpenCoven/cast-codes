@@ -144,18 +144,25 @@ impl BrowserTab {
         true
     }
 
+    // Tab pin + favicon accessors/mutators are scaffolding for an upcoming
+    // tab-strip UI revision; no caller wires them yet but they're read by
+    // the matching BrowserModel helpers below.
+    #[allow(dead_code)]
     pub fn pinned(&self) -> bool {
         self.pinned
     }
 
+    #[allow(dead_code)]
     pub fn favicon(&self) -> Option<&str> {
         self.favicon.as_deref()
     }
 
+    #[allow(dead_code)]
     fn set_pinned(&mut self, pinned: bool) {
         self.pinned = pinned;
     }
 
+    #[allow(dead_code)]
     fn set_favicon(&mut self, favicon: Option<String>) {
         self.favicon = favicon;
     }
@@ -324,6 +331,7 @@ impl BrowserModel {
         self.tabs[idx].replace_current_url(url)
     }
 
+    #[allow(dead_code)]
     pub fn set_pinned(&mut self, id: TabId, pinned: bool) -> bool {
         let Some(idx) = self.index_of(id) else {
             return false;
@@ -332,6 +340,7 @@ impl BrowserModel {
         true
     }
 
+    #[allow(dead_code)]
     pub fn set_favicon(&mut self, id: TabId, favicon: Option<String>) -> bool {
         let Some(idx) = self.index_of(id) else {
             return false;

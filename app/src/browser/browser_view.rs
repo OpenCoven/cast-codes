@@ -938,6 +938,7 @@ impl BrowserView {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_toolbar_button(
         &self,
         icon: Icon,
@@ -1291,6 +1292,7 @@ impl BrowserView {
         .finish()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_tab_chip(
         &self,
         idx: usize,
@@ -1326,7 +1328,7 @@ impl BrowserView {
             Icon::X,
             TAB_CLOSE_BUTTON_SIZE,
             close_mouse,
-            chip_text_color.into(),
+            chip_text_color,
         )
         .with_tooltip(move || {
             ui_builder

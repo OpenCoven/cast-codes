@@ -63,6 +63,12 @@ pub(crate) fn clear_script() -> &'static str {
 
 /// Shape of the JSON message the find script posts back via
 /// `window.ipc.postMessage`. See `assets/bundled/js/find.js`.
+//
+// Constructed only by serde inside webview_host's macOS-gated IPC
+// handler; on Linux/Windows the type compiles but nothing deserializes
+// into it. Allowed at the struct level until the non-macOS wry wiring
+// lands.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct FindResultsMessage {
     pub kind: String,
