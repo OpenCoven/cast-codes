@@ -79,6 +79,7 @@ async fn stream_messages_yields_chunks_in_order() {
         gateway_url: format!("http://127.0.0.1:{port}"),
         token: None,
         request_timeout: std::time::Duration::from_secs(5),
+        socket_path: None,
     });
     let client = GatewayClient::new(config);
 
