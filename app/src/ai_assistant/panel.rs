@@ -43,7 +43,13 @@ use crate::ui_components::buttons::icon_button;
 use crate::workspace::WorkspaceAction;
 use crate::workspace::{ActiveSession, TAB_BAR_HEIGHT};
 
-use crate::util::bindings::{cmd_or_ctrl, cmd_or_ctrl_shift, CustomAction};
+use crate::util::bindings::{cmd_or_ctrl_shift, CustomAction};
+// `cmd_or_ctrl` is only referenced from inside `#[cfg(feature = "cast-agent")]`
+// blocks below; importing it unconditionally trips clippy's
+// `unused_imports` lint (promoted to `-D warnings` in CI) on builds
+// without the feature.
+#[cfg(feature = "cast-agent")]
+use crate::util::bindings::cmd_or_ctrl;
 use warpui::elements::MouseStateHandle;
 use warpui::elements::ParentElement;
 use warpui::elements::Resizable;

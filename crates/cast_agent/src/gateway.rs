@@ -29,6 +29,7 @@
 //! [`CastAgentConfig::token`] is set on TCP requests. The Unix-transport
 //! daemon currently relies on process-local trust via socket file mode.
 
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -37,14 +38,23 @@ use std::sync::{
 
 use anyhow::{anyhow, Context};
 use futures::{SinkExt, Stream, StreamExt};
+#[cfg(unix)]
 use instant::Instant;
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as WsMessage};
 
 use crate::{
     agent::{AgentMessage, AgentResponse},
     config::CastAgentConfig,
+    session::CovenSession,
+};
+// Unix transport: direct HTTP/1.1 over the daemon's socket. The
+// `daemon_chat` and `unix_http` modules + the daemon-shape adapter
+// only compile on Unix; the cross-platform default is the TCP/bridge
+// path below.
+#[cfg(unix)]
+use crate::{
     daemon_chat,
-    session::{convert_daemon_sessions, CovenSession, DaemonSessionRecord},
+    session::{convert_daemon_sessions, DaemonSessionRecord},
     unix_http,
 };
 
@@ -57,7 +67,8 @@ const DAEMON_SESSION_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 
 /// Interval between event polls during a chat turn. Short enough for
 /// reasonable interactivity, long enough that a wedged daemon doesn't
-/// turn into a busy loop.
+/// turn into a busy loop. Only used by the Unix-transport poll loop.
+#[cfg(unix)]
 const DAEMON_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// A chunk of a streamed chat response from `/v1/messages/stream`.
@@ -83,8 +94,18 @@ pub enum MessageChunk {
 }
 
 enum Transport {
+    #[cfg(unix)]
     Unix { socket: PathBuf },
-    Tcp { http: reqwest::Client },
+    Tcp {
+        http: reqwest::Client,
+    },
+}
+
+fn build_http_client(config: &CastAgentConfig) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(config.request_timeout)
+        .build()
+        .expect("cast_agent: failed to build reqwest client (TLS init?)")
 }
 
 pub struct GatewayClient {
@@ -95,15 +116,21 @@ pub struct GatewayClient {
 
 impl GatewayClient {
     pub fn new(config: Arc<CastAgentConfig>) -> Self {
-        let transport = match config.socket_path.clone() {
-            Some(socket) => Transport::Unix { socket },
-            None => {
-                let http = reqwest::Client::builder()
-                    .timeout(config.request_timeout)
-                    .build()
-                    .expect("cast_agent: failed to build reqwest client (TLS init?)");
-                Transport::Tcp { http }
-            }
+        // On non-Unix targets the `socket_path` config field is ignored —
+        // Windows has no `tokio::net::UnixStream`, wasm doesn't run the
+        // daemon — and the TCP/bridge path is the only option.
+        let transport = match () {
+            #[cfg(unix)]
+            () => match config.socket_path.clone() {
+                Some(socket) => Transport::Unix { socket },
+                None => Transport::Tcp {
+                    http: build_http_client(&config),
+                },
+            },
+            #[cfg(not(unix))]
+            () => Transport::Tcp {
+                http: build_http_client(&config),
+            },
         };
         Self {
             config,
@@ -117,6 +144,7 @@ impl GatewayClient {
     /// `false` (degraded mode).
     pub async fn health_probe(&self) {
         let ok = match &self.transport {
+            #[cfg(unix)]
             Transport::Unix { socket } => {
                 match unix_http::request(
                     socket,
@@ -184,6 +212,7 @@ impl GatewayClient {
     /// `POST /v1/messages` shape unchanged.
     pub async fn send_message(&self, msg: AgentMessage) -> anyhow::Result<AgentResponse> {
         match &self.transport {
+            #[cfg(unix)]
             Transport::Unix { socket } => self.send_message_via_daemon(socket, msg).await,
             Transport::Tcp { http } => {
                 // /v1/messages is inherently long-running on the bridge —
@@ -210,6 +239,7 @@ impl GatewayClient {
 
     /// Unix-transport implementation of `send_message`. Pulled out so
     /// the create-poll-collect dance doesn't bloat the public method.
+    #[cfg(unix)]
     async fn send_message_via_daemon(
         &self,
         socket: &std::path::Path,
@@ -325,6 +355,7 @@ impl GatewayClient {
     /// reaches a terminal status or the timeout fires. Returns the
     /// accumulated `output` text, the final status string, and the exit
     /// code (if any).
+    #[cfg(unix)]
     async fn collect_session_output(
         &self,
         socket: &std::path::Path,
@@ -416,6 +447,7 @@ impl GatewayClient {
 
     pub async fn list_sessions(&self) -> anyhow::Result<Vec<CovenSession>> {
         match &self.transport {
+            #[cfg(unix)]
             Transport::Unix { socket } => {
                 let resp = unix_http::request(
                     socket,
@@ -446,6 +478,7 @@ impl GatewayClient {
 
     pub async fn open_session(&self, name: &str) -> anyhow::Result<CovenSession> {
         match &self.transport {
+            #[cfg(unix)]
             Transport::Unix { socket } => {
                 // Daemon's POST /api/v1/sessions takes a richer body than
                 // CastCodes' historical `{name}` shape. We map `name` to
@@ -496,6 +529,7 @@ impl GatewayClient {
 
     pub async fn close_session(&self, id: &str) -> anyhow::Result<()> {
         match &self.transport {
+            #[cfg(unix)]
             Transport::Unix { socket } => {
                 // The daemon exposes session lifecycle via
                 // `POST /api/v1/sessions/:id/kill` rather than DELETE.
@@ -547,11 +581,14 @@ impl GatewayClient {
     /// supported on the TCP transport — the Unix-socket daemon does not
     /// serve a WebSocket endpoint.
     pub async fn stream_messages(&self, msg: AgentMessage) -> anyhow::Result<MessageStream> {
-        if matches!(self.transport, Transport::Unix { .. }) {
-            return Err(anyhow!(
-                "stream_messages is not supported on the Unix daemon transport \
-                 (daemon does not serve WebSocket endpoints)"
-            ));
+        #[cfg(unix)]
+        {
+            if matches!(self.transport, Transport::Unix { .. }) {
+                return Err(anyhow!(
+                    "stream_messages is not supported on the Unix daemon transport \
+                     (daemon does not serve WebSocket endpoints)"
+                ));
+            }
         }
 
         let url = self.ws_url("/v1/messages/stream");
