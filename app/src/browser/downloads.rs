@@ -1,3 +1,9 @@
+// Helpers are consumed by `browser/webview_host.rs`, which is itself
+// scaffolding for the in-progress download pipeline. Until that pipeline
+// gets wired up to a real wry handler, the call chain is unreachable from
+// production code paths, so allow dead_code at the module level.
+#![allow(dead_code)]
+
 //! Download destination resolution for the embedded browser pane.
 //!
 //! wry exposes `with_download_started_handler` (a `Fn(url, &mut PathBuf)

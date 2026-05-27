@@ -1099,19 +1099,6 @@ impl SettingsWidget for LogoutWidget {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::VersionInfoWidget;
-    use warp_core::channel::ChannelState;
-
-    #[test]
-    fn version_info_uses_package_version_when_release_tag_missing() {
-        ChannelState::set_app_version(None);
-
-        assert_eq!(VersionInfoWidget::version_label(), "v0.1.0-local");
-    }
-}
-
 impl SettingsPageMeta for MainSettingsPageView {
     fn section() -> SettingsSection {
         SettingsSection::Account
@@ -1145,5 +1132,18 @@ impl SettingsPageMeta for MainSettingsPageView {
 impl From<ViewHandle<MainSettingsPageView>> for SettingsPageViewHandle {
     fn from(view_handle: ViewHandle<MainSettingsPageView>) -> Self {
         SettingsPageViewHandle::Main(view_handle)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VersionInfoWidget;
+    use warp_core::channel::ChannelState;
+
+    #[test]
+    fn version_info_uses_package_version_when_release_tag_missing() {
+        ChannelState::set_app_version(None);
+
+        assert_eq!(VersionInfoWidget::version_label(), "v0.1.0-local");
     }
 }
