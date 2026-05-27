@@ -95,7 +95,9 @@ pub enum MessageChunk {
 
 enum Transport {
     #[cfg(unix)]
-    Unix { socket: PathBuf },
+    Unix {
+        socket: PathBuf,
+    },
     Tcp {
         http: reqwest::Client,
     },
