@@ -11,10 +11,12 @@ use std::time::Duration;
 use crate::appearance::Appearance;
 use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions};
 use crate::modal::Modal;
-use crate::themes::theme::{CustomTheme, ThemeKind};
-use crate::themes::tweakcn_import::{
-    extract_theme_id, fetch_share_url, write_imported, GamutPolicy, ImportError, ParsedBlocks,
-};
+#[cfg(feature = "local_fs")]
+use crate::themes::theme::CustomTheme;
+use crate::themes::theme::ThemeKind;
+use crate::themes::tweakcn_import::{extract_theme_id, fetch_share_url, ImportError, ParsedBlocks};
+#[cfg(feature = "local_fs")]
+use crate::themes::tweakcn_import::{write_imported, GamutPolicy};
 #[cfg(feature = "local_fs")]
 use crate::user_config;
 use warpui::elements::{

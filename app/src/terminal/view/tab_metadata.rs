@@ -37,6 +37,7 @@ impl GitLabel {
 /// `git_dir` is the per-worktree gitdir (e.g. `/repo/.git/worktrees/feature-a`).
 /// `common_dir` is the shared gitdir (e.g. `/repo/.git`).
 /// When they're equal, the CWD is in the main worktree.
+#[cfg(any(feature = "local_fs", test))]
 fn compute_git_label_from_paths(
     cwd: &std::path::Path,
     branch: Option<String>,

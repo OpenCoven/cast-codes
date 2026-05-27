@@ -1,3 +1,8 @@
+// BrowserView is a non-wasm-only render surface; many of its helpers
+// (persistence import, internal model accessor) compile on wasm but
+// the WKWebView-driven code paths that consume them don't.
+#![cfg_attr(target_family = "wasm", allow(dead_code, unused_imports))]
+
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 

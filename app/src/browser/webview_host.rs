@@ -1,3 +1,7 @@
+// wry's WKWebView wrapper has no wasm backend; the struct + methods
+// compile on wasm but never get invoked.
+#![cfg_attr(target_family = "wasm", allow(dead_code))]
+
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 

@@ -1,3 +1,7 @@
+// The persistence snapshot + tab-strip scaffolding compile on wasm
+// (they're plain serde types) but no caller exercises them there.
+#![cfg_attr(target_family = "wasm", allow(dead_code))]
+
 pub const DEFAULT_BROWSER_URL: &str = "about:home";
 
 use serde::{Deserialize, Serialize};

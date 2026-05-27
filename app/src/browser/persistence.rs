@@ -1,3 +1,7 @@
+// Persistence is only invoked from the native (non-wasm) browser pane
+// path. On wasm the helpers exist but are never called.
+#![cfg_attr(target_family = "wasm", allow(dead_code))]
+
 //! Persistence of `BrowserState` to a JSON file under the CastCodes
 //! support directory. Atomic write via temp-file + rename. Load is
 //! lenient: any failure (missing file, malformed JSON, unknown version)

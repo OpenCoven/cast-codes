@@ -1,3 +1,8 @@
+// Find scripts only run from the native (non-wasm) wry webview host;
+// on wasm the JS strings + helper functions exist in tree but are
+// unreachable. Allow dead_code on wasm builds only.
+#![cfg_attr(target_family = "wasm", allow(dead_code))]
+
 //! Find-in-page overlay model + injected JS glue.
 //!
 //! The overlay is a thin row that renders below the toolbar when active.
