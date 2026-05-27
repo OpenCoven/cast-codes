@@ -1,3 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
+use crate::supported_servers::LspStartupError;
 use crate::{
     config::{lsp_uri_to_path, LanguageId},
     server_repo_watcher::LspRepoWatcher,
@@ -8,8 +10,6 @@ use crate::{
     },
     LspServerConfig, LspServerLogLevel, LspService,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use crate::supported_servers::LspStartupError;
 use instant::Instant;
 use lsp_types::{
     notification::{self, Notification},
