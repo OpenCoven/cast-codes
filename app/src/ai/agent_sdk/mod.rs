@@ -1397,7 +1397,8 @@ fn local_agent_run_uses_cloud_services(args: &RunAgentArgs) -> bool {
         || args.bedrock_inference_role.is_some()
         || args.conversation.is_some()
         || args.profile.is_some()
-        || args.snapshot.no_snapshot
+        // --no-snapshot only disables upload; snapshot upload is already skipped in local-only
+        // builds, so treat it as a no-op rather than requiring cloud services.
         || args.snapshot.snapshot_upload_timeout.is_some()
         || args.snapshot.snapshot_script_timeout.is_some()
 }
@@ -1406,8 +1407,8 @@ fn local_agent_run_uses_cloud_services(args: &RunAgentArgs) -> bool {
 fn command_requires_hosted_auth(command: &CliCommand) -> bool {
     match command {
         CliCommand::Agent(agent_cmd) => match agent_cmd {
-            AgentCommand::Run { .. } => true,
-            AgentCommand::RunCloud { .. } => true,
+            AgentCommand::Run(_) => true,
+            AgentCommand::RunCloud(_) => true,
             AgentCommand::Profile(sub) => match sub {
                 AgentProfileCommand::List => true,
             },
@@ -1458,7 +1459,9 @@ fn launch_command(
 ) -> anyhow::Result<()> {
     if !ChannelState::cloud_services_available() && command_requires_cloud_services(&command) {
         return Err(anyhow::anyhow!(
-            "This command is unavailable in local-only CastCodes builds."
+            "This command requires cloud services (hosted tasks, accounts, or cloud-backed flags) \
+            which are unavailable in local-only CastCodes builds. \
+            Run without cloud-only flags (e.g. --task-id, --share, --environment) to use agent run locally."
         ));
     }
 
