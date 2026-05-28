@@ -2,6 +2,8 @@ use crate::context_chips::display_chip::GitLineChanges;
 use crate::context_chips::{git_line_changes_from_chips, ContextChipKind};
 use crate::terminal::TerminalView;
 use warpui::AppContext;
+#[cfg(feature = "local_fs")]
+use warpui::SingletonEntity;
 
 /// Tab indicator label that knows about worktrees (PRODUCT.md 16–19).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,27 +36,26 @@ impl GitLabel {
 
 /// Pure helper for unit-testing the label computation.
 ///
-/// `git_dir` is the per-worktree gitdir (e.g. `/repo/.git/worktrees/feature-a`).
-/// `common_dir` is the shared gitdir (e.g. `/repo/.git`).
-/// When they're equal, the CWD is in the main worktree.
+/// `is_linked_worktree` should come from cached repository metadata rather than
+/// render-time git subprocesses.
 #[cfg(any(feature = "local_fs", test))]
-fn compute_git_label_from_paths(
-    cwd: &std::path::Path,
+fn compute_git_label_from_repo_path(
+    repo_path: &std::path::Path,
     branch: Option<String>,
-    git_dir: &std::path::Path,
-    common_dir: &std::path::Path,
-    cwd_exists: bool,
+    is_linked_worktree: bool,
+    repo_exists: bool,
 ) -> GitLabel {
-    let is_main = git_dir == common_dir;
-    let slug = if is_main {
-        None
+    let slug = if is_linked_worktree {
+        repo_path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
     } else {
-        cwd.file_name().map(|s| s.to_string_lossy().to_string())
+        None
     };
     GitLabel {
         worktree_slug: slug,
         branch_or_sha: branch.unwrap_or_default(),
-        missing: !cwd_exists,
+        missing: !repo_exists,
     }
 }
 
@@ -142,25 +143,23 @@ impl TerminalView {
     /// Tab indicator label (PRODUCT.md 16–19). Returns `None` when the pane
     /// has no CWD or is outside any git repository.
     ///
-    /// Uses `pwd()` for the raw filesystem path (avoids `~`-expansion issues
-    /// that `display_working_directory` would introduce).
     #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
     pub fn current_git_label(&self, ctx: &AppContext) -> Option<GitLabel> {
-        let cwd_str = self.pwd()?;
-        let cwd_path = std::path::PathBuf::from(&cwd_str);
         #[cfg(feature = "local_fs")]
         {
-            let worktree_root =
-                crate::util::git::detect_repo_root_sync(&cwd_path).unwrap_or(cwd_path);
-            let (git_dir, common_dir) = crate::util::git::detect_git_dirs_sync(&worktree_root)?;
+            let repo_path = self.current_repo_path.as_ref()?;
+            let is_linked_worktree = repo_metadata::repositories::DetectedRepositories::as_ref(ctx)
+                .get_watched_repo_for_path(repo_path, ctx)
+                .is_some_and(|repository| {
+                    let repository = repository.as_ref(ctx);
+                    repository.git_dir() != repository.common_git_dir()
+                });
             let branch = self.current_git_branch(ctx);
-            let exists = worktree_root.exists();
-            Some(compute_git_label_from_paths(
-                &worktree_root,
+            Some(compute_git_label_from_repo_path(
+                repo_path,
                 branch,
-                &git_dir,
-                &common_dir,
-                exists,
+                is_linked_worktree,
+                repo_path.exists(),
             ))
         }
         #[cfg(not(feature = "local_fs"))]
@@ -201,11 +200,10 @@ mod git_label_tests {
 
     #[test]
     fn label_main_worktree_has_no_slug() {
-        let label = compute_git_label_from_paths(
+        let label = compute_git_label_from_repo_path(
             &PathBuf::from("/repo"),
             Some("main".to_string()),
-            &PathBuf::from("/repo/.git"),
-            &PathBuf::from("/repo/.git"),
+            false,
             true,
         );
         assert_eq!(label.worktree_slug, None);
@@ -215,11 +213,10 @@ mod git_label_tests {
 
     #[test]
     fn label_non_main_worktree_has_slug() {
-        let label = compute_git_label_from_paths(
+        let label = compute_git_label_from_repo_path(
             &PathBuf::from("/repo/.castcodes/worktrees/feature-a"),
             Some("feature/a".to_string()),
-            &PathBuf::from("/repo/.git/worktrees/feature-a"),
-            &PathBuf::from("/repo/.git"),
+            true,
             true,
         );
         assert_eq!(label.worktree_slug.as_deref(), Some("feature-a"));
@@ -230,11 +227,10 @@ mod git_label_tests {
     #[test]
     fn label_non_main_worktree_subdirectory_uses_worktree_root_slug() {
         let worktree_root = PathBuf::from("/repo/.castcodes/worktrees/feature-a");
-        let label = compute_git_label_from_paths(
+        let label = compute_git_label_from_repo_path(
             &worktree_root,
             Some("feature/a".to_string()),
-            &PathBuf::from("/repo/.git/worktrees/feature-a"),
-            &PathBuf::from("/repo/.git"),
+            true,
             true,
         );
         assert_eq!(label.render(), "feature-a · feature/a");
@@ -242,11 +238,10 @@ mod git_label_tests {
 
     #[test]
     fn label_detached_no_branch_returns_empty_branch_field() {
-        let label = compute_git_label_from_paths(
+        let label = compute_git_label_from_repo_path(
             &PathBuf::from("/repo/.castcodes/worktrees/detached"),
             None,
-            &PathBuf::from("/repo/.git/worktrees/detached"),
-            &PathBuf::from("/repo/.git"),
+            true,
             true,
         );
         assert_eq!(label.worktree_slug.as_deref(), Some("detached"));
@@ -255,11 +250,10 @@ mod git_label_tests {
 
     #[test]
     fn label_missing_worktree_sets_flag() {
-        let label = compute_git_label_from_paths(
+        let label = compute_git_label_from_repo_path(
             &PathBuf::from("/repo/.castcodes/worktrees/gone"),
             Some("gone".to_string()),
-            &PathBuf::from("/repo/.git/worktrees/gone"),
-            &PathBuf::from("/repo/.git"),
+            true,
             false,
         );
         assert!(label.missing);
