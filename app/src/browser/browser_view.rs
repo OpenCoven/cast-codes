@@ -1,6 +1,5 @@
-// BrowserView is a non-wasm-only render surface; many of its helpers
-// (persistence import, internal model accessor) compile on wasm but
-// the WKWebView-driven code paths that consume them don't.
+// BrowserView is a non-wasm-only render surface; some helpers compile on
+// wasm even though the WKWebView-driven code paths that consume them don't.
 #![cfg_attr(target_family = "wasm", allow(dead_code, unused_imports))]
 
 use std::collections::HashMap;
@@ -47,7 +46,6 @@ use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
 #[cfg(not(target_family = "wasm"))]
 use super::data_dir;
 use super::find::FindState;
-use super::persistence;
 use super::url_input::{resolve_with_engine, Resolved};
 #[cfg(not(target_family = "wasm"))]
 use super::webview_host::SharedWebContext;
@@ -284,6 +282,11 @@ pub struct BrowserView {
     /// per wry's docs). `None` on wasm.
     #[cfg(not(target_family = "wasm"))]
     web_context: Option<SharedWebContext>,
+    /// Stable per-pane UUID that keys this pane's WebKit data dir. Captured
+    /// at construction (fresh `Uuid::v4` for new panes; restored from
+    /// `BrowserPaneSnapshot` for rehydrated panes) so the data dir at
+    /// `<warp_home>/browser/data/<session_id>/` survives app restarts.
+    session_id: String,
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
@@ -314,6 +317,11 @@ impl BrowserView {
     pub(crate) fn model(&self) -> &BrowserModel {
         &self.model
     }
+
+    /// Stable per-pane session id. Empty on wasm (no WebKit data store).
+    pub(crate) fn session_id(&self) -> &str {
+        &self.session_id
+    }
 }
 
 impl BrowserView {
@@ -322,6 +330,8 @@ impl BrowserView {
         #[cfg(not(target_family = "wasm"))] session_id: &str,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
+        #[cfg(not(target_family = "wasm"))]
+        let session_id = data_dir::normalize_session_id(session_id);
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
@@ -334,7 +344,7 @@ impl BrowserView {
             // WKWebsiteDataStore default store regardless (wry 0.38
             // limitation, see `data_dir`), but creating the directory keeps
             // the layout consistent for future macOS plumbing.
-            let dir = data_dir::browser_data_dir(session_id);
+            let dir = data_dir::browser_data_dir(&session_id);
             // Construct the WebContext even when dir is None — wry handles
             // the missing-dir case internally with its platform default.
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
@@ -414,6 +424,10 @@ impl BrowserView {
             event_tx,
             #[cfg(not(target_family = "wasm"))]
             web_context,
+            #[cfg(not(target_family = "wasm"))]
+            session_id,
+            #[cfg(target_family = "wasm")]
+            session_id: String::new(),
             tab_ui_states,
             workspace_tab_visible: true,
             back_button_mouse_state: MouseStateHandle::default(),
@@ -443,6 +457,7 @@ impl BrowserView {
         session_id: &str,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
+        let session_id = data_dir::normalize_session_id(session_id);
         let model = BrowserModel::restore(state);
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
@@ -450,7 +465,7 @@ impl BrowserView {
 
         let web_context: Option<SharedWebContext> = {
             // Per-session data dir; see `Self::new` for the platform notes.
-            let dir = data_dir::browser_data_dir(session_id);
+            let dir = data_dir::browser_data_dir(&session_id);
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
         };
 
@@ -531,6 +546,7 @@ impl BrowserView {
             webviews,
             event_tx,
             web_context,
+            session_id,
             tab_ui_states,
             workspace_tab_visible: true,
             back_button_mouse_state: MouseStateHandle::default(),
@@ -933,14 +949,6 @@ impl BrowserView {
             configuration.set_title(self.model.display_title(), ctx);
             configuration.set_title_secondary(self.model.current_url(), ctx);
         });
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn persist_open_state(&self, open: bool) {
-        let state = self.model.snapshot(open);
-        if let Err(err) = persistence::save_to_default_dir(&state) {
-            log::warn!("failed to persist browser state: {err}");
-        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1557,7 +1565,6 @@ impl BackingView for BrowserView {
             for webview in &self.webviews {
                 webview.borrow_mut().detach_native();
             }
-            self.persist_open_state(false);
         }
         ctx.emit(BrowserViewEvent::Pane(PaneEvent::Close));
     }

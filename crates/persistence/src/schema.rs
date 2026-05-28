@@ -106,6 +106,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    browser_panes (id) {
+        id -> Integer,
+        kind -> Text,
+        session_id -> Text,
+        state_json -> Text,
+    }
+}
+
+diesel::table! {
     cloud_objects_refreshes (id) {
         id -> Integer,
         time_of_next_refresh -> Timestamp,

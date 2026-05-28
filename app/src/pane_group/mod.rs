@@ -1914,6 +1914,29 @@ impl PaneGroup {
                     "Can't restore execution profile editor panes"
                 ))
             }
+            LeafContents::Browser(browser_snapshot) => {
+                #[cfg(not(target_family = "wasm"))]
+                {
+                    let pane: Box<dyn AnyPaneContent + 'static> =
+                        Box::new(BrowserPane::new_from_state(
+                            browser_snapshot.state,
+                            browser_snapshot.session_id,
+                            ctx,
+                        ));
+                    let pane_id = pane.as_pane().id();
+                    pane_contents.insert(pane_id, pane);
+                    let focus = InitialFocus {
+                        focused_pane: leaf.is_focused.then_some(pane_id),
+                        active_session: None,
+                    };
+                    Ok((PaneData::new(pane_id), focus))
+                }
+                #[cfg(target_family = "wasm")]
+                {
+                    let _ = browser_snapshot;
+                    Err(anyhow::anyhow!("Browser panes are not supported on wasm"))
+                }
+            }
             LeafContents::NetworkLog => {
                 // Network log panes are intentionally not restored. Two
                 // reasons:

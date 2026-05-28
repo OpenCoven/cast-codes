@@ -28,7 +28,7 @@ use itertools::Itertools;
 use libsqlite3_sys as sqlite3;
 use num_traits::FromPrimitive;
 use pathfinder_geometry::{rect::RectF, vector::Vector2F};
-use persistence::model::AMBIENT_AGENT_PANE_KIND;
+use persistence::model::{AMBIENT_AGENT_PANE_KIND, BROWSER_PANE_KIND};
 use uuid::Uuid;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::platform::FullscreenState;
@@ -71,7 +71,7 @@ use crate::ai::mcp::{
 };
 use crate::ai::persisted_workspace::EnablementState;
 use crate::app_state::{
-    AIFactPaneSnapshot, AmbientAgentPaneSnapshot, CodeReviewPaneSnapshot,
+    AIFactPaneSnapshot, AmbientAgentPaneSnapshot, BrowserPaneSnapshot, CodeReviewPaneSnapshot,
     EnvVarCollectionPaneSnapshot, LeftPanelSnapshot, RightPanelSnapshot, SettingsPaneSnapshot,
     WorkflowPaneSnapshot,
 };
@@ -822,6 +822,7 @@ fn save_app_state(conn: &mut SqliteConnection, app_state: &AppState) -> Result<(
         diesel::delete(schema::code_review_panes::dsl::code_review_panes).execute(conn)?;
         diesel::delete(schema::ambient_agent_panes::dsl::ambient_agent_panes).execute(conn)?;
         diesel::delete(schema::welcome_panes::dsl::welcome_panes).execute(conn)?;
+        diesel::delete(schema::browser_panes::dsl::browser_panes).execute(conn)?;
         diesel::delete(schema::pane_leaves::dsl::pane_leaves).execute(conn)?;
         diesel::delete(schema::pane_branches::dsl::pane_branches).execute(conn)?;
         diesel::delete(schema::pane_nodes::dsl::pane_nodes).execute(conn)?;
@@ -1050,6 +1051,7 @@ fn save_pane_state(
         LeafContents::AIFact(_) => AI_FACT_PANE_KIND,
         LeafContents::CodeReview(_) => CODE_REVIEW_PANE_KIND,
         LeafContents::AmbientAgent(_) => AMBIENT_AGENT_PANE_KIND,
+        LeafContents::Browser(_) => BROWSER_PANE_KIND,
         LeafContents::ExecutionProfileEditor => EXECUTION_PROFILE_EDITOR_PANE_KIND,
         LeafContents::GetStarted => GET_STARTED_PANE_KIND,
         LeafContents::Welcome { .. } => WELCOME_PANE_KIND,
@@ -1243,6 +1245,19 @@ fn save_pane_state(
 
             diesel::insert_into(schema::code_review_panes::dsl::code_review_panes)
                 .values(code_review)
+                .execute(conn)?;
+        }
+        LeafContents::Browser(browser_snapshot) => {
+            let state_json = serde_json::to_string(&browser_snapshot.state)
+                .map_err(|e| Error::SerializationError(Box::new(e)))?;
+            let browser = model::NewBrowserPane {
+                id,
+                session_id: browser_snapshot.session_id.clone(),
+                state_json,
+            };
+
+            diesel::insert_into(schema::browser_panes::dsl::browser_panes)
+                .values(browser)
                 .execute(conn)?;
         }
         LeafContents::ExecutionProfileEditor => {
@@ -2597,6 +2612,20 @@ fn read_node(conn: &mut SqliteConnection, node: model::PaneNode) -> Result<PaneN
                     LeafContents::AmbientAgent(AmbientAgentPaneSnapshot {
                         uuid: pane.uuid,
                         task_id,
+                    })
+                }
+                BROWSER_PANE_KIND => {
+                    let row = schema::browser_panes::dsl::browser_panes
+                        .find(node.id)
+                        .select(model::BrowserPane::as_select())
+                        .first(conn)?;
+
+                    let state = serde_json::from_str(&row.state_json)
+                        .context("deserializing browser pane state")?;
+
+                    LeafContents::Browser(BrowserPaneSnapshot {
+                        session_id: row.session_id,
+                        state,
                     })
                 }
                 other => bail!("Unrecognized pane kind: {other}"),
