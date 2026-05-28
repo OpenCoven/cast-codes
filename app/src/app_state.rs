@@ -130,6 +130,9 @@ pub enum LeafContents {
     ExecutionProfileEditor,
     CodeReview(CodeReviewPaneSnapshot),
     AmbientAgent(AmbientAgentPaneSnapshot),
+    /// An embedded browser pane. Carries the stable per-pane session id
+    /// keying the WebKit data dir plus the open tabs / active tab state.
+    Browser(BrowserPaneSnapshot),
     /// The in-app network log pane. Not persisted across restarts because the
     /// backing log is an in-memory ring buffer that starts empty on launch.
     NetworkLog,
@@ -173,10 +176,24 @@ impl LeafContents {
             | LeafContents::ExecutionProfileEditor
             | LeafContents::CodeReview(_)
             | LeafContents::AmbientAgent(_)
+            | LeafContents::Browser(_)
             | LeafContents::Welcome { .. }
             | LeafContents::GetStarted => true,
         }
     }
+}
+
+/// Snapshot of an embedded browser pane.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BrowserPaneSnapshot {
+    /// Stable per-pane UUID that keys the WebKit data dir at
+    /// `<warp_home>/browser/data/<session_id>/`. Generated when the pane
+    /// is first created (see `Workspace::open_browser_pane`); preserved
+    /// across snapshot/restore so cookies/localStorage survive.
+    pub session_id: String,
+    /// Open intra-pane browser tabs, active index, etc. Serialized as
+    /// JSON in the SQLite row.
+    pub state: crate::pane_group::pane::browser::browser_model::BrowserState,
 }
 
 /// Snapshot of an ambient agent pane.
