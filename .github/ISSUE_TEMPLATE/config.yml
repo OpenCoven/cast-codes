@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: "⚠️ PRs not accepted until July 2026"
+    url: https://github.com/OpenCoven/cast-codes/blob/main/CONTRIBUTING.md
+    about: "We are only accepting Issues and Bug Reports right now. Please read CONTRIBUTING.md before opening a PR."
   - name: CastCodes Repository
     url: https://github.com/OpenCoven/cast-codes
     about: Search existing issues and project documentation before filing a new issue.
