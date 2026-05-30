@@ -1,7 +1,9 @@
 use url::Url;
 use warpui::{AppContext, ModelHandle, View, ViewContext, ViewHandle};
 
-use crate::app_state::{BrowserPaneSnapshot, LeafContents};
+#[cfg(not(target_family = "wasm"))]
+use crate::app_state::BrowserPaneSnapshot;
+use crate::app_state::LeafContents;
 
 use super::{
     browser::{BrowserView, BrowserViewEvent},
