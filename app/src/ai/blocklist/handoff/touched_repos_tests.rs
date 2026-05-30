@@ -50,14 +50,24 @@ fn find_git_root_walks_up_to_dot_git() {
     assert!(root_for_outside.is_none());
 }
 
+// Use a platform-appropriate absolute path so `Path::is_absolute()` is true on
+// every OS (Windows requires a drive prefix; `/repo` is only absolute on Unix).
+#[cfg(windows)]
+const REPO_ROOT: &str = r"C:\repo";
+#[cfg(not(windows))]
+const REPO_ROOT: &str = "/repo";
+#[cfg(windows)]
+const REPO_SUBDIR: &str = r"C:\repo\subdir";
+#[cfg(not(windows))]
+const REPO_SUBDIR: &str = "/repo/subdir";
+
 #[test]
 fn extract_paths_ignores_cancelled_or_failed_file_edit_results() {
-    let cwd = "/repo";
     let cancelled = action_id("cancelled-edit");
     let failed = action_id("failed-edit");
     let successful = action_id("successful-edit");
     let exchange = exchange_with_actions(
-        Some(cwd),
+        Some(REPO_ROOT),
         vec![
             file_edit_action(cancelled.clone(), "cancelled.txt"),
             file_edit_action(failed.clone(), "failed.txt"),
@@ -79,7 +89,10 @@ fn extract_paths_ignores_cancelled_or_failed_file_edit_results() {
 
     assert_eq!(
         paths,
-        vec![PathBuf::from(cwd), PathBuf::from("/repo/written.txt")]
+        vec![
+            PathBuf::from(REPO_ROOT),
+            PathBuf::from(REPO_ROOT).join("written.txt"),
+        ]
     );
 }
 
@@ -88,7 +101,7 @@ fn extract_paths_ignores_failed_upload_artifacts() {
     let failed = action_id("failed-upload");
     let successful = action_id("successful-upload");
     let exchange = exchange_with_actions(
-        Some("/repo/subdir"),
+        Some(REPO_SUBDIR),
         vec![
             upload_action(failed.clone(), "../failed.log"),
             upload_action(successful.clone(), "../artifact.log"),
@@ -116,8 +129,8 @@ fn extract_paths_ignores_failed_upload_artifacts() {
     assert_eq!(
         paths,
         vec![
-            PathBuf::from("/repo/subdir"),
-            PathBuf::from("/repo/subdir/../artifact.log")
+            PathBuf::from(REPO_SUBDIR),
+            PathBuf::from(REPO_SUBDIR).join("../artifact.log"),
         ]
     );
 }

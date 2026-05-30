@@ -343,6 +343,19 @@ impl ChannelState {
         *APP_VERSION.lock() = version;
     }
 
+    /// Temporarily overrides the active channel for the duration of a test.
+    /// Restores the previous channel when the returned guard is dropped, so
+    /// tests can exercise code paths gated on [`cloud_services_available`]
+    /// without permanently mutating global channel state.
+    #[cfg(feature = "test-util")]
+    #[must_use = "if unused the channel override will be immediately cleared"]
+    pub fn override_channel_for_test(channel: Channel) -> ChannelOverrideGuard {
+        let mut state = CHANNEL_STATE.lock();
+        let previous = state.channel;
+        state.channel = channel;
+        ChannelOverrideGuard { previous }
+    }
+
     #[cfg(not(feature = "test-util"))]
     pub fn app_version() -> Option<&'static str> {
         option_env!("GIT_RELEASE_TAG")
@@ -400,6 +413,21 @@ impl ChannelState {
             Channel::Local => "castcodeslocal",
             Channel::Oss => brand::PUBLIC_URL_SCHEME,
         }
+    }
+}
+
+/// RAII guard returned by [`ChannelState::override_channel_for_test`]. Restores
+/// the previous channel when dropped.
+#[cfg(feature = "test-util")]
+#[must_use = "if unused the channel override will be immediately cleared"]
+pub struct ChannelOverrideGuard {
+    previous: Channel,
+}
+
+#[cfg(feature = "test-util")]
+impl Drop for ChannelOverrideGuard {
+    fn drop(&mut self) {
+        CHANNEL_STATE.lock().channel = self.previous;
     }
 }
 
