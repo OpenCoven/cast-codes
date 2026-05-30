@@ -688,7 +688,7 @@ fn test_render_list_page_with_personal_and_team_environments_shows_section_heade
 
         app.update(|ctx| {
             // Ensure UserWorkspaces has a current team name so the "Team" section renders with the
-            // shared header copy ("Shared by Warp and <team>").
+            // shared header copy ("Shared by CastCodes and <team>").
             UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
                 user_workspaces.setup_test_workspace(ctx);
                 user_workspaces.update_current_workspace(
@@ -754,7 +754,7 @@ fn test_render_list_page_with_personal_and_team_environments_shows_section_heade
                 "Expected 'Personal' section header in rendered content: {text_content}"
             );
             assert!(
-                text_content.contains("SHARED BY WARP AND KATARINA'S TEAM"),
+                text_content.contains("SHARED BY CASTCODES AND KATARINA'S TEAM"),
                 "Expected shared section header in rendered content: {text_content}"
             );
         });

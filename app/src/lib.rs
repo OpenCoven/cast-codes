@@ -821,6 +821,10 @@ mod launch_mode_tests {
     use super::*;
     use std::path::Path;
 
+    // The bundle-detection branch this exercises is macOS-only
+    // (`is_macos_app_bundle_executable`); on Linux and Windows the stub
+    // returns false and `should_run_as_cli` falls through.
+    #[cfg(target_os = "macos")]
     #[test]
     fn castcodes_app_bundle_executable_launches_gui() {
         assert!(!should_run_as_cli(
