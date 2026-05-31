@@ -704,7 +704,13 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::ToggleWarpDrive)
         .with_mac_key_binding("cmd-b")
-        .with_linux_or_windows_key_binding("ctrl-b"),
+        // `ctrl-b` is the ASCII STX control character — registering it on
+        // Linux/Windows trips `is_binding_pty_compliant` on the Workspace
+        // view and panics binding validation at boot. Use `ctrl-shift-B`,
+        // matching the convention `cmd_or_ctrl_shift` documents for
+        // single-letter Mac shortcuts that would otherwise collide with the
+        // PTY on non-Mac platforms.
+        .with_linux_or_windows_key_binding("ctrl-shift-B"),
         EditableBinding::new(
             TOGGLE_RIGHT_PANEL_BINDING_NAME,
             BindingDescription::new("Toggle code review")
