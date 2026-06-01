@@ -317,7 +317,7 @@ pub fn test_ssh_with_shell_override() -> Builder {
         // Requires the GCP IAP SSH integration testing VM.  Set
         // CAST_CODES_SSH_INTEGRATION_TESTS=1 to opt in.
         .set_should_run_test(|| {
-            if std::env::var("CAST_CODES_SSH_INTEGRATION_TESTS").is_err() {
+            if std::env::var("CAST_CODES_SSH_INTEGRATION_TESTS").ok().as_deref() != Some("1") {
                 return false;
             }
             let (starter, _) = current_shell_starter_and_version();
