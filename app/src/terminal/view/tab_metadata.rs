@@ -147,20 +147,46 @@ impl TerminalView {
     pub fn current_git_label(&self, ctx: &AppContext) -> Option<GitLabel> {
         #[cfg(feature = "local_fs")]
         {
-            let repo_path = self.current_repo_path.as_ref()?;
-            let is_linked_worktree = repo_metadata::repositories::DetectedRepositories::as_ref(ctx)
-                .get_watched_repo_for_path(repo_path, ctx)
-                .is_some_and(|repository| {
-                    let repository = repository.as_ref(ctx);
-                    repository.git_dir() != repository.common_git_dir()
-                });
-            let branch = self.current_git_branch(ctx);
-            Some(compute_git_label_from_repo_path(
-                repo_path,
-                branch,
-                is_linked_worktree,
-                repo_path.exists(),
-            ))
+            if let Some(repo_path) = self.current_repo_path.as_ref() {
+                let branch = self.current_git_branch(ctx);
+                // Only build the repo-path label if we actually have a branch.
+                // When `current_repo_path` is set by `DetectedRepositories` before
+                // the shell git chip has propagated, `branch` is `None` and
+                // `compute_git_label_from_repo_path` would return an empty
+                // `branch_or_sha` string. That empty string is filtered out by
+                // `copyable_metadata_value`, which causes the "Copy branch" context
+                // menu item to be absent even though the test's
+                // `assert_current_git_branch` guard already confirmed the chip is
+                // populated — a timing window that fails the vertical context menu
+                // metadata copy tests. Falling through to the chip path when the
+                // branch is unknown keeps the two readers in sync and ensures the
+                // menu item is present whenever the branch is known.
+                if branch.is_some() {
+                    let is_linked_worktree =
+                        repo_metadata::repositories::DetectedRepositories::as_ref(ctx)
+                            .get_watched_repo_for_path(repo_path, ctx)
+                            .is_some_and(|repository| {
+                                let repository = repository.as_ref(ctx);
+                                repository.git_dir() != repository.common_git_dir()
+                            });
+                    return Some(compute_git_label_from_repo_path(
+                        repo_path,
+                        branch,
+                        is_linked_worktree,
+                        repo_path.exists(),
+                    ));
+                }
+            }
+            // No detected repo path yet (or repo_path is set but branch chip has
+            // not yet arrived — see comment above). Fall back to the shell git chip
+            // so the indicator and the "Copy branch" menu item light up whenever
+            // the prompt exposes a branch. Matches `current_git_branch`'s own
+            // chip-first behavior and keeps both readers in sync.
+            self.current_git_branch(ctx).map(|branch| GitLabel {
+                worktree_slug: None,
+                branch_or_sha: branch,
+                missing: false,
+            })
         }
         #[cfg(not(feature = "local_fs"))]
         {

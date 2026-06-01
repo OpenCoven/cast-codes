@@ -164,7 +164,11 @@ macro_rules! generate_can_bootstrap_legacy_ssh_test_for_shell {
         pub fn $fn_name() -> Builder {
             new_builder()
                 // TODO(CORE-2333) PowerShell has no SSH wrapper.
-                .set_should_run_test(|| {
+                // Requires the GCP IAP SSH integration testing VM.  Set
+                // CAST_CODES_SSH_INTEGRATION_TESTS=1 to opt in.
+                    if std::env::var("CAST_CODES_SSH_INTEGRATION_TESTS").ok().as_deref() != Some("1") {
+                        return false;
+                    }
                     if FeatureFlag::SSHTmuxWrapper.is_enabled() {
                         return false;
                     }
@@ -258,7 +262,11 @@ macro_rules! generate_long_running_block_ssh_test_for_shell {
         pub fn $fn_name() -> Builder {
             new_builder()
                 // TODO(CORE-2333) PowerShell has no SSH wrapper.
-                .set_should_run_test(|| {
+                // Requires the GCP IAP SSH integration testing VM.  Set
+                // CAST_CODES_SSH_INTEGRATION_TESTS=1 to opt in.
+                    if std::env::var("CAST_CODES_SSH_INTEGRATION_TESTS").ok().as_deref() != Some("1") {
+                        return false;
+                    }
                     let (starter, _) = current_shell_starter_and_version();
                     starter.shell_type() != ShellType::PowerShell
                 })
@@ -306,7 +314,12 @@ generate_long_running_block_ssh_test_for_shell!(test_ssh_into_ash, "ash", prompt
 pub fn test_ssh_with_shell_override() -> Builder {
     new_builder()
         // TODO(CORE-2333) PowerShell has no SSH wrapper.
+        // Requires the GCP IAP SSH integration testing VM.  Set
+        // CAST_CODES_SSH_INTEGRATION_TESTS=1 to opt in.
         .set_should_run_test(|| {
+            if std::env::var("CAST_CODES_SSH_INTEGRATION_TESTS").ok().as_deref() != Some("1") {
+                return false;
+            }
             let (starter, _) = current_shell_starter_and_version();
             starter.shell_type() != ShellType::PowerShell
         })
