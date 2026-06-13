@@ -2420,21 +2420,31 @@ impl BlockList {
         item: &WithinBlock<T>,
         respect_obfuscated_secrets: RespectObfuscatedSecrets,
     ) -> String {
+        self.try_string_at_range(item, respect_obfuscated_secrets)
+            .unwrap_or_default()
+    }
+
+    pub fn try_string_at_range<T: RangeInModel>(
+        &self,
+        item: &WithinBlock<T>,
+        respect_obfuscated_secrets: RespectObfuscatedSecrets,
+    ) -> Option<String> {
+        let block = self.blocks.get(item.block_index.0)?;
         let block_grid = if item.is_in_command_content() {
-            self.blocks[item.block_index.0].prompt_and_command_grid()
+            block.prompt_and_command_grid()
         } else {
-            self.blocks[item.block_index.0].output_grid()
+            block.output_grid()
         };
 
         let (start, end) = item.inner.range().into_inner();
-        block_grid.grid_handler.bounds_to_string(
+        Some(block_grid.grid_handler.bounds_to_string(
             start,
             end,
             false,
             respect_obfuscated_secrets,
             false, /* force_obfuscated_secrets */
             RespectDisplayedOutput::Yes,
-        )
+        ))
     }
 
     pub fn fragment_boundary_at_point(

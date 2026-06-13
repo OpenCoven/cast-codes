@@ -1822,6 +1822,28 @@ impl TerminalModel {
             .to_owned()
     }
 
+    pub fn try_link_at_range<T: RangeInModel>(
+        &self,
+        item: &WithinModel<T>,
+        respect_obfuscated_secrets: RespectObfuscatedSecrets,
+    ) -> Option<String> {
+        let text = match item {
+            WithinModel::AltScreen(inner) => {
+                let (start, end) = inner.range().into_inner();
+                self.alt_screen
+                    .bounds_to_string(start, end, respect_obfuscated_secrets)
+            }
+            WithinModel::BlockList(inner) => self
+                .block_list
+                .try_string_at_range(inner, respect_obfuscated_secrets)?,
+        };
+
+        Some(
+            text.trim_matches(['\u{200B}', ' ', '\n', '\r', '\t'])
+                .to_owned(),
+        )
+    }
+
     /// Return all possible file paths containing the grid point ordered from longest to shortest.
     pub fn possible_file_paths_at_point(
         &self,
