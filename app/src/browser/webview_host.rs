@@ -16,7 +16,7 @@ use super::browser_model::TabId;
 use super::downloads;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(not(target_family = "wasm"), target_os = "macos"))]
 use super::permissions;
 #[cfg(not(target_family = "wasm"))]
 use super::popup_policy::{self, Decision};
