@@ -20,6 +20,7 @@ use ::channel_versions::{ParsedVersion, VersionInfo};
 use anyhow::{anyhow, Context as _, Result};
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use rand::Rng as _;
+use serde::Deserialize;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
@@ -777,13 +778,18 @@ async fn fetch_version(
     update_id: &str,
     server_api: Arc<ServerApi>,
 ) -> Result<VersionInfo> {
+    if matches!(channel, Channel::Oss) {
+        return fetch_oss_version(server_api).await;
+    }
+
     let versions = fetch_channel_versions(update_id, server_api.clone(), false, is_daily).await?;
 
     let channel_version = match channel {
         Channel::Stable => versions.stable,
         Channel::Preview => versions.preview,
         Channel::Dev => versions.dev,
-        Channel::Integration | Channel::Local | Channel::Oss => {
+        Channel::Oss => unreachable!("oss autoupdate uses GitHub releases"),
+        Channel::Integration | Channel::Local => {
             // These channels don't ship release artifacts, so there's no
             // version to fetch. This branch is normally unreachable because
             // `AutoupdateState::register` gates the poll loop on the
@@ -798,6 +804,72 @@ async fn fetch_version(
     };
     let version_info = channel_version.version_info();
     Ok(version_info)
+}
+
+#[derive(Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    draft: bool,
+    prerelease: bool,
+    assets: Vec<GithubReleaseAsset>,
+}
+
+#[derive(Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+}
+
+async fn fetch_oss_version(server_api: Arc<ServerApi>) -> Result<VersionInfo> {
+    let releases: Vec<GithubRelease> = server_api
+        .http_client()
+        .get(format!(
+            "{}?per_page=20",
+            warp_core::brand::PUBLIC_RELEASES_API_URL
+        ))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "CastCodes")
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    version_info_from_github_releases(&releases).ok_or_else(|| {
+        anyhow!(
+            "No public CastCodes release contains the {} update asset",
+            oss_update_asset_name()
+        )
+    })
+}
+
+fn version_info_from_github_releases(releases: &[GithubRelease]) -> Option<VersionInfo> {
+    let asset_name = oss_update_asset_name();
+    releases
+        .iter()
+        .find(|release| {
+            !release.draft
+                && !release.prerelease
+                && release.assets.iter().any(|asset| asset.name == asset_name)
+        })
+        .map(|release| VersionInfo::new(release.tag_name.clone()))
+}
+
+fn oss_update_asset_name() -> &'static str {
+    cfg_if::cfg_if! {
+        if #[cfg(all(target_os = "macos", target_arch = "aarch64"))] {
+            "CastCodes-arm64.dmg"
+        } else if #[cfg(target_os = "macos")] {
+            "CastCodes.dmg"
+        } else if #[cfg(all(windows, target_arch = "x86_64"))] {
+            "CastCodesSetup.exe"
+        } else if #[cfg(all(target_os = "linux", target_arch = "x86_64"))] {
+            "CastCodes-x86_64.AppImage"
+        } else {
+            ""
+        }
+    }
 }
 
 // This method is unimplemented on wasm, so we allow unused variables.
@@ -1155,8 +1227,16 @@ fn release_assets_directory_url(channel: Channel, version: &str) -> String {
             format!("{releases_base_url}/preview/{version}")
         }
         Channel::Dev => format!("{releases_base_url}/dev/{version}"),
-        Channel::Local | Channel::Integration | Channel::Oss => {
-            unreachable!("local/integration/oss autoupdate not supported");
+        Channel::Oss => {
+            let releases_base_url = if releases_base_url.is_empty() {
+                warp_core::brand::PUBLIC_RELEASES_DOWNLOAD_BASE_URL.into()
+            } else {
+                releases_base_url
+            };
+            format!("{releases_base_url}/{version}")
+        }
+        Channel::Local | Channel::Integration => {
+            unreachable!("local/integration autoupdate not supported");
         }
     }
 }

@@ -289,6 +289,40 @@ fn make_version_info(version_string: impl Into<String>, is_rollback: bool) -> Ve
     }
 }
 
+#[test]
+fn test_oss_release_asset_directory_uses_github_release_downloads() {
+    assert_eq!(
+        release_assets_directory_url(Channel::Oss, "v0.0.13"),
+        "https://github.com/OpenCoven/cast-codes/releases/download/v0.0.13"
+    );
+}
+
+#[test]
+fn test_oss_release_version_skips_releases_without_current_platform_asset() {
+    let releases = vec![
+        GithubRelease {
+            tag_name: "v0.0.12".to_string(),
+            draft: false,
+            prerelease: false,
+            assets: vec![GithubReleaseAsset {
+                name: "CastCodesSetup.exe".to_string(),
+            }],
+        },
+        GithubRelease {
+            tag_name: "v0.0.11".to_string(),
+            draft: false,
+            prerelease: false,
+            assets: vec![GithubReleaseAsset {
+                name: oss_update_asset_name().to_string(),
+            }],
+        },
+    ];
+
+    let version = version_info_from_github_releases(&releases)
+        .expect("should find newest release with current platform asset");
+    assert_eq!(version.version, "v0.0.11");
+}
+
 /// When a download fails, `downloaded_update` must stay None so the next poll retries.
 /// This is the state-machine behavior underlying a disk-space issue where,
 /// without cleanup, every failed download retry would leave lots of failed artifacts behind,

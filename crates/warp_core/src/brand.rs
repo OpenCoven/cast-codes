@@ -9,6 +9,10 @@ pub const PRODUCT_SLUG: &str = "cast-codes";
 pub const ORG_ID: &str = "castcodes";
 pub const PUBLIC_APP_ID: &str = "dev.castcodes.CastCodes";
 pub const PUBLIC_URL_SCHEME: &str = "castcodes";
+pub const PUBLIC_RELEASES_DOWNLOAD_BASE_URL: &str =
+    "https://github.com/OpenCoven/cast-codes/releases/download";
+pub const PUBLIC_RELEASES_API_URL: &str =
+    "https://api.github.com/repos/OpenCoven/cast-codes/releases";
 
 pub const CONFIG_DIR: &str = ".cast-codes";
 pub const LEGACY_CONFIG_DIR: &str = ".warp";

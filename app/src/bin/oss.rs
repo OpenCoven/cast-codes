@@ -5,7 +5,10 @@
 use anyhow::Result;
 use warp_core::{
     brand,
-    channel::{Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig as ServerConfig},
+    channel::{
+        AutoupdateConfig, Channel, ChannelConfig, ChannelState, OzConfig,
+        WarpServerConfig as ServerConfig,
+    },
     AppId,
 };
 
@@ -21,7 +24,10 @@ fn main() -> Result<()> {
             oz_config: OzConfig::unavailable(),
             telemetry_config: None,
             crash_reporting_config: None,
-            autoupdate_config: None,
+            autoupdate_config: Some(AutoupdateConfig {
+                releases_base_url: brand::PUBLIC_RELEASES_DOWNLOAD_BASE_URL.into(),
+                show_autoupdate_menu_items: true,
+            }),
             mcp_static_config: None,
         },
     );
