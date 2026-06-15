@@ -820,10 +820,15 @@ struct GithubReleaseAsset {
 }
 
 async fn fetch_oss_version(server_api: Arc<ServerApi>) -> Result<VersionInfo> {
+    let asset_name = oss_update_asset_name();
+    if asset_name.is_empty() {
+        anyhow::bail!("OSS autoupdate is not supported on this platform");
+    }
+
     let releases: Vec<GithubRelease> = server_api
         .http_client()
         .get(format!(
-            "{}?per_page=20",
+            "{}?per_page=100",
             warp_core::brand::PUBLIC_RELEASES_API_URL
         ))
         .header("Accept", "application/vnd.github+json")
@@ -839,7 +844,7 @@ async fn fetch_oss_version(server_api: Arc<ServerApi>) -> Result<VersionInfo> {
     version_info_from_github_releases(&releases).ok_or_else(|| {
         anyhow!(
             "No public CastCodes release contains the {} update asset",
-            oss_update_asset_name()
+            asset_name
         )
     })
 }
