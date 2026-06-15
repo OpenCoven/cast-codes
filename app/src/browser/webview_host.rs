@@ -13,6 +13,8 @@ use super::downloads;
 #[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
 #[cfg(not(target_family = "wasm"))]
+use super::permissions;
+#[cfg(not(target_family = "wasm"))]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
@@ -249,6 +251,7 @@ impl NativeBrowserWebView {
 
             let mut builder = wry::WebViewBuilder::new_as_child(&parent)
                 .with_url(url)
+                .with_initialization_script(permissions::INIT_SCRIPT)
                 .with_bounds(Self::wry_rect(bounds))
                 .with_visible(self.desired_visible)
                 .with_accept_first_mouse(true)
