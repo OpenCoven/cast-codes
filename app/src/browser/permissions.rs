@@ -18,9 +18,10 @@
 
 /// JS shim loaded via `WebViewBuilder::with_initialization_script` so it
 /// runs once per page-creation, before any page-author script.
+#[cfg(not(target_family = "wasm"))]
 pub(crate) const INIT_SCRIPT: &str = include_str!("../../assets/bundled/js/permissions.js");
 
-#[cfg(test)]
+#[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
     use super::*;
 
