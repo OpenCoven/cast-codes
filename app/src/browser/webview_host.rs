@@ -14,7 +14,7 @@ use warpui::{AppContext, WindowId};
 use super::browser_model::TabId;
 #[cfg(target_os = "macos")]
 use super::downloads;
-#[cfg(target_os = "macos")]
+#[cfg(not(target_family = "wasm"))]
 use super::find::{self, FindResultsMessage};
 #[cfg(target_os = "macos")]
 use super::permissions;
