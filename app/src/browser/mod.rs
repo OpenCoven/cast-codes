@@ -6,6 +6,7 @@ pub(crate) mod data_dir;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod downloads;
 pub(crate) mod find;
+#[cfg(target_os = "macos")]
 pub(crate) mod permissions;
 pub(crate) mod popup_policy;
 pub(crate) mod url_input;

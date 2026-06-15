@@ -14,11 +14,11 @@ use warpui::{AppContext, WindowId};
 use super::browser_model::TabId;
 #[cfg(target_os = "macos")]
 use super::downloads;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "macos")]
 use super::find::{self, FindResultsMessage};
-#[cfg(all(not(target_family = "wasm"), target_os = "macos"))]
+#[cfg(target_os = "macos")]
 use super::permissions;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(target_os = "macos")]
 use super::popup_policy::{self, Decision};
 
 /// Events the native webview layer can push back to `BrowserView`.
