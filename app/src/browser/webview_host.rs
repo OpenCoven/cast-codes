@@ -15,7 +15,9 @@ use super::browser_model::TabId;
 #[cfg(target_os = "macos")]
 use super::downloads;
 #[cfg(not(target_family = "wasm"))]
-use super::find::{self, FindResultsMessage};
+use super::find;
+#[cfg(target_os = "macos")]
+use super::find::FindResultsMessage;
 #[cfg(target_os = "macos")]
 use super::permissions;
 #[cfg(target_os = "macos")]
