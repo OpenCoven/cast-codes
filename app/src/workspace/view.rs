@@ -3329,10 +3329,11 @@ impl Workspace {
             registry.register(window_id, weak_handle);
         });
 
-        // Restore the browser pane if it was open at last shutdown.
-        // No-op on wasm where the pane isn't supported.
+        // One-shot cleanup of the pre-Layer-C JSON browser state file.
+        // Idempotent — missing file is silent. Fires per workspace
+        // construction, which is harmless for a remove operation.
         #[cfg(not(target_family = "wasm"))]
-        ws.restore_browser_state_on_init(ctx);
+        crate::pane_group::pane::browser::data_dir::delete_legacy_state_file();
 
         ws
     }
@@ -5183,6 +5184,22 @@ impl Workspace {
             index
         };
 
+        // Notify the outgoing tab's panes that they're losing visibility
+        // before we swap. Panes that wrap a native OS view (browser pane's
+        // WKWebView) use this to hide their native layer, which otherwise
+        // keeps painting over the newly-active tab. Guarded on a real
+        // index change to avoid spurious flips when re-selecting the same
+        // tab.
+        let prev_index = self.active_tab_index;
+        if prev_index != index {
+            if let Some(prev_tab) = self.tabs.get(prev_index) {
+                let prev_pane_group = prev_tab.pane_group.clone();
+                prev_pane_group.update(ctx, |pane_group, ctx| {
+                    pane_group.notify_workspace_tab_visibility_changed(false, ctx);
+                });
+            }
+        }
+
         self.active_tab_index = index;
 
         if let Some(tab) = self.tabs.get(index) {
@@ -5219,6 +5236,18 @@ impl Workspace {
                 ctx,
             );
         });
+
+        // Notify the incoming tab's panes that they're now visible. Browser
+        // pane uses this to re-show its WKWebView. Skipped when the index
+        // didn't actually change.
+        if prev_index != index {
+            if let Some(new_tab) = self.tabs.get(index) {
+                let new_pane_group = new_tab.pane_group.clone();
+                new_pane_group.update(ctx, |pane_group, ctx| {
+                    pane_group.notify_workspace_tab_visibility_changed(true, ctx);
+                });
+            }
+        }
 
         let pane_group = self.active_tab_pane_group();
         let focused_terminal_view_id = self
@@ -13306,7 +13335,11 @@ impl Workspace {
 
     pub(crate) fn open_browser_pane(&mut self, url: Option<String>, ctx: &mut ViewContext<Self>) {
         let url = url.unwrap_or_else(|| DEFAULT_BROWSER_URL.to_string());
-        let pane = BrowserPane::new(Some(url), ctx);
+        // Stable per-pane UUID keys the WebKit data dir — see
+        // `crate::browser::data_dir`. Persisted in `BrowserPaneSnapshot`
+        // so cookies/localStorage survive restarts.
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let pane = BrowserPane::new(Some(url), session_id, ctx);
         self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
             pane_group.add_pane_with_direction(
                 Direction::Right,
@@ -13319,7 +13352,8 @@ impl Workspace {
 
     /// Toggles the browser pane: closes the visible browser pane if one
     /// exists in the active pane group, otherwise opens a fresh one.
-    /// Persists the resulting state.
+    /// Persistence is handled transparently by the SQLite app-state path
+    /// via `BrowserPane::snapshot` — no explicit write is needed here.
     ///
     /// `PaneGroup::close_pane` with the `UndoClosedPanes` flag enabled does
     /// *not* actually destroy the pane — it detaches into a hidden-for-close
@@ -13349,17 +13383,6 @@ impl Workspace {
         };
 
         if let Some(&pane_id) = visible_browser.first() {
-            // Snapshot model BEFORE close so the persisted tab list
-            // reflects the state the user closed at.
-            let snapshot = group
-                .as_ref(ctx)
-                .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
-                .map(|pane| {
-                    pane.browser_view(ctx)
-                        .as_ref(ctx)
-                        .model()
-                        .snapshot(/* open */ false)
-                });
             group.update(ctx, |pane_group, ctx| {
                 pane_group.close_pane(pane_id, ctx);
                 // Promote a hidden-for-close shadow into a real close so the
@@ -13367,9 +13390,6 @@ impl Workspace {
                 // fully removed the pane.
                 pane_group.cleanup_closed_pane(pane_id, ctx);
             });
-            if let Some(state) = snapshot {
-                Self::write_browser_state(&state);
-            }
             return;
         }
 
@@ -13384,26 +13404,6 @@ impl Workspace {
         }
 
         self.open_browser_pane(None, ctx);
-        // Capture the freshly opened pane's snapshot for persistence.
-        let group = self.active_tab_pane_group();
-        let snapshot = group
-            .as_ref(ctx)
-            .pane_ids()
-            .find(|id| id.is_browser_pane())
-            .and_then(|pane_id| {
-                group
-                    .as_ref(ctx)
-                    .downcast_pane_by_id::<crate::pane_group::BrowserPane>(pane_id)
-            })
-            .map(|pane| {
-                pane.browser_view(ctx)
-                    .as_ref(ctx)
-                    .model()
-                    .snapshot(/* open */ true)
-            });
-        if let Some(state) = snapshot {
-            Self::write_browser_state(&state);
-        }
     }
 
     /// If the active pane group has a *visible* browser pane, navigate its
@@ -13452,49 +13452,6 @@ impl Workspace {
             });
         }
         self.open_browser_pane(Some(url), ctx);
-    }
-
-    /// Writes the supplied browser state to disk. Errors are logged, not
-    /// propagated — persistence is a convenience, not a correctness boundary.
-    #[cfg(not(target_family = "wasm"))]
-    fn write_browser_state(state: &crate::pane_group::pane::browser::browser_model::BrowserState) {
-        use crate::pane_group::pane::browser::persistence;
-
-        if let Err(err) = persistence::save_to_default_dir(state) {
-            log::warn!("failed to persist browser state: {err}");
-        }
-    }
-
-    /// At workspace init: if the user last quit with the browser pane open,
-    /// reopen it with the persisted tab list and active index.
-    #[cfg(not(target_family = "wasm"))]
-    pub(crate) fn restore_browser_state_on_init(&mut self, ctx: &mut ViewContext<Self>) {
-        let Some(dir) = warp_core::paths::warp_home_config_dir() else {
-            return;
-        };
-        let Some(state) = crate::pane_group::pane::browser::persistence::load(&dir) else {
-            return;
-        };
-        if state.open {
-            self.open_browser_pane_with_state(state, ctx);
-        }
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn open_browser_pane_with_state(
-        &mut self,
-        state: crate::pane_group::pane::browser::browser_model::BrowserState,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let pane = BrowserPane::new_from_state(state, ctx);
-        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-            pane_group.add_pane_with_direction(
-                Direction::Right,
-                pane,
-                true, /* focus_new_pane */
-                ctx,
-            );
-        });
     }
 
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
@@ -24874,6 +24831,18 @@ impl Workspace {
         placeholder_pane_group.update(ctx, |pg, ctx| {
             pg.detach_panes_for_close(&working_directories_model, ctx);
         });
+
+        // The placeholder we just replaced was made active by
+        // `add_tab_with_pane_layout` (via `activate_tab_internal`), but only
+        // the placeholder's pane group received the visible-side notification.
+        // The adopted group came from a source window where `begin_tab_drag`
+        // swapped to an adjacent tab, firing `visibility_changed(false)` on
+        // it; without re-notifying here, a browser pane in the dragged tab
+        // would keep its native WKWebView hidden in the new window.
+        new_pane_group.update(ctx, |pane_group, ctx| {
+            pane_group.notify_workspace_tab_visibility_changed(true, ctx);
+        });
+
         self.pending_pane_group_transfer = false;
         ctx.dispatch_global_action("workspace:save_app", ());
         ctx.notify();
@@ -25438,28 +25407,6 @@ fn compute_default_panel_widths(
     }
 }
 
-#[cfg(test)]
-mod tab_bar_collapse_tests {
-    use super::*;
-
-    #[test]
-    fn manual_collapse_hides_tab_bar_until_revealed() {
-        assert_eq!(
-            resolve_manual_tab_bar_mode(true, false),
-            Some(ShowTabBar::Hidden)
-        );
-        assert_eq!(
-            resolve_manual_tab_bar_mode(true, true),
-            Some(ShowTabBar::Stacked)
-        );
-    }
-
-    #[test]
-    fn manual_collapse_does_not_override_regular_mode_when_disabled() {
-        assert_eq!(resolve_manual_tab_bar_mode(false, false), None);
-    }
-}
-
 /// Idempotently sets the opencode-warp plugin entry in `~/.config/opencode/opencode.json`.
 /// Removes any existing opencode-warp plugin entries (both local file:// and github:) and adds
 /// the given `new_entry`. Creates the config file with a default structure if it doesn't exist.
@@ -25514,5 +25461,27 @@ fn set_opencode_warp_plugin(new_entry: &str) -> String {
             Err(e) => format!("Failed to write opencode.json: {e}"),
         },
         Err(e) => format!("Failed to serialize opencode.json: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tab_bar_collapse_tests {
+    use super::*;
+
+    #[test]
+    fn manual_collapse_hides_tab_bar_until_revealed() {
+        assert_eq!(
+            resolve_manual_tab_bar_mode(true, false),
+            Some(ShowTabBar::Hidden)
+        );
+        assert_eq!(
+            resolve_manual_tab_bar_mode(true, true),
+            Some(ShowTabBar::Stacked)
+        );
+    }
+
+    #[test]
+    fn manual_collapse_does_not_override_regular_mode_when_disabled() {
+        assert_eq!(resolve_manual_tab_bar_mode(false, false), None);
     }
 }

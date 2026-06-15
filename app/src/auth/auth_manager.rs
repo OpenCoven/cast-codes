@@ -151,11 +151,6 @@ impl AuthManager {
         enforce_state_validation: bool,
         ctx: &mut ModelContext<Self>,
     ) {
-        if Self::hosted_auth_disabled() {
-            log::info!("Ignoring auth redirect: hosted auth is disabled for this channel");
-            return;
-        }
-
         let AuthRedirectPayload {
             refresh_token,
             user_uid,
@@ -163,6 +158,11 @@ impl AuthManager {
             state,
         } = auth_payload.clone();
 
+        // CSRF state validation runs even when hosted auth is disabled. The
+        // pending-state token is generated locally, so consuming/rejecting it
+        // never touches the hosted backend — and surfacing an invalid-state
+        // error from a redirect that smuggled in a mismatched token is still
+        // the right behavior in the OSS build.
         if let Some(received_state) = &state {
             if !self.consume_auth_state(received_state) {
                 if self.should_silently_ignore_stale_redirect(&user_uid) {
@@ -184,6 +184,14 @@ impl AuthManager {
             ctx.emit(AuthManagerEvent::AuthFailed(
                 UserAuthenticationError::MissingStateParameter,
             ));
+            return;
+        }
+
+        // State validation passed (or wasn't required). From here we'd actually
+        // contact the hosted backend, which OSS builds don't have — bail before
+        // touching `auth_client`.
+        if Self::hosted_auth_disabled() {
+            log::info!("Ignoring auth redirect: hosted auth is disabled for this channel");
             return;
         }
 

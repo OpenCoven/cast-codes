@@ -59,8 +59,12 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
       exit 1
     fi
 
-    # Resolve to a commit SHA to avoid option injection
-    base_sha=$(git rev-parse --verify --quiet -- "${base_ref}^{commit}" 2>/dev/null) || base_sha=""
+    # Resolve to a commit SHA. `git rev-parse --verify` takes a revision,
+    # not a pathspec — passing `--` makes it treat the argument as a path
+    # and silently return empty, which skips the entire commit-message scan.
+    # `base_ref` is already guarded above against `-…` to prevent option
+    # injection, so the `--` separator isn't needed here.
+    base_sha=$(git rev-parse --verify --quiet "${base_ref}^{commit}" 2>/dev/null) || base_sha=""
 
     if [[ -n "$base_sha" ]]; then
       while IFS= read -r sha; do

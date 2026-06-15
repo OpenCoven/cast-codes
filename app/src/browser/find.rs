@@ -1,3 +1,8 @@
+// Find scripts only run from the native (non-wasm) wry webview host;
+// on wasm the JS strings + helper functions exist in tree but are
+// unreachable. Allow dead_code on wasm builds only.
+#![cfg_attr(target_family = "wasm", allow(dead_code))]
+
 //! Find-in-page overlay model + injected JS glue.
 //!
 //! The overlay is a thin row that renders below the toolbar when active.
@@ -63,6 +68,12 @@ pub(crate) fn clear_script() -> &'static str {
 
 /// Shape of the JSON message the find script posts back via
 /// `window.ipc.postMessage`. See `assets/bundled/js/find.js`.
+//
+// Constructed only by serde inside webview_host's macOS-gated IPC
+// handler; on Linux/Windows the type compiles but nothing deserializes
+// into it. Allowed at the struct level until the non-macOS wry wiring
+// lands.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct FindResultsMessage {
     pub kind: String,

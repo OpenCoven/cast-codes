@@ -1,6 +1,7 @@
 use comfy_table::Cell;
 use serde::Serialize;
 use warp_cli::{mcp::MCPCommand, GlobalOptions};
+use warp_core::channel::ChannelState;
 use warpui::{AppContext, ModelContext, SingletonEntity};
 
 use crate::ai::agent_sdk::output::{self, TableFormat};
@@ -27,21 +28,34 @@ struct MCPCommandRunner;
 
 impl MCPCommandRunner {
     fn list(&self, global_options: GlobalOptions, ctx: &mut ModelContext<Self>) {
+        if !ChannelState::cloud_services_available() {
+            self.print_list(global_options, ctx);
+            return;
+        }
+
         let initial_sync = UpdateManager::as_ref(ctx).initial_load_complete();
 
         ctx.spawn(initial_sync, move |_, _, ctx| {
-            let mut servers = TemplatableMCPServerManager::get_all_runnable_mcp_servers(ctx);
-            servers.sort_by_key(|(uuid, _)| *uuid);
-
-            output::print_list(
-                servers
-                    .into_iter()
-                    .map(|(uuid, name)| MCPServerInfo { uuid, name }),
-                global_options.output_format,
-            );
-
-            ctx.terminate_app(warpui::platform::TerminationMode::ForceTerminate, None);
+            Self::print_list_with_context(global_options, ctx);
         });
+    }
+
+    fn print_list(&self, global_options: GlobalOptions, ctx: &mut ModelContext<Self>) {
+        Self::print_list_with_context(global_options, ctx);
+    }
+
+    fn print_list_with_context(global_options: GlobalOptions, ctx: &mut ModelContext<Self>) {
+        let mut servers = TemplatableMCPServerManager::get_all_runnable_mcp_servers(ctx);
+        servers.sort_by_key(|(uuid, _)| *uuid);
+
+        output::print_list(
+            servers
+                .into_iter()
+                .map(|(uuid, name)| MCPServerInfo { uuid, name }),
+            global_options.output_format,
+        );
+
+        ctx.terminate_app(warpui::platform::TerminationMode::ForceTerminate, None);
     }
 }
 

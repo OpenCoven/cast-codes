@@ -1,5 +1,12 @@
 # Contributing to CastCodes
 
+> **⚠️ Contribution Status — Updated May 2026**
+>
+> **We are currently only accepting Issues and Bug Reports.**
+> Pull Requests will not be reviewed or merged until **July 2026**.
+> Please do not open PRs at this time — they will be closed without review.
+> If you have a fix or feature in mind, open an issue to track it and we will pick it up when the contribution window reopens.
+
 CastCodes accepts small, focused patches that preserve the existing architecture and keep public fork behavior honest.
 
 ## Rebrand Boundaries

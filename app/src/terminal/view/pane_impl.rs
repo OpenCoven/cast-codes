@@ -1141,10 +1141,9 @@ impl TerminalView {
     }
 }
 
-fn default_agent_conversation_title(is_ambient_agent: bool) -> String {
-    if is_ambient_agent {
-        "New agent conversation".to_owned()
-    } else {
-        "New agent conversation".to_owned()
-    }
+fn default_agent_conversation_title(_is_ambient_agent: bool) -> String {
+    // Ambient vs. regular agents currently share the same default title;
+    // the parameter is retained because callers will distinguish them in
+    // a follow-up that customises the ambient label.
+    "New agent conversation".to_owned()
 }

@@ -91,7 +91,7 @@ async fn detached_tag_display_returns_short_sha() {
 #[cfg(feature = "local_fs")]
 #[test]
 fn detect_repo_root_sync_returns_repo_root() {
-    use std::process::Command as StdCommand;
+    use command::blocking::Command as StdCommand;
 
     let dir = tempfile::tempdir().expect("failed to create temp dir");
     let repo = dir.path();

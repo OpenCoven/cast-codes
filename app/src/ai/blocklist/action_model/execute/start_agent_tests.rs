@@ -198,9 +198,11 @@ fn execute_returns_error_when_local_harness_child_requires_orchestration_v2() {
         let parent_conversation_id = history_model.update(&mut app, |history_model, ctx| {
             history_model.start_new_conversation(terminal_view_id, false, false, ctx)
         });
+        // Use "claude" (a valid local child harness) so parsing succeeds and we
+        // reach the OrchestrationV2 gate this test exercises.
         let action = build_start_agent_action(
             StartAgentVersion::V2,
-            StartAgentExecutionMode::local_harness("codex".to_string()),
+            StartAgentExecutionMode::local_harness("claude".to_string()),
         );
 
         let execution = executor.update(&mut app, |executor, ctx| {

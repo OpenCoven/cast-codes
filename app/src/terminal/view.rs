@@ -15377,7 +15377,7 @@ impl TerminalView {
                 match highlighted_link {
                     GridHighlightedLink::Url(url) => {
                         let url_content =
-                            Some(model.link_at_range(url, RespectObfuscatedSecrets::Yes));
+                            model.try_link_at_range(url, RespectObfuscatedSecrets::Yes);
                         url_content
                             .map(|url_content| {
                                 vec![MenuItemFields::new("Copy URL")
@@ -17479,9 +17479,15 @@ impl TerminalView {
                 }
             }
             GridHighlightedLink::Url(url) if url.contains(position) => {
-                let resolved = {
+                let Some(resolved) = ({
                     let model = self.model.lock();
-                    model.link_at_range(url, RespectObfuscatedSecrets::No)
+                    model.try_link_at_range(url, RespectObfuscatedSecrets::No)
+                }) else {
+                    if self.highlighted_link.take(&mut self.model.lock()).is_some() {
+                        ctx.reset_cursor();
+                        ctx.notify();
+                    }
+                    return;
                 };
                 ctx.notify();
                 // Route to the embedded browser pane: if one is open in the

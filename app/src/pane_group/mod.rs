@@ -1914,6 +1914,29 @@ impl PaneGroup {
                     "Can't restore execution profile editor panes"
                 ))
             }
+            LeafContents::Browser(browser_snapshot) => {
+                #[cfg(not(target_family = "wasm"))]
+                {
+                    let pane: Box<dyn AnyPaneContent + 'static> =
+                        Box::new(BrowserPane::new_from_state(
+                            browser_snapshot.state,
+                            browser_snapshot.session_id,
+                            ctx,
+                        ));
+                    let pane_id = pane.as_pane().id();
+                    pane_contents.insert(pane_id, pane);
+                    let focus = InitialFocus {
+                        focused_pane: leaf.is_focused.then_some(pane_id),
+                        active_session: None,
+                    };
+                    Ok((PaneData::new(pane_id), focus))
+                }
+                #[cfg(target_family = "wasm")]
+                {
+                    let _ = browser_snapshot;
+                    Err(anyhow::anyhow!("Browser panes are not supported on wasm"))
+                }
+            }
             LeafContents::NetworkLog => {
                 // Network log panes are intentionally not restored. Two
                 // reasons:
@@ -7175,6 +7198,23 @@ impl PaneGroup {
         for pane in self.pane_contents.values() {
             let pane = pane.as_pane();
             pane.detach(self, DetachType::HiddenForClose, ctx);
+        }
+    }
+
+    /// Fires [`PaneContent::on_workspace_tab_visibility_changed`] on every
+    /// pane in this group. Called by `Workspace::set_active_tab_index` when
+    /// the owning workspace tab is swapped in (`visible == true`) or out
+    /// (`visible == false`) so panes with native OS-level views (browser
+    /// pane) can hide or show their native layer. Pure-Rust panes default
+    /// to a no-op and pay nothing.
+    pub fn notify_workspace_tab_visibility_changed(
+        &self,
+        visible: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        for pane in self.pane_contents.values() {
+            pane.as_pane()
+                .on_workspace_tab_visibility_changed(visible, ctx);
         }
     }
 

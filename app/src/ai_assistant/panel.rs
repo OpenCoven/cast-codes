@@ -44,6 +44,12 @@ use crate::workspace::WorkspaceAction;
 use crate::workspace::{ActiveSession, TAB_BAR_HEIGHT};
 
 use crate::util::bindings::{cmd_or_ctrl_shift, CustomAction};
+// `cmd_or_ctrl` is only referenced from inside `#[cfg(feature = "cast-agent")]`
+// blocks below; importing it unconditionally trips clippy's
+// `unused_imports` lint (promoted to `-D warnings` in CI) on builds
+// without the feature.
+#[cfg(feature = "cast-agent")]
+use crate::util::bindings::cmd_or_ctrl;
 use warpui::elements::MouseStateHandle;
 use warpui::elements::ParentElement;
 use warpui::elements::Resizable;
@@ -240,14 +246,29 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding(cmd_or_ctrl_shift("k")),
     ]);
 
+    // Two bindings, same action: Cmd+Enter / Ctrl+Enter is the default
+    // chat-send chord (standard across most chat UIs), with the older
+    // Cmd+Shift+M kept as a non-conflicting alternative for muscle
+    // memory. The AIAssistantPanel context predicate makes both override
+    // the EditorView's generic `cmd-enter` -> `EditorAction::CmdEnter`
+    // binding when focus is inside the panel's editor.
     #[cfg(feature = "cast-agent")]
-    app.register_editable_bindings([EditableBinding::new(
-        "ai_assistant_panel:send_via_coven_gateway",
-        "Stream a message through the Coven Gateway",
-        AIAssistantAction::SendViaCovenGateway,
-    )
-    .with_context_predicate(id!("AIAssistantPanel"))
-    .with_key_binding(cmd_or_ctrl_shift("m"))]);
+    app.register_editable_bindings([
+        EditableBinding::new(
+            "ai_assistant_panel:send_via_coven_gateway",
+            "Stream a message through the Coven Gateway",
+            AIAssistantAction::SendViaCovenGateway,
+        )
+        .with_context_predicate(id!("AIAssistantPanel"))
+        .with_key_binding(cmd_or_ctrl("enter")),
+        EditableBinding::new(
+            "ai_assistant_panel:send_via_coven_gateway:alt",
+            "Stream a message through the Coven Gateway (alternative)",
+            AIAssistantAction::SendViaCovenGateway,
+        )
+        .with_context_predicate(id!("AIAssistantPanel"))
+        .with_key_binding(cmd_or_ctrl_shift("m")),
+    ]);
 }
 
 impl AIAssistantPanelView {
@@ -902,9 +923,26 @@ impl AIAssistantPanelView {
                 .map(|d| d.as_nanos())
                 .unwrap_or(0)
         );
+        // Carry the user's working directory across the wire so the
+        // bridge can launch the daemon session against the active
+        // workspace rather than falling back to $HOME. Falls back to
+        // letting the bridge default (CASTCODES_BRIDGE_PROJECT_ROOT
+        // or $HOME) when current_dir() fails.
+        let body = match std::env::current_dir() {
+            Ok(cwd) => serde_json::json!({
+                "text": prompt,
+                "projectRoot": cwd.to_string_lossy(),
+            }),
+            Err(err) => {
+                log::debug!(
+                    "cast_agent: current_dir() failed ({err}); bridge will default projectRoot"
+                );
+                serde_json::json!({ "text": prompt })
+            }
+        };
         let msg = ::ai::cast_agent::AgentMessage {
             conversation_id: conversation_id.clone(),
-            body: serde_json::json!({ "text": prompt }),
+            body,
         };
 
         // Reset shared state for the new stream. If a previous stream

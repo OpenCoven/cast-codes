@@ -2,4 +2,20 @@
 #
 # Installs macOS-specific build dependencies required to build Warp.
 
-xcodebuild -downloadComponent MetalToolchain
+# `xcodebuild -downloadComponent` was added in Xcode 15.3. On stock
+# GitHub `macos-latest` runners, this script executes *before*
+# `prepare_environment` runs `setup-xcode` to select Xcode 26, so the
+# active Xcode is still whatever ships with the runner image, which
+# may not support the option. CI's `prepare_environment` action has a
+# dedicated `Install selected Xcode Metal toolchain` step that retries
+# this exact command after `setup-xcode`, so silently skipping here is
+# safe for stock CI. Self-hosted runners hit this script with their
+# own Xcode pre-selected and the call should succeed there.
+if out=$(xcodebuild -downloadComponent MetalToolchain 2>&1); then
+    printf '%s\n' "$out"
+elif printf '%s' "$out" | grep -q "invalid option '-downloadComponent'"; then
+    echo "xcodebuild -downloadComponent unsupported by current Xcode; skipping (CI retries after setup-xcode)."
+else
+    printf '%s\n' "$out" >&2
+    exit 1
+fi

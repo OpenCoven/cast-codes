@@ -145,7 +145,7 @@ impl ChatStore {
         )?;
 
         let convs = stmt
-            .query_map([], |row| row_to_conversation(row))?
+            .query_map([], row_to_conversation)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         let mut result = Vec::with_capacity(convs.len());

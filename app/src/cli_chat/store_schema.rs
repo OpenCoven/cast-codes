@@ -49,8 +49,8 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         return Err(rusqlite::Error::InvalidQuery);
     }
 
-    for v in (current as usize)..MIGRATIONS.len() {
-        for stmt in MIGRATIONS[v] {
+    for (v, migration) in MIGRATIONS.iter().enumerate().skip(current as usize) {
+        for stmt in *migration {
             conn.execute(stmt, [])?;
         }
         conn.execute(

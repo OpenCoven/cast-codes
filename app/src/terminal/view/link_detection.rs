@@ -389,8 +389,17 @@ impl super::TerminalView {
                 }
             }
             GridHighlightedLink::Url(url) => {
-                let model = self.model.lock();
-                ctx.open_url(&model.link_at_range(url, RespectObfuscatedSecrets::No));
+                let resolved = {
+                    let model = self.model.lock();
+                    model.try_link_at_range(url, RespectObfuscatedSecrets::No)
+                };
+
+                if let Some(resolved) = resolved {
+                    ctx.open_url(&resolved);
+                } else if self.highlighted_link.take(&mut self.model.lock()).is_some() {
+                    ctx.reset_cursor();
+                    ctx.notify();
+                }
             }
         };
     }

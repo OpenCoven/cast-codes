@@ -877,6 +877,21 @@ impl BindingGroup {
 ///     Keystroke::parse("ctrl-shift-{")
 /// };
 /// ```
+/// Platform-aware Cmd/Ctrl modifier without Shift. Returns `"cmd-{key}"`
+/// on macOS and `"ctrl-{key}"` elsewhere — matches the convention most
+/// applications use for "primary modifier + key" shortcuts (e.g. `Cmd+S`
+/// on Mac vs `Ctrl+S` on Linux/Windows). Use this instead of
+/// `cmd_or_ctrl_shift` when you want the modifier to be Ctrl alone on
+/// non-Mac platforms (e.g. `Ctrl+Enter` is the standard chat-send chord
+/// while `Ctrl+Shift+Enter` is not).
+pub fn cmd_or_ctrl(key: &str) -> String {
+    if OperatingSystem::get().is_mac() {
+        format!("cmd-{key}")
+    } else {
+        format!("ctrl-{key}")
+    }
+}
+
 pub fn cmd_or_ctrl_shift(key: &str) -> String {
     if OperatingSystem::get().is_mac() {
         format!("cmd-{key}")

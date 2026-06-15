@@ -1,3 +1,7 @@
+// BrowserView is a non-wasm-only render surface; some helpers compile on
+// wasm even though the WKWebView-driven code paths that consume them don't.
+#![cfg_attr(target_family = "wasm", allow(dead_code, unused_imports))]
+
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 
@@ -42,7 +46,6 @@ use super::browser_model::{BrowserModel, TabId, DEFAULT_BROWSER_URL};
 #[cfg(not(target_family = "wasm"))]
 use super::data_dir;
 use super::find::FindState;
-use super::persistence;
 use super::url_input::{resolve_with_engine, Resolved};
 #[cfg(not(target_family = "wasm"))]
 use super::webview_host::SharedWebContext;
@@ -98,6 +101,9 @@ fn classify_security(url: &str) -> SecurityState {
 }
 
 const URL_BAR_HEIGHT: f32 = 32.0;
+// Caps the editor's intrinsic height so the URL bar can vertically center the
+// text inside URL_BAR_HEIGHT instead of letting the editor element stretch.
+const URL_BAR_TEXT_HEIGHT: f32 = 18.0;
 const URL_BAR_MIN_WIDTH: f32 = 160.0;
 // Toolbar = URL bar height + 4pt total vertical padding (2pt each side). The
 // previous 48pt left ~16pt of dead space around a 32pt input and made the
@@ -114,7 +120,10 @@ const TAB_HEIGHT: f32 = 26.0;
 const TAB_CHIP_PADDING: f32 = 8.0;
 const TAB_CLOSE_BUTTON_SIZE: f32 = 16.0;
 const TOOLBAR_HORIZONTAL_PADDING: f32 = 10.0;
-const TOOLBAR_BUTTON_GAP: f32 = 6.0;
+const TOOLBAR_BUTTON_GAP: f32 = 2.0;
+// Space inserted before/after the URL bar so the nav cluster reads as a group
+// distinct from the address bar rather than as one continuous strip.
+const URL_BAR_OUTER_GAP: f32 = 8.0;
 const TAB_GAP: f32 = 2.0;
 const URL_BAR_BORDER_RADIUS: f32 = 6.0;
 const TAB_BORDER_RADIUS: f32 = 4.0;
@@ -140,9 +149,8 @@ fn zoom_level_for_step(step: u8) -> f32 {
 }
 
 fn zoom_step_in(current: u8) -> u8 {
-    let next = (current as usize).saturating_add(1);
     let max = (ZOOM_STEPS.len() - 1) as u8;
-    (next as u8).min(max)
+    current.saturating_add(1).min(max)
 }
 
 fn zoom_step_out(current: u8) -> u8 {
@@ -274,9 +282,15 @@ pub struct BrowserView {
     /// per wry's docs). `None` on wasm.
     #[cfg(not(target_family = "wasm"))]
     web_context: Option<SharedWebContext>,
+    /// Stable per-pane UUID that keys this pane's WebKit data dir. Captured
+    /// at construction (fresh `Uuid::v4` for new panes; restored from
+    /// `BrowserPaneSnapshot` for rehydrated panes) so the data dir at
+    /// `<warp_home>/browser/data/<session_id>/` survives app restarts.
+    session_id: String,
     /// Per-tab UI mouse states keyed by stable [`TabId`] so they survive tab
     /// closures (which shift indices).
     tab_ui_states: HashMap<TabId, TabUiState>,
+    workspace_tab_visible: bool,
     back_button_mouse_state: MouseStateHandle,
     forward_button_mouse_state: MouseStateHandle,
     reload_button_mouse_state: MouseStateHandle,
@@ -303,10 +317,21 @@ impl BrowserView {
     pub(crate) fn model(&self) -> &BrowserModel {
         &self.model
     }
+
+    /// Stable per-pane session id. Empty on wasm (no WebKit data store).
+    pub(crate) fn session_id(&self) -> &str {
+        &self.session_id
+    }
 }
 
 impl BrowserView {
-    pub fn new(initial_url: Option<String>, ctx: &mut ViewContext<Self>) -> Self {
+    pub fn new(
+        initial_url: Option<String>,
+        #[cfg(not(target_family = "wasm"))] session_id: &str,
+        ctx: &mut ViewContext<Self>,
+    ) -> Self {
+        #[cfg(not(target_family = "wasm"))]
+        let session_id = data_dir::normalize_session_id(session_id);
         let model = BrowserModel::new(initial_url.unwrap_or_default());
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
@@ -314,7 +339,12 @@ impl BrowserView {
 
         #[cfg(not(target_family = "wasm"))]
         let web_context: Option<SharedWebContext> = {
-            let dir = data_dir::browser_data_dir();
+            // Per-session data dir isolates cookies/localStorage/IndexedDB
+            // per workspace tab on Linux + Windows. macOS shares the
+            // WKWebsiteDataStore default store regardless (wry 0.38
+            // limitation, see `data_dir`), but creating the directory keeps
+            // the layout consistent for future macOS plumbing.
+            let dir = data_dir::browser_data_dir(&session_id);
             // Construct the WebContext even when dir is None — wry handles
             // the missing-dir case internally with its platform default.
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
@@ -377,13 +407,11 @@ impl BrowserView {
             editor
         });
 
-        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
-            match event {
-                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
-                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
-                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
-                _ => {}
-            }
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| match event {
+            EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+            EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+            EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+            _ => {}
         });
 
         Self {
@@ -396,7 +424,12 @@ impl BrowserView {
             event_tx,
             #[cfg(not(target_family = "wasm"))]
             web_context,
+            #[cfg(not(target_family = "wasm"))]
+            session_id,
+            #[cfg(target_family = "wasm")]
+            session_id: String::new(),
             tab_ui_states,
+            workspace_tab_visible: true,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
@@ -421,15 +454,18 @@ impl BrowserView {
     #[cfg(not(target_family = "wasm"))]
     pub fn from_state(
         state: super::browser_model::BrowserState,
+        session_id: &str,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
+        let session_id = data_dir::normalize_session_id(session_id);
         let model = BrowserModel::restore(state);
         let pane_configuration =
             ctx.add_model(|_ctx| PaneConfiguration::new(model.display_title()));
         let (event_tx, event_rx) = async_channel::unbounded::<NativeWebViewEvent>();
 
         let web_context: Option<SharedWebContext> = {
-            let dir = data_dir::browser_data_dir();
+            // Per-session data dir; see `Self::new` for the platform notes.
+            let dir = data_dir::browser_data_dir(&session_id);
             Some(Rc::new(RefCell::new(wry::WebContext::new(dir))))
         };
 
@@ -494,13 +530,11 @@ impl BrowserView {
             editor
         });
 
-        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| {
-            match event {
-                EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
-                EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
-                EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
-                _ => {}
-            }
+        ctx.subscribe_to_view(&find_editor, move |view, _, event, ctx| match event {
+            EditorEvent::Edited(_) => view.handle_find_query_changed(ctx),
+            EditorEvent::Enter => view.handle_action(&BrowserViewAction::FindNext, ctx),
+            EditorEvent::Escape => view.handle_action(&BrowserViewAction::CloseFind, ctx),
+            _ => {}
         });
 
         Self {
@@ -512,7 +546,9 @@ impl BrowserView {
             webviews,
             event_tx,
             web_context,
+            session_id,
             tab_ui_states,
+            workspace_tab_visible: true,
             back_button_mouse_state: MouseStateHandle::default(),
             forward_button_mouse_state: MouseStateHandle::default(),
             reload_button_mouse_state: MouseStateHandle::default(),
@@ -548,7 +584,10 @@ impl BrowserView {
 
     fn zoom_in(&mut self, ctx: &mut ViewContext<Self>) {
         let tab_id = self.model.active_tab().id();
-        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let cur = *self
+            .tab_zoom_steps
+            .get(&tab_id)
+            .unwrap_or(&DEFAULT_ZOOM_STEP);
         let next = zoom_step_in(cur);
         if next == cur {
             return;
@@ -560,7 +599,10 @@ impl BrowserView {
 
     fn zoom_out(&mut self, ctx: &mut ViewContext<Self>) {
         let tab_id = self.model.active_tab().id();
-        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let cur = *self
+            .tab_zoom_steps
+            .get(&tab_id)
+            .unwrap_or(&DEFAULT_ZOOM_STEP);
         let next = zoom_step_out(cur);
         if next == cur {
             return;
@@ -592,8 +634,36 @@ impl BrowserView {
         ctx.focus(&self.url_editor);
     }
 
+    fn sync_webview_visibility(&mut self) {
+        let active_idx = self.model.active_index();
+        for (idx, webview) in self.webviews.iter().enumerate() {
+            webview
+                .borrow_mut()
+                .set_visibility(self.workspace_tab_visible && idx == active_idx);
+        }
+    }
+
     fn active_webview(&self) -> Option<&Rc<RefCell<NativeBrowserWebView>>> {
         self.webviews.get(self.model.active_index())
+    }
+
+    /// Hide or show the native webview for the currently-active intra-pane
+    /// browser tab. Inactive intra-pane tabs are already kept hidden by
+    /// [`Self::select_tab`], so only the active webview's NSView needs to
+    /// flip when the owning workspace tab changes focus.
+    ///
+    /// Without this, switching workspace tabs leaves the WKWebView NSView
+    /// attached to the parent NSView and painting over whichever tab is
+    /// now active. Mirrors the `detach_native` pattern used by `close()`
+    /// for the same root cause, but reversibly — the webview stays alive
+    /// so navigation/load state survives the round trip.
+    pub(crate) fn set_workspace_tab_visible(&mut self, visible: bool) {
+        if self.workspace_tab_visible == visible {
+            return;
+        }
+
+        self.workspace_tab_visible = visible;
+        self.sync_webview_visibility();
     }
 
     fn navigate_to_editor_url(&mut self, ctx: &mut ViewContext<Self>) {
@@ -675,7 +745,7 @@ impl BrowserView {
             self.event_tx.clone(),
             #[cfg(not(target_family = "wasm"))]
             self.web_context.clone(),
-            true,
+            self.workspace_tab_visible,
         )));
         self.webviews.push(webview);
         self.tab_ui_states.insert(tab_id, TabUiState::default());
@@ -715,7 +785,7 @@ impl BrowserView {
                 self.event_tx.clone(),
                 #[cfg(not(target_family = "wasm"))]
                 self.web_context.clone(),
-                true,
+                self.workspace_tab_visible,
             )));
             self.webviews.push(webview);
             self.tab_ui_states.insert(new_tab_id, TabUiState::default());
@@ -728,7 +798,9 @@ impl BrowserView {
         if self.model.active_index() != prior_active_idx || result.removed_index == prior_active_idx
         {
             if let Some(webview) = self.active_webview() {
-                webview.borrow_mut().set_visibility(true);
+                webview
+                    .borrow_mut()
+                    .set_visibility(self.workspace_tab_visible);
             }
             self.sync_active_tab_into_editor(ctx);
             self.sync_pane_title(ctx);
@@ -748,7 +820,7 @@ impl BrowserView {
             prev.borrow_mut().set_visibility(false);
         }
         if let Some(next) = self.active_webview() {
-            next.borrow_mut().set_visibility(true);
+            next.borrow_mut().set_visibility(self.workspace_tab_visible);
         }
 
         self.sync_active_tab_into_editor(ctx);
@@ -879,14 +951,7 @@ impl BrowserView {
         });
     }
 
-    #[cfg(not(target_family = "wasm"))]
-    fn persist_open_state(&self, open: bool) {
-        let state = self.model.snapshot(open);
-        if let Err(err) = persistence::save_to_default_dir(&state) {
-            log::warn!("failed to persist browser state: {err}");
-        }
-    }
-
+    #[allow(clippy::too_many_arguments)]
     fn render_toolbar_button(
         &self,
         icon: Icon,
@@ -1006,7 +1071,15 @@ impl BrowserView {
         url_row.add_child(
             Expanded::new(
                 1.0,
-                Clipped::new(ChildView::new(&self.url_editor).finish()).finish(),
+                Align::new(
+                    ConstrainedBox::new(
+                        Clipped::new(ChildView::new(&self.url_editor).finish()).finish(),
+                    )
+                    .with_height(URL_BAR_TEXT_HEIGHT)
+                    .finish(),
+                )
+                .left()
+                .finish(),
             )
             .finish(),
         );
@@ -1029,7 +1102,7 @@ impl BrowserView {
             Expanded::new(
                 1.0,
                 Container::new(editor)
-                    .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+                    .with_margin_left(URL_BAR_OUTER_GAP)
                     .finish(),
             )
             .finish(),
@@ -1045,7 +1118,7 @@ impl BrowserView {
                 BrowserViewAction::ToggleFind,
                 app,
             ))
-            .with_margin_left(TOOLBAR_HORIZONTAL_PADDING)
+            .with_margin_left(URL_BAR_OUTER_GAP)
             .finish(),
         );
         toolbar.add_child(
@@ -1093,7 +1166,15 @@ impl BrowserView {
 
         let input = Container::new(
             ConstrainedBox::new(
-                Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+                Align::new(
+                    ConstrainedBox::new(
+                        Clipped::new(ChildView::new(&self.find_editor).finish()).finish(),
+                    )
+                    .with_height(URL_BAR_TEXT_HEIGHT)
+                    .finish(),
+                )
+                .left()
+                .finish(),
             )
             .with_height(URL_BAR_HEIGHT)
             .with_min_width(URL_BAR_MIN_WIDTH)
@@ -1177,6 +1258,9 @@ impl BrowserView {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
         let active = self.model.active_index();
+        // With a single tab there is no other chip to disambiguate from, so the
+        // accent border just adds chrome. Show it only once tabs have peers.
+        let show_active_border = self.model.tabs().len() > 1;
 
         let mut row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
@@ -1186,7 +1270,15 @@ impl BrowserView {
             let title = tab.display_title().to_string();
             let tab_id = tab.id();
             let ui_state = self.tab_ui_states.get(&tab_id).cloned().unwrap_or_default();
-            let chip = self.render_tab_chip(idx, tab_id, &title, idx == active, ui_state, app);
+            let chip = self.render_tab_chip(
+                idx,
+                tab_id,
+                &title,
+                idx == active,
+                show_active_border,
+                ui_state,
+                app,
+            );
             let chip_with_margin = if idx == 0 {
                 chip
             } else {
@@ -1213,12 +1305,14 @@ impl BrowserView {
         .finish()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_tab_chip(
         &self,
         idx: usize,
         _tab_id: TabId,
         title: &str,
         is_active: bool,
+        show_active_border: bool,
         ui_state: TabUiState,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -1247,7 +1341,7 @@ impl BrowserView {
             Icon::X,
             TAB_CLOSE_BUTTON_SIZE,
             close_mouse,
-            chip_text_color.into(),
+            chip_text_color,
         )
         .with_tooltip(move || {
             ui_builder
@@ -1292,7 +1386,7 @@ impl BrowserView {
             if let Some(bg) = background {
                 container = container.with_background(bg);
             }
-            if is_active {
+            if is_active && show_active_border {
                 container = container.with_border(Border::all(1.0).with_border_fill(accent));
             }
             container.finish()
@@ -1397,13 +1491,15 @@ impl TypedActionView for BrowserView {
             }
             BrowserViewAction::ToggleFind => self.toggle_find(ctx),
             BrowserViewAction::CloseFind => self.close_find(ctx),
-            BrowserViewAction::FindNext => {
+            BrowserViewAction::FindNext =>
+            {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_next();
                 }
             }
-            BrowserViewAction::FindPrev => {
+            BrowserViewAction::FindPrev =>
+            {
                 #[cfg(not(target_family = "wasm"))]
                 if let Some(webview) = self.active_webview() {
                     webview.borrow().find_prev();
@@ -1426,7 +1522,10 @@ impl BackingView for BrowserView {
         _ctx: &AppContext,
     ) -> Vec<MenuItem<BrowserViewAction>> {
         let tab_id = self.model.active_tab().id();
-        let cur = *self.tab_zoom_steps.get(&tab_id).unwrap_or(&DEFAULT_ZOOM_STEP);
+        let cur = *self
+            .tab_zoom_steps
+            .get(&tab_id)
+            .unwrap_or(&DEFAULT_ZOOM_STEP);
         let pct = (zoom_level_for_step(cur) * 100.0).round() as i32;
         let reset_label = format!("Reset zoom ({pct}%)");
         let modifier = if cfg!(target_os = "macos") {
@@ -1466,7 +1565,6 @@ impl BackingView for BrowserView {
             for webview in &self.webviews {
                 webview.borrow_mut().detach_native();
             }
-            self.persist_open_state(false);
         }
         ctx.emit(BrowserViewEvent::Pane(PaneEvent::Close));
     }
@@ -1509,8 +1607,9 @@ impl BackingView for BrowserView {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_security, zoom_level_for_step, zoom_step_in, zoom_step_out, SecurityState, TAB_STRIP_HEIGHT,
-        DEFAULT_ZOOM_STEP, ZOOM_STEPS,
+    use super::{
+        classify_security, zoom_level_for_step, zoom_step_in, zoom_step_out, SecurityState,
+        DEFAULT_ZOOM_STEP, TAB_STRIP_HEIGHT, ZOOM_STEPS,
     };
 
     #[test]

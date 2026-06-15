@@ -49,6 +49,7 @@ use crate::terminal::cli_agent_sessions::{
 use crate::terminal::model::ansi::{self, InitShellValue};
 use crate::terminal::model::ansi::{BootstrappedValue, PreexecValue};
 use crate::terminal::model::blocks::{insert_block, TotalIndex};
+use crate::terminal::model::grid::grid_handler::Link;
 use crate::terminal::model::grid::Dimensions as _;
 use crate::terminal::model::terminal_model::WithinBlock;
 use crate::terminal::session_settings::AgentToolbarChipSelection;
@@ -3523,6 +3524,31 @@ fn test_link_at_range_trims_zero_width_spaces() {
             assert_eq!(
                 model.link_at_range(&url, RespectObfuscatedSecrets::No),
                 escaped_url
+            );
+        });
+    })
+}
+
+#[test]
+fn test_try_link_at_range_returns_none_for_stale_block_link() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        terminal.read(&app, |view, _ctx| {
+            let model = view.model.lock();
+            let stale_link = WithinModel::BlockList(WithinBlock::new(
+                Link {
+                    range: Point::new(0, 0)..=Point::new(0, 10),
+                    is_empty: false,
+                },
+                BlockIndex(model.block_list().blocks().len() + 100),
+                crate::terminal::GridType::Output,
+            ));
+
+            assert_eq!(
+                model.try_link_at_range(&stale_link, RespectObfuscatedSecrets::No),
+                None
             );
         });
     })

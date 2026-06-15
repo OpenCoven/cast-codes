@@ -19,12 +19,17 @@ pub struct ComuxPane {
     pub active: bool,
 }
 
+// Only used by the cfg(unix) impl block further down — comux speaks
+// over a Unix domain socket. On Windows/wasm `-D dead-code` flags
+// these as unconstructed.
+#[cfg(unix)]
 #[derive(serde::Serialize)]
 struct ListPanesRequest {
     #[serde(rename = "type")]
     kind: &'static str,
 }
 
+#[cfg(unix)]
 #[derive(serde::Deserialize)]
 struct ListPanesResponse {
     panes: Vec<ComuxPane>,

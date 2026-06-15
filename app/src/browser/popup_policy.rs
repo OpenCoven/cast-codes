@@ -1,3 +1,8 @@
+// Consumed by `browser/webview_host.rs`'s in-progress popup wiring; until
+// that handler is hooked to wry, the call chain is unreachable from
+// production paths.
+#![allow(dead_code)]
+
 //! Policy decisions for popups (`window.open` / `target="_blank"`) inside
 //! the embedded browser pane.
 //!

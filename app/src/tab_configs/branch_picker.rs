@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use warpui::{
-    elements::ChildView, ui_components::components::UiComponentStyles, AppContext, Element, Entity,
-    TypedActionView, View, ViewContext, ViewHandle,
+    elements::ChildView, r#async::SpawnedFutureHandle,
+    ui_components::components::UiComponentStyles, AppContext, Element, Entity, TypedActionView,
+    View, ViewContext, ViewHandle,
 };
 
 use crate::{
@@ -44,6 +45,9 @@ pub struct BranchPicker {
     /// True while an async branch fetch is in-flight. While loading, the
     /// dropdown is disabled so the user cannot interact with an empty list.
     is_loading: bool,
+    /// Handle for the active branch fetch, if any. Replaced fetches are
+    /// aborted so rapid repo changes do not leave stale `git` work running.
+    fetch_handle: Option<SpawnedFutureHandle>,
 }
 
 impl BranchPicker {
@@ -85,6 +89,7 @@ impl BranchPicker {
             fetch_epoch: 0,
             cached_main_branch: None,
             is_loading: false,
+            fetch_handle: None,
         };
 
         // Synchronously show the default value immediately so the dropdown is
@@ -131,11 +136,15 @@ impl BranchPicker {
             dropdown.set_selected_by_name(LOADING_PLACEHOLDER, ctx);
         });
 
-        self.fetch_epoch += 1;
+        if let Some(handle) = self.fetch_handle.take() {
+            handle.abort();
+        }
+
+        self.fetch_epoch = self.fetch_epoch.wrapping_add(1);
         let epoch = self.fetch_epoch;
         let known_main = self.cached_main_branch.clone();
 
-        ctx.spawn(
+        self.fetch_handle = Some(ctx.spawn(
             async move {
                 let branches = match known_main {
                     Some(ref main) => {
@@ -168,6 +177,7 @@ impl BranchPicker {
                     return;
                 }
 
+                me.fetch_handle = None;
                 me.is_loading = false;
                 me.dropdown.update(ctx, |dropdown, ctx| {
                     dropdown.set_enabled(ctx);
@@ -229,7 +239,7 @@ impl BranchPicker {
 
                 ctx.notify();
             },
-        );
+        ));
     }
 
     /// Clears the current branch list and re-fetches for a new repo path.

@@ -1,7 +1,9 @@
+#[cfg(not(target_arch = "wasm32"))]
+use crate::supported_servers::LspStartupError;
 use crate::{
     config::{lsp_uri_to_path, LanguageId},
     server_repo_watcher::LspRepoWatcher,
-    supported_servers::{LSPServerType, LspStartupError, LspStartupFailureReason},
+    supported_servers::{LSPServerType, LspStartupFailureReason},
     types::{
         DefinitionLocation, DocumentVersion, HoverResult, Location, ReferenceLocation,
         TextDocumentContentChangeEvent, TextEdit, WatchedFileChangeEvent,

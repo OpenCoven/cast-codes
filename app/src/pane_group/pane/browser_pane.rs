@@ -1,6 +1,8 @@
 use url::Url;
 use warpui::{AppContext, ModelHandle, View, ViewContext, ViewHandle};
 
+#[cfg(not(target_family = "wasm"))]
+use crate::app_state::BrowserPaneSnapshot;
 use crate::app_state::LeafContents;
 
 use super::{
@@ -32,17 +34,34 @@ impl BrowserPane {
         }
     }
 
-    pub fn new<V: View>(url: Option<String>, ctx: &mut ViewContext<V>) -> Self {
-        let view = ctx.add_typed_action_view(move |ctx| BrowserView::new(url, ctx));
+    /// `session_id` keys this pane's WebKit data store (per-pane isolation
+    /// on Linux + Windows; see [`crate::browser::data_dir`] for platform
+    /// notes). It is accepted unconditionally so callers don't need to
+    /// cfg-gate; on wasm it is discarded because there is no WebKit data
+    /// store to scope.
+    pub fn new<V: View>(url: Option<String>, session_id: String, ctx: &mut ViewContext<V>) -> Self {
+        let view = ctx.add_typed_action_view(move |ctx| {
+            #[cfg(not(target_family = "wasm"))]
+            {
+                BrowserView::new(url, &session_id, ctx)
+            }
+            #[cfg(target_family = "wasm")]
+            {
+                let _ = session_id;
+                BrowserView::new(url, ctx)
+            }
+        });
         Self::from_view(view, ctx)
     }
 
     #[cfg(not(target_family = "wasm"))]
     pub fn new_from_state<V: View>(
         state: super::browser::browser_model::BrowserState,
+        session_id: String,
         ctx: &mut ViewContext<V>,
     ) -> Self {
-        let view = ctx.add_typed_action_view(move |ctx| BrowserView::from_state(state, ctx));
+        let view =
+            ctx.add_typed_action_view(move |ctx| BrowserView::from_state(state, &session_id, ctx));
         Self::from_view(view, ctx)
     }
 
@@ -88,10 +107,22 @@ impl PaneContent for BrowserPane {
         ctx.unsubscribe_to_view(&self.view);
     }
 
-    fn snapshot(&self, _app: &AppContext) -> LeafContents {
-        // Browser panes are transient until app-state grows a dedicated browser leaf.
-        // Reuse the existing non-persisted leaf so session restore skips this pane.
-        LeafContents::NetworkLog
+    fn snapshot(&self, app: &AppContext) -> LeafContents {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let browser_view = self.browser_view(app);
+            let view = browser_view.as_ref(app);
+            LeafContents::Browser(BrowserPaneSnapshot {
+                session_id: view.session_id().to_owned(),
+                state: view.model().snapshot(/* open */ true),
+            })
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            let _ = app;
+            // wasm has no WebKit data store; nothing to persist.
+            LeafContents::NetworkLog
+        }
     }
 
     fn has_application_focus(&self, ctx: &mut ViewContext<PaneGroup>) -> bool {
@@ -119,5 +150,10 @@ impl PaneContent for BrowserPane {
 
     fn is_pane_being_dragged(&self, ctx: &AppContext) -> bool {
         self.view.as_ref(ctx).is_being_dragged()
+    }
+
+    fn on_workspace_tab_visibility_changed(&self, visible: bool, ctx: &mut ViewContext<PaneGroup>) {
+        let browser_view = self.browser_view(ctx);
+        browser_view.update(ctx, |view, _ctx| view.set_workspace_tab_visible(visible));
     }
 }

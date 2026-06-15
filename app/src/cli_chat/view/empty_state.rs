@@ -13,6 +13,7 @@ use warpui::fonts::FamilyId;
 use crate::cli_chat::strings;
 
 /// Which empty state to display.
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum EmptyKind {
     /// No conversations at all — invite the user to run a CLI.
     NoHistory,

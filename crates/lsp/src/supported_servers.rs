@@ -128,6 +128,9 @@ pub struct LspStartupError {
 }
 
 impl LspStartupError {
+    // Only constructed by the non-wasm `LspServerModel::start` path; gate
+    // to match so wasm clippy doesn't flag the constructor as dead code.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn missing_binary(server_type: LSPServerType) -> Self {
         Self {
             reason: LspStartupFailureReason::MissingBinary { server_type },

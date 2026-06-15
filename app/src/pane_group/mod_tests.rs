@@ -1110,6 +1110,13 @@ fn test_number_of_shared_panes() {
 #[test]
 fn test_start_shared_session_from_modal() {
     let _guard = FeatureFlag::CreatingSharedSessions.override_enabled(true);
+    // `open_share_session_modal` early-returns on channels without cloud
+    // services (e.g. the default OSS channel used for unit-test builds). This
+    // test exercises the hosted-channel path, so override the channel for its
+    // duration.
+    let _channel_guard = warp_core::channel::ChannelState::override_channel_for_test(
+        warp_core::channel::Channel::Stable,
+    );
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());

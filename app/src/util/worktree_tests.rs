@@ -181,7 +181,7 @@ fn parse_main_is_first_entry() {
 #[cfg(feature = "local_fs")]
 #[tokio::test]
 async fn list_worktrees_round_trip_on_temp_repo() {
-    use std::process::Command;
+    use command::blocking::Command;
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
@@ -222,7 +222,7 @@ async fn list_worktrees_round_trip_on_temp_repo() {
 #[cfg(feature = "local_fs")]
 #[tokio::test]
 async fn add_worktree_existing_branch() {
-    use std::process::Command;
+    use command::blocking::Command;
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
@@ -250,7 +250,7 @@ async fn add_worktree_existing_branch() {
 #[cfg(feature = "local_fs")]
 #[tokio::test]
 async fn add_worktree_creates_new_branch() {
-    use std::process::Command;
+    use command::blocking::Command;
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
@@ -282,7 +282,7 @@ async fn add_worktree_creates_new_branch() {
 #[cfg(feature = "local_fs")]
 #[tokio::test]
 async fn remove_worktree_clean() {
-    use std::process::Command;
+    use command::blocking::Command;
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {
@@ -315,7 +315,7 @@ async fn remove_worktree_clean() {
 #[cfg(feature = "local_fs")]
 #[tokio::test]
 async fn remove_worktree_dirty_requires_force() {
-    use std::process::Command;
+    use command::blocking::Command;
     let td = TempDir::new().unwrap();
     let repo = td.path();
     let run = |args: &[&str]| {

@@ -367,7 +367,9 @@ pub enum ServerApiEvent {
     UserAccountDisabled,
     /// The current bearer token was refreshed.
     AccessTokenRefreshed {
-        #[cfg_attr(target_family = "wasm", allow(dead_code))]
+        // Currently only the Debug impl reads this; consumers don't yet
+        // observe the refreshed value. Allow until a consumer wires up.
+        #[allow(dead_code)]
         token: String,
     },
 }

@@ -1,3 +1,6 @@
+> **⚠️ PRs are not being accepted until July 2026.**
+> Please close this PR and open an Issue instead. Unreviewed PRs will be closed.
+
 ## Description
 <!-- Please remember to add your design buddy onto the PR for review, if it contains any UI changes! -->
 
