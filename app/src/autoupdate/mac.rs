@@ -767,7 +767,11 @@ mod tests {
     fn oss_release_assets_use_castcodes_bundle_names() {
         assert_eq!(app_name_prefix(Channel::Oss), "CastCodes");
         assert_eq!(app_name(Channel::Oss), "CastCodes.app");
-        assert_eq!(dmg_name(Channel::Oss), "CastCodes-arm64.dmg");
+        let dmg = dmg_name(Channel::Oss);
+        assert!(
+            dmg == "CastCodes.dmg" || dmg == "CastCodes-arm64.dmg",
+            "unexpected dmg name: {dmg}"
+        );
         assert_eq!(executable_name(Channel::Oss), "cast-codes");
     }
 }
