@@ -848,12 +848,17 @@ fn version_info_from_github_releases(releases: &[GithubRelease]) -> Option<Versi
     let asset_name = oss_update_asset_name();
     releases
         .iter()
-        .find(|release| {
+        .filter(|release| {
             !release.draft
                 && !release.prerelease
                 && release.assets.iter().any(|asset| asset.name == asset_name)
         })
-        .map(|release| VersionInfo::new(release.tag_name.clone()))
+        .filter_map(|release| {
+            let parsed = ParsedVersion::try_from(release.tag_name.as_str()).ok()?;
+            Some((parsed, release))
+        })
+        .max_by(|(a, _), (b, _)| a.cmp(b))
+        .map(|(_, release)| VersionInfo::new(release.tag_name.clone()))
 }
 
 fn oss_update_asset_name() -> &'static str {
