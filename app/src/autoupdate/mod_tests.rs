@@ -305,7 +305,9 @@ fn test_oss_release_version_skips_releases_without_current_platform_asset() {
             draft: false,
             prerelease: false,
             assets: vec![GithubReleaseAsset {
-                name: "CastCodesSetup.exe".to_string(),
+                // Deliberately use a macOS-only asset so this release is
+                // skipped on Windows and Linux (only macOS should pick it up).
+                name: "CastCodes-arm64.dmg".to_string(),
             }],
         },
         GithubRelease {
