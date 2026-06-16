@@ -1,4 +1,4 @@
-# CastCodes
+# CastCodes 📡✨
 
 CastCodes is a local-first AI coding workspace powered by Coven. It is the product users open: terminal and editor substrate, agent panels and lanes, local project context, and review workflows in one desktop workspace.
 
