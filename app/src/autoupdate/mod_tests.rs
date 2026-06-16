@@ -305,9 +305,10 @@ fn test_oss_release_version_skips_releases_without_current_platform_asset() {
             draft: false,
             prerelease: false,
             assets: vec![GithubReleaseAsset {
-                // Deliberately use a macOS-only asset so this release is
-                // skipped on Windows and Linux (only macOS should pick it up).
-                name: "CastCodes-arm64.dmg".to_string(),
+                // Deliberately use an asset that matches no known platform
+                // (not macOS arm64, not macOS x86, not Windows, not Linux x86_64)
+                // so this release is skipped on every CI runner.
+                name: "CastCodes-riscv64.AppImage".to_string(),
             }],
         },
         GithubRelease {
