@@ -732,23 +732,22 @@ fn dmg_name(channel: Channel) -> String {
 
 fn app_name_prefix(channel: Channel) -> &'static str {
     match channel {
-        Channel::Stable => "CastCodes",
+        Channel::Stable | Channel::Oss => "CastCodes",
         Channel::Preview => "WarpPreview",
         Channel::Local => "warp",
         Channel::Integration => "integration",
         Channel::Dev => "WarpDev",
-        Channel::Oss => "warp-oss",
     }
 }
 
 fn executable_name(channel: Channel) -> &'static str {
     match channel {
+        Channel::Oss => "cast-codes",
         Channel::Stable => "stable",
         Channel::Preview => "preview",
         Channel::Local => "warp",
         Channel::Integration => "integration",
         Channel::Dev => "dev",
-        Channel::Oss => "warp-oss",
     }
 }
 
@@ -757,5 +756,22 @@ fn executable_path(channel: Channel) -> String {
         format!("Contents/MacOS/{}", executable_name(channel))
     } else {
         executable_name(channel).to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oss_release_assets_use_castcodes_bundle_names() {
+        assert_eq!(app_name_prefix(Channel::Oss), "CastCodes");
+        assert_eq!(app_name(Channel::Oss), "CastCodes.app");
+        let dmg = dmg_name(Channel::Oss);
+        assert!(
+            dmg == "CastCodes.dmg" || dmg == "CastCodes-arm64.dmg",
+            "unexpected dmg name: {dmg}"
+        );
+        assert_eq!(executable_name(Channel::Oss), "cast-codes");
     }
 }

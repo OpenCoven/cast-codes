@@ -40,7 +40,11 @@ fn oss_channel_uses_castcodes_public_identity() {
     assert!(!ChannelState::cloud_services_available());
     assert!(!ChannelState::is_telemetry_available());
     assert!(!ChannelState::is_crash_reporting_available());
-    assert_eq!(ChannelState::releases_base_url(), "");
+    assert_eq!(
+        ChannelState::releases_base_url(),
+        brand::PUBLIC_RELEASES_DOWNLOAD_BASE_URL
+    );
+    assert!(ChannelState::show_autoupdate_menu_items());
     assert_eq!(
         ChannelState::server_root_url(),
         brand::UNAVAILABLE_LOCALHOST_HTTP_URL

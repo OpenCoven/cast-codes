@@ -6,7 +6,8 @@ use url::{Origin, ParseError, Url};
 use crate::{
     brand,
     channel::config::{
-        ChannelConfig, McpOAuthProviderConfig, OzConfig, RudderStackDestination, WarpServerConfig,
+        AutoupdateConfig, ChannelConfig, McpOAuthProviderConfig, OzConfig, RudderStackDestination,
+        WarpServerConfig,
     },
     features::FeatureFlag,
     AppId,
@@ -49,7 +50,10 @@ impl ChannelState {
                 server_config: WarpServerConfig::unavailable(),
                 oz_config: OzConfig::unavailable(),
                 telemetry_config: None,
-                autoupdate_config: None,
+                autoupdate_config: Some(AutoupdateConfig {
+                    releases_base_url: brand::PUBLIC_RELEASES_DOWNLOAD_BASE_URL.into(),
+                    show_autoupdate_menu_items: true,
+                }),
                 crash_reporting_config: None,
                 mcp_static_config: None,
             },
