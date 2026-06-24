@@ -16,7 +16,7 @@ Public beginner docs should lead with this hierarchy:
 2. **Coven** — the daemon/runtime/API/session authority under the workspace.
 3. **OpenCoven** — the organization, lab, and ecosystem behind the product direction.
 
-Advanced docs may mention other clients when needed, but beginner/product copy should not make users learn comux, OpenMeow, OpenClaw bridge details, optional clients, or historical prototypes before they understand why CastCodes matters.
+Advanced docs may mention other clients when needed, but beginner/product copy should not make users learn comux, OpenClaw bridge details, optional clients, or historical prototypes before they understand why CastCodes matters.
 
 Preferred public wording:
 
@@ -28,9 +28,9 @@ Preferred public wording:
 
 Avoid public-first wording that presents OpenCoven as a bundle of optional surfaces:
 
-- `Coven works with comux, OpenMeow, OpenClaw, CastCodes, and future clients.`
+- `Coven works with comux, OpenClaw, CastCodes, and future clients.`
 - `comux is the cockpit.`
-- `OpenMeow is the intake layer.`
+- `The chat/intake client is the intake layer.`
 - `OpenClaw is required for orchestration.`
 - `Users can choose from many optional OpenCoven surfaces.`
 
@@ -85,7 +85,7 @@ Public docs can say:
 Retire these from beginner/product copy:
 
 - comux as the active public cockpit;
-- OpenMeow as required intake;
+- the chat/intake client as required intake;
 - OpenClaw bridge as the primary story;
 - optional clients as a first-contact explanation; and
 - broad ecosystem diagrams before the CastCodes + Coven story is clear.
@@ -135,7 +135,7 @@ These are roadmap/parity milestones unless the current app has shipped the exact
 
 ## Acceptance Criteria
 
-- A new user can read CastCodes public docs and understand the product without learning comux, OpenMeow, or OpenClaw first.
+- A new user can read CastCodes public docs and understand the product without learning comux or OpenClaw first.
 - Coven docs identify CastCodes as the primary public workspace/proof surface.
 - Coven remains described as daemon/runtime/API/session authority.
 - comux references are clearly legacy, migration, reference, or advanced architecture context.
