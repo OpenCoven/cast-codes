@@ -30,7 +30,7 @@ const SUBSCRIBE_ITEMS: &[&str] = &[
     "Access to Reload credits and volume-based discounts",
     "Extended agent access",
     "Highest codebase indexing limits",
-    "Unlimited Warp Drive objects and collaboration",
+    "Unlimited Cast Drive objects and collaboration",
     "Private email support",
     "Unlimited conversation storage",
 ];
@@ -121,7 +121,7 @@ impl FreeUserNoAiSlide {
             appearance,
             0,
             Icon::Code2,
-            "Agent driven development with Warp's built-in agent",
+            "Agent driven development with CastCodes's built-in agent",
             "Iterate, plan, and build with Cast Agent inside CastCodes.",
             agent_price_badge.to_string(),
             true, // badge is green
@@ -316,7 +316,7 @@ impl FreeUserNoAiSlide {
             self.next_button.render(
                 appearance,
                 button::Params {
-                    content: button::Content::Label("Get Warping".into()),
+                    content: button::Content::Label("Get Casting".into()),
                     theme: &button::themes::Primary,
                     options: button::Options {
                         keystroke: Some(enter),
@@ -368,7 +368,7 @@ impl FreeUserNoAiSlide {
         let text_sub = internal_colors::text_sub(theme, internal_colors::neutral_2(theme));
 
         let title = FormattedTextElement::from_str(
-            "Subscribe to access agent driven development in Warp.",
+            "Subscribe to access agent driven development in CastCodes.",
             ui_font_family,
             24.,
         )

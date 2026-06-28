@@ -268,7 +268,7 @@ impl ThemePickerSlide {
 
         let theme_picker_last = FeatureFlag::OpenWarpNewSettingsModes.is_enabled();
         let next_label = if theme_picker_last {
-            "Get Warping"
+            "Get Casting"
         } else {
             "Next"
         };
@@ -597,7 +597,7 @@ impl ThemePickerSlide {
         let tos_line = Flex::row()
             .with_child(
                 ui_builder
-                    .span("By continuing, you agree to Warp's ")
+                    .span("By continuing, you agree to CastCodes's ")
                     .with_style(disclaimer_styles)
                     .build()
                     .finish(),
