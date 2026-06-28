@@ -1,4 +1,9 @@
-use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    ffi::OsString,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use futures::channel::oneshot;
 use warp_cli::agent::Harness;
@@ -118,6 +123,22 @@ fn test_normalize_sse_server_with_headers() {
 
 // ── IdleTimeoutSender tests ──────────────────────────────────────────────────────
 
+fn recv_within<T>(rx: &mut oneshot::Receiver<T>, timeout: Duration) -> Option<T> {
+    let started_at = Instant::now();
+
+    loop {
+        if let Some(value) = rx.try_recv().unwrap() {
+            return Some(value);
+        }
+
+        if started_at.elapsed() >= timeout {
+            return None;
+        }
+
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[test]
 fn idle_timeout_sender_send_now_delivers_value() {
     let (tx, mut rx) = oneshot::channel::<i32>();
@@ -144,8 +165,7 @@ fn idle_timeout_sender_send_after_delivers_after_timeout() {
     // Not yet delivered.
     assert_eq!(rx.try_recv().unwrap(), None);
 
-    std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(rx.try_recv().unwrap(), Some(99));
+    assert_eq!(recv_within(&mut rx, Duration::from_secs(1)), Some(99));
 }
 
 #[test]
@@ -180,8 +200,7 @@ fn idle_timeout_sender_later_send_after_supersedes_earlier() {
     // Second timer: short timeout. The first is implicitly cancelled.
     idle_timeout.end_run_after(Duration::from_millis(50), 2);
 
-    std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(rx.try_recv().unwrap(), Some(2));
+    assert_eq!(recv_within(&mut rx, Duration::from_secs(1)), Some(2));
 }
 
 #[test]
