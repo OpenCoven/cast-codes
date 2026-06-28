@@ -1,11 +1,7 @@
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, ffi::OsString, sync::Arc, time::Duration};
 
 use futures::channel::oneshot;
+use instant::Instant;
 use warp_cli::agent::Harness;
 use warp_cli::{
     OZ_CLI_ENV, OZ_HARNESS_ENV, OZ_PARENT_RUN_ID_ENV, OZ_RUN_ID_ENV, SERVER_ROOT_URL_OVERRIDE_ENV,
