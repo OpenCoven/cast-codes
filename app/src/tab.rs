@@ -1472,7 +1472,11 @@ impl<'a> TabComponent<'a> {
                 .finish(),
             );
             Container::new(flex_row.finish())
-                .with_horizontal_padding(8.)
+                .with_horizontal_padding(if FeatureFlag::NewTabStyling.is_enabled() {
+                    10.
+                } else {
+                    8.
+                })
                 .finish()
         };
 
@@ -1614,13 +1618,21 @@ impl<'a> TabComponent<'a> {
             .with_vertical_padding(2.)
             .with_background(background_color);
         if FeatureFlag::NewTabStyling.is_enabled() {
-            let is_first_tab = self.tab_index == 0;
-            tab = tab.with_border(
-                Border::all(1.)
-                    // We only include a left border on the very first tab to avoid double borders.
-                    .with_sides(false, is_first_tab, false, true)
-                    .with_border_fill(border_fill),
-            );
+            // Floating browser-style card: rounded top corners with a flat bottom
+            // that merges into the content area below. The active tab's accent
+            // underline (added below) sits along that flat edge. Tabs are spaced
+            // by a small gap (added in `build`) rather than abutting separators.
+            tab = tab.with_corner_radius(CornerRadius::with_top(Radius::Pixels(6.0)));
+            // Only the active/hovered card draws a subtle outline (top + sides,
+            // open bottom); idle tabs stay borderless for a calm, uncluttered
+            // strip.
+            if is_active || is_hovered {
+                tab = tab.with_border(
+                    Border::all(1.)
+                        .with_sides(true, true, false, true)
+                        .with_border_fill(border_fill),
+                );
+            }
         } else {
             tab = tab
                 .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.0)))
@@ -1884,6 +1896,16 @@ impl UiComponent for TabComponent<'_> {
             ConstrainedBox::new(tab.finish())
                 .with_max_width(200.)
                 .finish()
+        };
+
+        // Separate the floating cards with a small gap instead of abutting
+        // separators (new styling only). The first tab keeps a tight left edge.
+        let constrained_tab = if FeatureFlag::NewTabStyling.is_enabled() && tab_index > 0 {
+            Container::new(constrained_tab)
+                .with_margin_left(2.)
+                .finish()
+        } else {
+            constrained_tab
         };
 
         // Skip the `Draggable` and `SavePosition` wrappers when rendering
