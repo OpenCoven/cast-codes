@@ -1414,7 +1414,9 @@ impl<'a> TabComponent<'a> {
                 Fill::None
             };
 
-            let border = if is_active {
+            // Brighten the border on hover (matching the active treatment) so an
+            // inactive tab gives clear feedback under the cursor.
+            let border = if is_active || is_hovered {
                 internal_colors::fg_overlay_2(theme)
             } else {
                 internal_colors::fg_overlay_1(theme)
@@ -1625,9 +1627,35 @@ impl<'a> TabComponent<'a> {
                 .with_border(Border::all(1.).with_border_fill(border_fill));
         }
 
+        // Mark the active tab with a full-width accent underline pinned to its
+        // bottom edge, visually connecting it to the content area below. The bar
+        // is a pure overlay (`ParentBySize` stretches it to the tab width) so it
+        // adds no height and never reflows the strip.
+        let tab_element: Box<dyn Element> = if FeatureFlag::NewTabStyling.is_enabled() && is_active
+        {
+            let accent_underline =
+                ConstrainedBox::new(Rect::new().with_background(theme.accent()).finish())
+                    .with_height(2.)
+                    .finish();
+
+            let mut accented = Stack::new().with_child(tab.finish());
+            accented.add_positioned_overlay_child(
+                accent_underline,
+                OffsetPositioning::offset_from_parent(
+                    vec2f(0., 0.),
+                    ParentOffsetBounds::ParentBySize,
+                    ParentAnchor::BottomLeft,
+                    ChildAnchor::BottomLeft,
+                ),
+            );
+            accented.finish()
+        } else {
+            tab.finish()
+        };
+
         // If the tab is being dragged, add an opaque background behind it
         if is_tab_dragging {
-            Container::new(tab.finish())
+            Container::new(tab_element)
                 .with_background_color(
                     self.ui_builder
                         .warp_theme()
@@ -1641,10 +1669,10 @@ impl<'a> TabComponent<'a> {
             // semantically meaningful for an element that follows the cursor,
             // and because the inner `DropTarget`'s position is unrelated to
             // any real tab in the target window.
-            tab.finish()
+            tab_element
         } else {
             DropTarget::new(
-                tab.finish(),
+                tab_element,
                 TabBarDropTargetData {
                     tab_bar_location: TabBarLocation::TabIndex(self.tab_index),
                 },
