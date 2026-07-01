@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use crate::ai::blocklist::is_local_to_cloud_handoff_available;
 use crate::context_chips::{agent_footer_available_chips, available_chips, ContextChipKind};
 use crate::features::FeatureFlag;
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::ui_components::icons::Icon;
 
 use super::editor::AgentToolbarEditorMode;
@@ -91,29 +90,6 @@ impl AgentToolbarItemKind {
         }
     }
 
-    /// Whether this item should be visible to session viewers.
-    /// Items that control host settings or initiate actions on the host's
-    /// behalf are hidden from viewers.
-    pub fn available_to_session_viewer(
-        &self,
-        status: &SharedSessionStatus,
-        is_cloud_mode: bool,
-    ) -> bool {
-        match self {
-            Self::Settings | Self::ShareSession | Self::FileExplorer => !status.is_viewer(),
-            Self::FileAttach => !status.is_viewer() || is_cloud_mode,
-            Self::FastForwardToggle => !status.is_viewer() || status.is_executor(),
-            // Handoff is host-initiated; viewers cannot hand off another user's conversation.
-            Self::HandoffToCloud => !status.is_viewer(),
-            Self::ContextChip(_)
-            | Self::ModelSelector
-            | Self::NLDToggle
-            | Self::ContextWindowUsage
-            | Self::RichInput
-            | Self::VoiceInput => true,
-        }
-    }
-
     pub fn display_label(&self) -> &'static str {
         match self {
             Self::ContextChip(_) => "Context Chip",
@@ -183,11 +159,6 @@ impl AgentToolbarItemKind {
             Self::ContextWindowUsage,
             Self::ModelSelector,
         ];
-        if FeatureFlag::CreatingSharedSessions.is_enabled()
-            && FeatureFlag::HOARemoteControl.is_enabled()
-        {
-            items.push(Self::ShareSession);
-        }
         if is_local_to_cloud_handoff_available() {
             items.push(Self::HandoffToCloud);
         }
@@ -212,11 +183,6 @@ impl AgentToolbarItemKind {
         if FeatureFlag::FastForwardAutoexecuteButton.is_enabled() {
             items.push(Self::FastForwardToggle);
         }
-        if FeatureFlag::CreatingSharedSessions.is_enabled()
-            && FeatureFlag::HOARemoteControl.is_enabled()
-        {
-            items.push(Self::ShareSession);
-        }
         if is_local_to_cloud_handoff_available() {
             items.push(Self::HandoffToCloud);
         }
@@ -230,11 +196,6 @@ impl AgentToolbarItemKind {
             Self::VoiceInput,
             Self::ContextChip(ContextChipKind::GitDiffStats),
         ];
-        if FeatureFlag::CreatingSharedSessions.is_enabled()
-            && FeatureFlag::HOARemoteControl.is_enabled()
-        {
-            items.push(Self::ShareSession);
-        }
         items.push(Self::FileExplorer);
         if FeatureFlag::CLIAgentRichInput.is_enabled() {
             items.push(Self::RichInput);
@@ -264,11 +225,6 @@ impl AgentToolbarItemKind {
             Self::VoiceInput,
             Self::Settings,
         ]);
-        if FeatureFlag::CreatingSharedSessions.is_enabled()
-            && FeatureFlag::HOARemoteControl.is_enabled()
-        {
-            items.push(Self::ShareSession);
-        }
         items
     }
 

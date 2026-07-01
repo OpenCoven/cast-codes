@@ -46,7 +46,6 @@ use crate::{
     },
     menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields},
     settings_view::SettingsSection,
-    terminal::view::ambient_agent::AmbientAgentViewModel,
     terminal::{
         input::{MenuPositioning, MenuPositioningProvider},
         TerminalModel,
@@ -171,7 +170,6 @@ pub struct ProfileModelSelector {
     is_blurred: bool,
     new_model_popup: ViewHandle<FeaturePopup>,
     input_model: ModelHandle<BlocklistAIInputModel>,
-    ambient_agent_view_model: Option<ModelHandle<AmbientAgentViewModel>>,
     render_compact: bool,
     hovered_llm_info: Option<LLMInfo>,
     manage_api_key_button: ViewHandle<ActionButton>,
@@ -230,7 +228,6 @@ impl ProfileModelSelector {
         menu_positioning_provider: Arc<dyn crate::terminal::input::MenuPositioningProvider>,
         terminal_view_id: EntityId,
         input_model: ModelHandle<BlocklistAIInputModel>,
-        ambient_agent_view_model: Option<ModelHandle<AmbientAgentViewModel>>,
         terminal_model: Arc<FairMutex<TerminalModel>>,
         controller: Option<ModelHandle<BlocklistAIController>>,
         ctx: &mut ViewContext<Self>,
@@ -538,7 +535,6 @@ impl ProfileModelSelector {
             is_blurred: false,
             new_model_popup,
             input_model,
-            ambient_agent_view_model,
             render_compact: false,
             hovered_llm_info: None,
             manage_api_key_button,
@@ -1364,20 +1360,7 @@ impl ProfileModelSelector {
         let theme = appearance.theme();
         let llm_preferences = LLMPreferences::as_ref(app);
 
-        // Allow editing if composing an ambient agent query, or if the user has edit access
-        // in a shared session (i.e., not a viewer, or is an executor).
-        let is_composing_ambient_agent =
-            self.ambient_agent_view_model
-                .as_ref()
-                .is_some_and(|ambient_agent_model| {
-                    ambient_agent_model
-                        .as_ref(app)
-                        .is_configuring_ambient_agent()
-                });
         let terminal_model = self.terminal_model.lock();
-        let has_edit_access = is_composing_ambient_agent
-            || !terminal_model.shared_session_status().is_viewer()
-            || terminal_model.shared_session_status().is_executor();
         let is_lrc = FeatureFlag::InlineMenuHeaders.is_enabled()
             && terminal_model
                 .block_list()
@@ -1437,10 +1420,9 @@ impl ProfileModelSelector {
 
         content = content.with_child(model_text);
 
-        // Only show chevron icon if the user can click to open the menu (i.e. has edit access)
-        // and the InlineMenuHeaders feature flag is not enabled
+        // Only show chevron icon if the InlineMenuHeaders feature flag is not enabled
         // (when enabled, clicking opens the inline model selector instead of a dropdown).
-        if has_edit_access && !FeatureFlag::InlineMenuHeaders.is_enabled() {
+        if !FeatureFlag::InlineMenuHeaders.is_enabled() {
             let chevron_icon = Icon::ChevronDown
                 .to_warpui_icon(Fill::Solid(text_color))
                 .finish();
@@ -1474,11 +1456,7 @@ impl ProfileModelSelector {
                     )))
                     .finish();
 
-                let tooltip_text = if !has_edit_access {
-                    "Request edit access to change model".to_owned()
-                } else {
-                    "Choose an agent model".to_owned()
-                };
+                let tooltip_text = "Choose an agent model".to_owned();
 
                 let tooltip = appearance.ui_builder().tool_tip(tooltip_text);
                 let mut stack = Stack::new();
@@ -1498,17 +1476,12 @@ impl ProfileModelSelector {
             }
         });
 
-        // Only make clickable if the user can click to open the menu (i.e. has edit access)
-        if !has_edit_access {
-            hoverable.finish()
-        } else {
-            hoverable
-                .on_click(|ctx, _app, _position| {
-                    ctx.dispatch_typed_action(ProfileModelSelectorAction::ToggleModelMenu);
-                })
-                .with_cursor(Cursor::PointingHand)
-                .finish()
-        }
+        hoverable
+            .on_click(|ctx, _app, _position| {
+                ctx.dispatch_typed_action(ProfileModelSelectorAction::ToggleModelMenu);
+            })
+            .with_cursor(Cursor::PointingHand)
+            .finish()
     }
 
     fn render_separator(&self, app: &AppContext, visible: bool) -> Box<dyn Element> {
@@ -1857,18 +1830,10 @@ impl View for ProfileModelSelector {
         let profiles_model = AIExecutionProfilesModel::as_ref(app);
         let has_multiple_profiles = profiles_model.has_multiple_profiles();
 
-        // Check if user is a viewer in a shared session
-        let is_viewer = self
-            .terminal_model
-            .lock()
-            .shared_session_status()
-            .is_viewer();
-
         let mut compact_row = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
 
-        // Only add profile button to compact layout if there are multiple profiles
-        // and the user is not a viewer (we currently don't support profiles in shared sessions).
-        let should_show_profile_section = has_multiple_profiles && !is_viewer;
+        // Only add profile button to compact layout if there are multiple profiles.
+        let should_show_profile_section = has_multiple_profiles;
         if should_show_profile_section {
             let profile_button_with_save_position = SavePosition::new(
                 ChildView::new(&self.profile_compact_button).finish(),

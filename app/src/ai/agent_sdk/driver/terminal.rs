@@ -10,17 +10,12 @@ use std::{
 };
 
 use futures::channel::oneshot;
-use session_sharing_protocol::common::{Role, SessionId};
-use session_sharing_protocol::sharer::SessionSourceType;
-use warp_cli::share::{ShareAccessLevel, ShareRequest, ShareSubject};
+use session_sharing_protocol::common::SessionId;
+use warp_cli::share::ShareRequest;
 use warp_completer::completer::CommandOutput;
 use warp_core::command::ExitCode;
-use warp_core::features::FeatureFlag;
 use warp_util::{path::ShellFamily, sync::Condition};
-use warpui::{
-    r#async::FutureExt, AppContext, Entity, ModelContext, ModelHandle, SingletonEntity as _,
-    ViewHandle,
-};
+use warpui::{r#async::FutureExt, AppContext, Entity, ModelContext, ModelHandle, ViewHandle};
 
 use crate::terminal::model::session::ExecuteCommandOptions;
 
@@ -30,12 +25,10 @@ use crate::{
     root_view::{open_new_with_workspace_source, NewWorkspaceSource},
     terminal::{
         model::block::{BlockId, SerializedBlock},
-        shared_session::{self, IsSharedSessionCreator},
         shell::ShellType,
         view::ConversationRestorationInNewPaneType,
         TerminalView,
     },
-    workspaces::user_workspaces::UserWorkspaces,
 };
 
 use crate::ai::attachment_utils::attachments_download_dir;
@@ -123,20 +116,9 @@ fn create_terminal_view(
     options: TerminalDriverOptions,
     ctx: &mut AppContext,
 ) -> Result<ViewHandle<TerminalView>, AgentDriverError> {
-    let is_shared_session_creator = if options.should_share {
-        IsSharedSessionCreator::Yes {
-            source_type: SessionSourceType::AmbientAgent {
-                task_id: options.task_id.map(|t| t.to_string()),
-            },
-        }
-    } else {
-        IsSharedSessionCreator::No
-    };
-
     let (_, root_view) = open_new_with_workspace_source(
         NewWorkspaceSource::Session {
             options: Box::new(NewTerminalOptions {
-                is_shared_session_creator,
                 initial_directory: Some(options.working_dir),
                 env_vars: options.env_vars,
                 conversation_restoration: options.conversation_restoration,
@@ -199,22 +181,12 @@ impl TerminalDriver {
         let sharing_expected =
             should_share && !warp_core::channel::ChannelState::server_root_url().contains("ngrok");
         let (mut session_share_tx, session_share_rx) = if sharing_expected {
-            if !FeatureFlag::CreatingSharedSessions.is_enabled() {
-                // Session sharing was requested but the feature is not enabled for this
-                // user/team (typically an enterprise/admin setting). Fail immediately
-                // with a clear error rather than waiting for a timeout.
-                log::warn!(
-                    "Session sharing requested but the CreatingSharedSessions feature flag \
-                     is not enabled. This is likely due to a team administrator disabling \
-                     session sharing."
-                );
-                let (tx, rx) = oneshot::channel();
-                let _ = tx.send(Err(ShareSessionError::Disabled));
-                (None, Some(rx))
-            } else {
-                let (tx, rx) = oneshot::channel();
-                (Some(tx), Some(rx))
-            }
+            // Session sharing is not available in this build. Fail immediately with a
+            // clear error rather than waiting for a timeout.
+            log::warn!("Session sharing was requested but is not available in this build.");
+            let (tx, rx) = oneshot::channel();
+            let _ = tx.send(Err(ShareSessionError::Disabled));
+            (None, Some(rx))
         } else {
             (None, None)
         };
@@ -291,54 +263,11 @@ impl TerminalDriver {
     }
 
     /// Apply pending session-sharing guest requests.
-    fn apply_share_requests(&mut self, ctx: &mut ModelContext<Self>) {
-        if self.pending_share_requests.is_empty() {
-            return;
-        }
-
-        let share_requests = std::mem::take(&mut self.pending_share_requests);
-        self.terminal_view.update(ctx, |terminal_view, ctx| {
-            let mut viewer_emails = Vec::new();
-            let mut editor_emails = Vec::new();
-
-            for request in share_requests {
-                let role = match request.access_level {
-                    ShareAccessLevel::View => Role::Reader,
-                    ShareAccessLevel::Edit => Role::Executor,
-                };
-
-                match request.subject {
-                    ShareSubject::Team => {
-                        if let Some(team_uid) = UserWorkspaces::as_ref(ctx).current_team_uid() {
-                            terminal_view.update_session_team_permissions(
-                                Some(role),
-                                team_uid.to_string(),
-                                ctx,
-                            );
-                        }
-                    }
-                    ShareSubject::Public => {
-                        // Apply an anyone-with-link ACL at the requested role.
-                        // This uses the same path as the share modal's
-                        // "anyone with link" toggle. The workspace-level
-                        // anyone-with-link setting on the server still gates
-                        // whether the ACL write succeeds.
-                        terminal_view.update_session_link_permissions(Some(role), ctx);
-                    }
-                    ShareSubject::User { email } => match request.access_level {
-                        ShareAccessLevel::View => viewer_emails.push(email),
-                        ShareAccessLevel::Edit => editor_emails.push(email),
-                    },
-                }
-            }
-
-            if !viewer_emails.is_empty() {
-                terminal_view.add_guests(viewer_emails, Role::Reader, ctx);
-            }
-            if !editor_emails.is_empty() {
-                terminal_view.add_guests(editor_emails, Role::Executor, ctx);
-            }
-        });
+    ///
+    /// Session sharing is unavailable in this build, so any pending requests are
+    /// simply dropped.
+    fn apply_share_requests(&mut self, _ctx: &mut ModelContext<Self>) {
+        self.pending_share_requests.clear();
     }
 
     /// Submit `text` to the active CLI agent on the terminal PTY using the
@@ -599,7 +528,7 @@ impl TerminalDriver {
 
                 ctx.emit(TerminalDriverEvent::EstablishedSharedSession {
                     session_id: *session_id,
-                    join_url: shared_session::join_link(session_id),
+                    join_url: format!("{session_id:?}"),
                 });
             }
             crate::terminal::view::Event::FailedToShareSession { reason, cause } => {

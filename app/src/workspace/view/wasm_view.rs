@@ -127,17 +127,6 @@ impl Workspace {
             return true;
         }
 
-        // For shared sessions, show if there's an ambient agent task_id or an active conversation
-        if model.shared_session_status().is_sharer_or_viewer() {
-            if model.ambient_agent_task_id().is_some() {
-                return true;
-            }
-            drop(model); // Release lock before accessing BlocklistAIHistoryModel
-            return BlocklistAIHistoryModel::as_ref(ctx)
-                .active_conversation(focused_terminal_view.id())
-                .is_some();
-        }
-
         false
     }
 

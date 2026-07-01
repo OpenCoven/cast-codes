@@ -44,7 +44,9 @@ use warpui::{AppContext, ModelHandle, ViewHandle, WindowId};
 
 use crate::ai::blocklist::agent_view::{AgentViewController, AgentViewState};
 use crate::pane_group::TerminalViewResources;
-use crate::terminal::shared_session;
+use crate::terminal::mock_terminal_manager::MockTerminalManager;
+use crate::terminal::shell::ShellName;
+use crate::terminal::ShellLaunchState;
 use crate::terminal::TerminalManager;
 use crate::terminal::TerminalModel;
 use crate::terminal::TerminalView;
@@ -62,74 +64,27 @@ pub fn create_cloud_mode_view(
     ViewHandle<TerminalView>,
     ModelHandle<Box<dyn TerminalManager>>,
 ) {
-    // In Cloud Mode, ambient agent prompts are composed in an uninitialized session-sharing
-    // viewer pane. This lets us reuse the terminal input without a backing session, and
-    // then join the ambient agent session once it's ready.
-    let terminal_manager: ModelHandle<Box<dyn TerminalManager>> = ctx.add_model(|ctx| {
-        Box::new(shared_session::viewer::TerminalManager::new_deferred(
-            resources,
-            view_bounds_size,
-            window_id,
-            ctx,
-        )) as Box<dyn TerminalManager>
-    });
+    // In Cloud Mode, ambient agent prompts were composed in an uninitialized
+    // session-sharing viewer pane that later joined the ambient session once ready.
+    // Shared sessions (and their viewer terminal manager) are removed in this build,
+    // so cloud mode — a hosted-service feature that is unavailable in this OSS build —
+    // falls back to a non-backed mock terminal manager. This keeps the local terminal
+    // path fully intact; the cloud path is never reached at runtime because Cloud Mode
+    // is gated off.
+    let terminal_manager: ModelHandle<Box<dyn TerminalManager>> = MockTerminalManager::create_model(
+        ShellLaunchState::DeterminingShell {
+            available_shell: None,
+            display_name: ShellName::LessDescriptive("Shell".to_owned()),
+        },
+        resources,
+        None, /* restored_blocks */
+        None, /* conversation_restoration */
+        view_bounds_size,
+        window_id,
+        ctx,
+    );
 
     let terminal_view = terminal_manager.as_ref(ctx).view();
-
-    // Subscribe to the ambient agent view model to join the session once it's ready.
-    // This ensures that we use the manager corresponding to this specific view.
-    let Some(view_model) = terminal_view
-        .as_ref(ctx)
-        .ambient_agent_view_model()
-        .cloned()
-    else {
-        log::warn!("Cloud mode view was created without an ambient agent view model");
-        return (terminal_view, terminal_manager);
-    };
-    let view_model_for_subscription = view_model.clone();
-    terminal_manager.update(ctx, |_, ctx| {
-        ctx.subscribe_to_model(&view_model, move |manager, event, ctx| {
-            let Some(manager) = manager
-                .as_any_mut()
-                .downcast_mut::<shared_session::viewer::TerminalManager>()
-            else {
-                return;
-            };
-            match event {
-                AmbientAgentViewModelEvent::SessionReady { session_id } => {
-                    // Local-to-cloud handoff panes pre-populate the forked
-                    // conversation on chip click. Use append-mode scrollback
-                    // + replay suppression so the cloud agent's replay doesn't
-                    // duplicate the blocks we already have.
-                    let append_followup_scrollback = view_model_for_subscription
-                        .as_ref(ctx)
-                        .is_local_to_cloud_handoff();
-                    manager.connect_to_session(*session_id, append_followup_scrollback, ctx);
-                }
-                AmbientAgentViewModelEvent::FollowupSessionReady { session_id } => {
-                    manager.attach_followup_session(*session_id, ctx);
-                }
-                AmbientAgentViewModelEvent::EnteredSetupState
-                | AmbientAgentViewModelEvent::EnteredComposingState
-                | AmbientAgentViewModelEvent::DispatchedAgent
-                | AmbientAgentViewModelEvent::FollowupDispatched
-                | AmbientAgentViewModelEvent::ProgressUpdated
-                | AmbientAgentViewModelEvent::EnvironmentSelected
-                | AmbientAgentViewModelEvent::Failed { .. }
-                | AmbientAgentViewModelEvent::ShowAICreditModal
-                | AmbientAgentViewModelEvent::NeedsGithubAuth
-                | AmbientAgentViewModelEvent::Cancelled
-                | AmbientAgentViewModelEvent::HarnessSelected
-                | AmbientAgentViewModelEvent::HostSelected
-                | AmbientAgentViewModelEvent::HarnessModelSelected
-                | AmbientAgentViewModelEvent::HarnessCommandStarted { .. }
-                | AmbientAgentViewModelEvent::PendingHandoffChanged
-                | AmbientAgentViewModelEvent::HandoffSnapshotUploadFailed { .. }
-                | AmbientAgentViewModelEvent::UpdatedSetupCommandVisibility
-                | AmbientAgentViewModelEvent::AuthSecretSelected => {}
-            }
-        });
-    });
 
     (terminal_view, terminal_manager)
 }

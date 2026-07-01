@@ -651,13 +651,6 @@ fn make_new_drive_menu(ctx: &AppContext) -> Menu {
         ctx,
     ));
 
-    if FeatureFlag::CreatingSharedSessions.is_enabled() {
-        items.extend([
-            MenuItem::Separator,
-            updateable_custom_item_without_checkmark(CustomAction::ShareCurrentSession, ctx),
-        ])
-    }
-
     Menu::new("Drive", items)
 }
 

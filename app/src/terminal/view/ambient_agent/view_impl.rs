@@ -302,10 +302,6 @@ impl TerminalView {
                     model.finish_setup_command_group(group_id, ctx);
                     model.set_setup_command_visibility(false, ctx);
                 });
-                // Force a fresh viewer size report to the sharer so the harness CLI (e.g.
-                // the claude TUI) starts at our terminal's actual dimensions instead of
-                // whatever the sandbox PTY was sized to during setup.
-                self.force_report_viewer_terminal_size(ctx);
                 ctx.emit(TerminalViewEvent::TerminalViewStateChanged);
                 ctx.notify();
             }

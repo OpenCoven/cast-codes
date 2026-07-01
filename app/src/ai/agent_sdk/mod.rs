@@ -822,8 +822,9 @@ impl AgentDriverRunner {
                     build_merged_config_and_task(&args, &resolved_skill, &prompt_clone, ctx)?;
 
                 let task_id = args.task_id.as_ref().and_then(|s| s.parse().ok());
-                let should_share = (args.share.is_shared() || args.task_id.is_some())
-                    && FeatureFlag::AgentSharedSessions.is_enabled();
+                // Hosted shared sessions are unavailable in this build, so agent
+                // sessions are never shared.
+                let should_share = false;
 
                 let third_party_harness_model_id = merged_config
                     .harness
@@ -1518,14 +1519,6 @@ fn launch_command(
     });
 
     Ok(())
-}
-
-/// Check if we're running within Warp (for example, if this is an invocation of the Warp CLI
-/// within a Warp terminal session).
-pub fn is_running_in_warp() -> bool {
-    std::env::var("TERM_PROGRAM")
-        .map(|v| v == "WarpTerminal")
-        .unwrap_or(false)
 }
 
 /// Report a fatal error and terminate the app.

@@ -1917,13 +1917,6 @@ pub(crate) fn initialize_app(
     // Add a singleton model for resizable modals whose size should be persisted through restarts.
     ctx.add_singleton_model(|_| ResizableData::default());
 
-    // Add a singleton model to maintain state of shared session across all windows.
-    ctx.add_singleton_model(terminal::shared_session::manager::Manager::new);
-
-    ctx.add_singleton_model(
-        terminal::shared_session::permissions_manager::SessionPermissionsManager::new,
-    );
-
     ctx.add_singleton_model(EnvVarCollectionManager::new);
     ctx.add_singleton_model(WorkflowManager::new);
 
@@ -2603,14 +2596,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::Ligatures,
         #[cfg(feature = "selectable_prompt")]
         FeatureFlag::SelectablePrompt,
-        #[cfg(feature = "viewing_shared_sessions")]
-        FeatureFlag::ViewingSharedSessions,
-        #[cfg(feature = "creating_shared_sessions")]
-        FeatureFlag::CreatingSharedSessions,
         #[cfg(feature = "agent_mode")]
         FeatureFlag::AgentMode,
-        #[cfg(feature = "shared_session_long_running_commands")]
-        FeatureFlag::SharedSessionWriteToLongRunningCommands,
         #[cfg(feature = "resize_fix")]
         FeatureFlag::ResizeFix,
         #[cfg(feature = "richtext_multiselect")]
@@ -2699,8 +2686,6 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::AgentModePrePlanXML,
         #[cfg(feature = "agent_onboarding")]
         FeatureFlag::AgentOnboarding,
-        #[cfg(feature = "agent_shared_sessions")]
-        FeatureFlag::AgentSharedSessions,
         #[cfg(feature = "suggested_rules")]
         FeatureFlag::SuggestedRules,
         #[cfg(feature = "suggested_agent_mode_workflows")]
@@ -3053,9 +3038,6 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
                     | FeatureFlag::RecordAppActiveEvents
                     | FeatureFlag::GlobalAIAnalyticsBanner
                     | FeatureFlag::GlobalAIAnalyticsCollection
-                    | FeatureFlag::ViewingSharedSessions
-                    | FeatureFlag::CreatingSharedSessions
-                    | FeatureFlag::SharedSessionWriteToLongRunningCommands
                     | FeatureFlag::SessionSharingAcls
                     | FeatureFlag::SharedWithMe
                     | FeatureFlag::CloudEnvironments
@@ -3068,7 +3050,6 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
                     | FeatureFlag::APIKeyManagement
                     | FeatureFlag::UsageBasedPricing
                     | FeatureFlag::TeamApiKeys
-                    | FeatureFlag::AgentSharedSessions
                     | FeatureFlag::SyncAmbientPlans
                     | FeatureFlag::WarpManagedSecrets
                     | FeatureFlag::CloudConversations

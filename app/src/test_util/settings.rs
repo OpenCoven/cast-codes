@@ -30,8 +30,7 @@ pub fn initialize_settings_for_tests_with_mode(
             general_settings::GeneralSettings, keys_settings::KeysSettings,
             ligature_settings::LigatureSettings, safe_mode_settings::SafeModeSettings,
             session_settings::SessionSettings, settings::TerminalSettings,
-            shared_session::settings::SharedSessionSettings, warpify::settings::WarpifySettings,
-            BlockListSettings,
+            warpify::settings::WarpifySettings, BlockListSettings,
         },
         undo_close::UndoCloseSettings,
         user_config::WarpConfig,
@@ -96,7 +95,6 @@ pub fn initialize_settings_for_tests_with_mode(
     VimBannerSettings::register(app);
     WarpDriveSettings::register(app);
     WindowSettings::register(app);
-    SharedSessionSettings::register(app);
     CodeSettings::register(app);
     SemanticSelection::register(app);
 

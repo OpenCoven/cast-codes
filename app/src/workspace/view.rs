@@ -250,7 +250,6 @@ use crate::remote_server::manager::RemoteServerManager;
 #[cfg(feature = "local_fs")]
 use crate::remote_server::manager::RemoteServerManagerEvent;
 use crate::terminal::keys_settings::KeysSettings;
-use crate::terminal::shared_session::SharedSessionActionSource;
 
 use crate::ai::blocklist::agent_view::editor::{AgentToolbarEditorEvent, AgentToolbarEditorModal};
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
@@ -382,7 +381,6 @@ use itertools::Itertools;
 use parking_lot::FairMutex;
 use pathfinder_geometry::rect::RectF;
 use repo_metadata::repositories::DetectedRepositories;
-use session_sharing_protocol::common::SessionId as SharedSessionId;
 use std::collections::{HashMap, HashSet};
 #[cfg(feature = "local_fs")]
 use std::convert::TryFrom;
@@ -782,8 +780,6 @@ fn resolve_manual_tab_bar_mode(
 enum SimplifiedWasmTabBarContent {
     /// Viewing a Warp Drive object (notebook, workflow, env vars, AI facts, MCP servers)
     WarpDriveObject,
-    /// Participating in a shared session (viewer or writer). Contains the optional ambient agent task ID.
-    SharedSession { task_id: Option<AmbientAgentTaskId> },
     /// Viewing a conversation transcript. Contains the optional ambient agent task ID.
     ConversationTranscript { task_id: Option<AmbientAgentTaskId> },
 }
@@ -3026,7 +3022,6 @@ impl Workspace {
         Self::subscribe_to_workspace_toast_stack(toast_stack.clone(), ctx);
         Self::subscribe_to_tab_config_errors(toast_stack.clone(), ctx);
         Self::subscribe_to_settings_errors(ctx);
-        Self::subscribe_to_shared_session_manager(ctx);
 
         let user_menu = ctx.add_typed_action_view(|_| {
             Menu::new()
@@ -3691,9 +3686,6 @@ impl Workspace {
                 );
                 self.check_and_trigger_onboarding(ctx);
             }
-            NewWorkspaceSource::SharedSessionAsViewer { session_id } => {
-                self.add_tab_for_joining_shared_session(session_id, ctx);
-            }
             NewWorkspaceSource::FromCloudConversationId { conversation_id } => {
                 self.open_cloud_conversation_from_server_token(conversation_id, ctx);
             }
@@ -3823,13 +3815,11 @@ impl Workspace {
             | NewWorkspaceSource::AgentSession { .. }
             | NewWorkspaceSource::NotebookFromFilePath { .. } => should_default_open,
             #[cfg(not(target_family = "wasm"))]
-            NewWorkspaceSource::SharedSessionAsViewer { .. }
-            | NewWorkspaceSource::FromCloudConversationId { .. }
+            NewWorkspaceSource::FromCloudConversationId { .. }
             | NewWorkspaceSource::NotebookById { .. }
             | NewWorkspaceSource::WorkflowById { .. } => should_default_open,
             #[cfg(target_family = "wasm")]
-            NewWorkspaceSource::SharedSessionAsViewer { .. }
-            | NewWorkspaceSource::FromCloudConversationId { .. }
+            NewWorkspaceSource::FromCloudConversationId { .. }
             | NewWorkspaceSource::NotebookById { .. }
             | NewWorkspaceSource::WorkflowById { .. } => {
                 // Web opens these as single-purpose views without exposed multi-tab UI, so keep
@@ -3986,31 +3976,6 @@ impl Workspace {
         }
     }
 
-    pub fn add_tab_for_joining_shared_session(
-        &mut self,
-        session_id: SharedSessionId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let new_pane_group = ctx.add_typed_action_view(|ctx| {
-            PaneGroup::new_for_shared_session_viewer(
-                session_id,
-                self.tips_completed.clone(),
-                self.user_default_shell_unsupported_banner_model_handle
-                    .clone(),
-                self.server_api.clone(),
-                self.model_event_sender.clone(),
-                ctx,
-            )
-        });
-
-        ctx.subscribe_to_view(&new_pane_group, move |me, pane_group, event, ctx| {
-            me.handle_file_tree_event(pane_group, event, ctx)
-        });
-
-        self.tabs.push(TabData::new(new_pane_group));
-        self.activate_tab_internal(self.tab_count() - 1, ctx);
-    }
-
     /// Opens an agent conversation by server token.
     /// If the current user owns or created it, navigate to its open pane or restore it
     /// into a new tab. Otherwise, open the read-only transcript viewer.
@@ -4144,142 +4109,10 @@ impl Workspace {
         );
     }
 
-    fn open_share_session_modal(&mut self, index: usize, ctx: &mut ViewContext<Self>) {
-        // Focus on the clicked tab
-        if index >= self.tab_count() {
-            return;
-        }
-        self.set_active_tab_index(index, ctx);
-
-        // Open the share session modal
-        if let Some(terminal_view) = self
-            .active_tab_pane_group()
-            .as_ref(ctx)
-            .focused_session_view(ctx)
-        {
-            terminal_view.update(ctx, |view, ctx| {
-                view.open_share_session_modal(SharedSessionActionSource::Tab, ctx);
-            });
-        }
-    }
-
-    fn stop_sharing_all_panes_in_tab(
-        &mut self,
-        pane_group: &WeakViewHandle<PaneGroup>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if let Some(pane_group) = pane_group.upgrade(ctx) {
-            let shared_views = pane_group.as_ref(ctx).shared_session_view_ids(ctx);
-            for shared_view_id in shared_views {
-                self.stop_sharing_session(&shared_view_id, SharedSessionActionSource::Tab, ctx);
-            }
-        }
-    }
-
-    fn stop_sharing_session(
-        &mut self,
-        terminal_view_id: &EntityId,
-        source: SharedSessionActionSource,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        use terminal::shared_session::manager::Manager;
-
-        let manager = Manager::as_ref(ctx);
-        if let Some(terminal_view) = manager.shared_view_by_id(terminal_view_id, ctx) {
-            terminal_view.update(ctx, |view, ctx| {
-                view.stop_sharing_session(source, ctx);
-            });
-        }
-    }
-
-    fn copy_shared_session_link_from_tab(&mut self, tab_index: usize, ctx: &mut ViewContext<Self>) {
-        // Get the pane group for the specified tab
-        let Some(pane_group) = self.tabs.get(tab_index).map(|tab| tab.pane_group.clone()) else {
-            return;
-        };
-
-        // Get the focused terminal view in that tab
-        let Some(terminal_view) = pane_group.as_ref(ctx).focused_session_view(ctx) else {
-            return;
-        };
-
-        // Copy the shared session link from that terminal view
-        terminal_view.update(ctx, |view, ctx| {
-            view.copy_shared_session_link(SharedSessionActionSource::Tab, ctx);
-        });
-    }
-
-    fn subscribe_to_shared_session_manager(ctx: &mut ViewContext<Self>) {
-        use terminal::shared_session::manager::{Manager, ManagerEvent};
-
-        let manager = Manager::handle(ctx);
-        ctx.subscribe_to_model(&manager, move |me, _, event, ctx| {
-            match event {
-                ManagerEvent::StartedShare {
-                    window_id,
-                    session_id,
-                } => {
-                    if *window_id == ctx.window_id() {
-                        me.copy_shared_session_link(session_id, ctx);
-                    }
-                }
-                #[cfg(target_family = "wasm")]
-                ManagerEvent::JoinedSession { view_id, .. } => {
-                    // Check if this session is in the current window and has an ambient agent task
-                    let manager = Manager::as_ref(ctx);
-                    if let Some(terminal_view) = manager.joined_view_by_id(view_id, ctx) {
-                        let task_id = terminal_view
-                            .as_ref(ctx)
-                            .model
-                            .lock()
-                            .ambient_agent_task_id();
-                        if task_id.is_some() {
-                            // Open the details panel for shared ambient agent sessions (unless on mobile)
-                            if !warpui::platform::wasm::is_mobile_device() {
-                                me.current_workspace_state.is_transcript_details_panel_open = true;
-                                me.transcript_info_button.update(ctx, |button, ctx| {
-                                    button.set_active(true, ctx);
-                                });
-                            }
-                            me.update_transcript_details_panel_data(ctx);
-                        }
-                    }
-                }
-                #[cfg(not(target_family = "wasm"))]
-                ManagerEvent::JoinedSession { .. } => {}
-                _ => {}
-            }
-            ctx.notify();
-        });
-    }
-
-    fn copy_shared_session_link(
-        &mut self,
-        session_id: &SharedSessionId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        ctx.clipboard().write(ClipboardContent::plain_text(
-            terminal::shared_session::join_link(session_id),
-        ));
-
-        self.toast_stack.update(ctx, |toast_stack, ctx| {
-            let toast = DismissibleToast::default("Remote control link copied.".to_string());
-            toast_stack.add_ephemeral_toast(toast, ctx);
-        });
-    }
-
     // Returns true if the focused pane is the viewer of a shared session
-    pub fn is_shared_session_viewer_focused(&self, app: &AppContext) -> bool {
-        self.active_tab_pane_group()
-            .as_ref(app)
-            .active_session_view(app)
-            .is_some_and(|view| {
-                view.as_ref(app)
-                    .model
-                    .lock()
-                    .shared_session_status()
-                    .is_viewer()
-            })
+    pub fn is_shared_session_viewer_focused(&self, _app: &AppContext) -> bool {
+        // Shared sessions are unavailable in OSS; the focused pane is never a viewer.
+        false
     }
 
     pub fn is_conversation_transcript_viewer_focused(&self, app: &AppContext) -> bool {
@@ -4310,13 +4143,6 @@ impl Workspace {
             // Conversation transcript viewer takes priority
             if model.is_conversation_transcript_viewer() {
                 return Some(SimplifiedWasmTabBarContent::ConversationTranscript {
-                    task_id: model.ambient_agent_task_id(),
-                });
-            }
-
-            // Check for shared session (viewer or writer)
-            if model.shared_session_status().is_sharer_or_viewer() {
-                return Some(SimplifiedWasmTabBarContent::SharedSession {
                     task_id: model.ambient_agent_task_id(),
                 });
             }
@@ -9795,25 +9621,6 @@ impl Workspace {
         self.tab_views().find(|view| view.id() == id)
     }
 
-    // The workspace manages the close confirmation dialog, so it may need to close a pane after the user confirms in the dialog.
-    // The flow is:
-    // - User closes pane in pane group, which emits event to workspace
-    // - Workspace shows confirmation dialog, and calls back into pane group to close pane here if user confirms
-    fn close_pane(
-        &mut self,
-        pane_group_id: EntityId,
-        pane_id: PaneId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let Some(pane_group_view) = self.get_pane_group_view_with_id(pane_group_id) else {
-            log::error!("Could not close pane because pane group doesn't exist");
-            return;
-        };
-        pane_group_view.update(ctx, |pane_group, ctx| {
-            pane_group.close_pane(pane_id, ctx);
-        });
-    }
-
     fn handle_close_session_confirmation_dialog_event(
         &mut self,
         event: &CloseSessionConfirmationEvent,
@@ -9841,12 +9648,6 @@ impl Workspace {
                 match *open_confirmation_source {
                     OpenDialogSource::CloseTab { tab_index } => {
                         self.remove_tab(tab_index, true, true, ctx);
-                    }
-                    OpenDialogSource::ClosePane {
-                        pane_group_id,
-                        pane_id,
-                    } => {
-                        self.close_pane(pane_group_id, pane_id, ctx);
                     }
                     OpenDialogSource::CloseTabsDirection {
                         tab_index,
@@ -10480,10 +10281,7 @@ impl Workspace {
         if self.tab_count() == 1 {
             return false;
         }
-        // TODO: remove session sharing flag check when long-running commands are included
-        FeatureFlag::CreatingSharedSessions.is_enabled()
-            && ContextFlag::CreateSharedSession.is_enabled()
-            && *SessionSettings::as_ref(ctx).should_confirm_close_session
+        *SessionSettings::as_ref(ctx).should_confirm_close_session
     }
 
     /// Checks if the provided tab indices need to be confirmed before closing, unless skip_confirmation is true.
@@ -10560,7 +10358,6 @@ impl Workspace {
                 send_telemetry_from_ctx!(
                     TelemetryEvent::QuitModalShown {
                         running_processes: summary.total_long_running_commands as u32,
-                        shared_sessions: summary.shared_sessions as u32,
                         modal_for: CloseTarget::Tab,
                     },
                     ctx
@@ -11566,8 +11363,7 @@ impl Workspace {
         ctx: &mut ViewContext<Self>,
     ) {
         let terminal_view_for_active_pane = self.active_session_view(ctx).filter(|_| {
-            self.get_active_session_terminal_model(ctx)
-                .is_some_and(|model| !model.lock().shared_session_status().is_viewer())
+            self.get_active_session_terminal_model(ctx).is_some()
                 && FeatureFlag::AgentView.is_enabled()
         });
 
@@ -13032,19 +12828,9 @@ impl Workspace {
         self.active_tab_pane_group().as_ref(ctx).left_panel_open
     }
 
-    fn is_readonly_shared_session_active(&self, ctx: &mut ViewContext<Self>) -> bool {
-        let active_terminal_view = self
-            .active_tab_pane_group()
-            .as_ref(ctx)
-            .active_session_view(ctx);
-
-        active_terminal_view.is_some_and(|view| {
-            view.as_ref(ctx)
-                .model
-                .lock()
-                .shared_session_status()
-                .is_reader()
-        })
+    fn is_readonly_shared_session_active(&self, _ctx: &mut ViewContext<Self>) -> bool {
+        // Shared sessions are unavailable in OSS; no read-only shared session is ever active.
+        false
     }
 
     fn handle_settings_pane_event(
@@ -13987,19 +13773,6 @@ impl Workspace {
                 *in_subshell,
                 ctx,
             ),
-            pane_group::Event::CloseSharedSessionPaneRequested { pane_id } => {
-                if *SessionSettings::as_ref(ctx).should_confirm_close_session {
-                    self.show_close_session_confirmation_dialog(
-                        OpenDialogSource::ClosePane {
-                            pane_group_id: pane_group.id(),
-                            pane_id: *pane_id,
-                        },
-                        ctx,
-                    );
-                } else {
-                    self.close_pane(pane_group.id(), *pane_id, ctx);
-                }
-            }
             pane_group::Event::MaximizePaneToggled => {
                 ctx.notify();
             }
@@ -17756,8 +17529,7 @@ impl Workspace {
 
             // Extract task_id from conversation transcripts and shared sessions
             let task_id = match content_type {
-                SimplifiedWasmTabBarContent::ConversationTranscript { task_id }
-                | SimplifiedWasmTabBarContent::SharedSession { task_id } => task_id,
+                SimplifiedWasmTabBarContent::ConversationTranscript { task_id } => task_id,
                 SimplifiedWasmTabBarContent::WarpDriveObject => None,
             };
 
@@ -21984,18 +21756,6 @@ impl TypedActionView for Workspace {
                 // perform nested updates on the workspace.
                 ctx.dispatch_global_action("app:undo_close", ());
             }
-            OpenShareSessionModal(index) => {
-                self.open_share_session_modal(*index, ctx);
-            }
-            StopSharingSessionFromTabMenu { terminal_view_id } => {
-                self.stop_sharing_session(terminal_view_id, SharedSessionActionSource::Tab, ctx)
-            }
-            StopSharingAllSessionsInTab { pane_group } => {
-                self.stop_sharing_all_panes_in_tab(pane_group, ctx)
-            }
-            CopySharedSessionLinkFromTab { tab_index } => {
-                self.copy_shared_session_link_from_tab(*tab_index, ctx)
-            }
             AddWindow => {
                 ctx.dispatch_global_action("root_view:open_new", ());
             }
@@ -22303,16 +22063,15 @@ impl TypedActionView for Workspace {
                 );
             }
             OpenAmbientAgentSession {
-                session_id,
+                session_id: _,
                 task_id,
             } => {
-                // Check if there's already a terminal viewing this task.
+                // Check if there's already a terminal viewing this task. Shared-session
+                // joining is unavailable in OSS, so nothing is opened otherwise.
                 if let Some(tab_index) =
                     self.find_tab_with_ambient_agent_conversation(*task_id, ctx)
                 {
                     self.activate_tab(tab_index, ctx);
-                } else {
-                    self.add_tab_for_joining_shared_session(*session_id, ctx);
                 }
             }
             OpenConversationTranscriptViewer {
@@ -23842,11 +23601,9 @@ impl View for Workspace {
             stack.add_child(ChildView::new(lightbox_view).finish());
         }
 
-        if FeatureFlag::CreatingSharedSessions.is_enabled()
-            && ContextFlag::CreateSharedSession.is_enabled()
-            && self
-                .current_workspace_state
-                .is_close_session_confirmation_dialog_open
+        if self
+            .current_workspace_state
+            .is_close_session_confirmation_dialog_open
         {
             stack.add_positioned_overlay_child(
                 ChildView::new(&self.close_session_confirmation_dialog).finish(),

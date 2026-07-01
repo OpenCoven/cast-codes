@@ -12,7 +12,6 @@ use super::{AmbientAgentTask, AmbientAgentTaskState};
 use crate::{
     server::retry_strategies::with_bounded_retry,
     server::server_api::ai::{AIClient, RunFollowupRequest, SpawnAgentRequest, TaskStatusMessage},
-    terminal::shared_session,
 };
 
 /// How long to poll for the agent to be ready.
@@ -39,12 +38,9 @@ impl SessionJoinInfo {
         let session_id_str = run_execution.session_id?;
         let session_id = SessionId::from_str(session_id_str).ok()?;
 
-        // Prefer the server-provided `session_link`; fall back to constructing one from
-        // `session_id`. `active_run_execution()` already filters out empty links.
-        let session_link = run_execution
-            .session_link
-            .map(String::from)
-            .unwrap_or_else(|| shared_session::join_link(&session_id));
+        // Use the server-provided `session_link`; without one there is no actionable
+        // join target. `active_run_execution()` already filters out empty links.
+        let session_link = run_execution.session_link.map(String::from)?;
         Some(Self {
             session_id: Some(session_id),
             session_link,

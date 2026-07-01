@@ -19,10 +19,7 @@ use crate::server::server_api::ai::{
 };
 use crate::server::server_api::ServerApi;
 use crate::workspaces::user_workspaces::UserWorkspaces;
-use crate::{
-    terminal::shared_session, util::time_format::format_approx_duration_from_now_utc,
-    ServerApiProvider,
-};
+use crate::{util::time_format::format_approx_duration_from_now_utc, ServerApiProvider};
 use anyhow::{anyhow, Context as _};
 use comfy_table::Cell;
 use futures::{future, StreamExt};
@@ -561,15 +558,7 @@ impl AmbientAgentRunner {
                 Ok(session_join_info) => {
                     if should_open {
                         if let Some(session_join_info) = session_join_info {
-                            let url =
-                                match (super::is_running_in_warp(), session_join_info.session_id) {
-                                    (true, Some(session_id)) => {
-                                        shared_session::join_native_intent(&session_id)
-                                    }
-                                    _ => session_join_info.session_link,
-                                };
-
-                            ctx.open_url(&url);
+                            ctx.open_url(&session_join_info.session_link);
                         }
                     }
                     ctx.terminate_app(TerminationMode::ForceTerminate, None);
