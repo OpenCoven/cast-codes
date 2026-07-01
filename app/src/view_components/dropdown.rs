@@ -258,11 +258,6 @@ where
         ctx.notify();
     }
 
-    pub fn with_drop_shadow(mut self) -> Self {
-        self.use_drop_shadow = true;
-        self
-    }
-
     pub fn set_font_color(&mut self, color: ColorU, ctx: &mut ViewContext<Self>) {
         self.font_color = Some(color);
         ctx.notify();

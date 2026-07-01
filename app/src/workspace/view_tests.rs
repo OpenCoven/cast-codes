@@ -19,7 +19,6 @@ use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::notebooks::notebook::NotebookView;
 use crate::pane_group::{Direction, PaneGroupAction, PaneId};
-use crate::pricing::PricingInfoModel;
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
 #[cfg(feature = "local_fs")]
 use crate::user_config::tab_configs_dir;
@@ -204,7 +203,6 @@ fn initialize_app(app: &mut App) {
     app.update(workspace::init);
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
     app.add_singleton_model(|_| ProjectContextModel::default());
-    app.add_singleton_model(|_| PricingInfoModel::new());
     app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
 

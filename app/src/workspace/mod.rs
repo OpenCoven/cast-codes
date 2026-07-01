@@ -101,9 +101,7 @@ pub fn init(app: &mut AppContext) {
     tab_configs::session_config_modal::init(app);
     view::launch_modal::oz_launch::init(app);
     view::openwarp_launch_modal::init(app);
-    view::cloud_agent_capacity_modal::init(app);
     view::codex_modal::init(app);
-    view::free_tier_limit_hit_modal::init(app);
     view::global_search::view::GlobalSearchView::init(app);
     view::right_panel::RightPanelView::init(app);
     header_toolbar_editor::init(app);
@@ -171,20 +169,7 @@ pub fn init(app: &mut AppContext) {
         )]);
         #[cfg(debug_assertions)]
         {
-            // Debug actions for build plan migration modal (command palette only)
             app.register_editable_bindings([
-                EditableBinding::new(
-                    "workspace:open_build_plan_migration_modal",
-                    "[Debug] Open Build Plan Migration Modal",
-                    WorkspaceAction::OpenBuildPlanMigrationModal,
-                )
-                .with_context_predicate(id!("Workspace")),
-                EditableBinding::new(
-                    "workspace:reset_build_plan_migration_modal_state",
-                    "[Debug] Reset Build Plan Migration Modal State",
-                    WorkspaceAction::ResetBuildPlanMigrationModalState,
-                )
-                .with_context_predicate(id!("Workspace")),
                 EditableBinding::new(
                     "workspace:debug_reset_aws_bedrock_login_banner_dismissed",
                     "[Debug] Un-dismiss AWS login banner",
@@ -1482,15 +1467,6 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::ShowAboutWarp),
         EditableBinding::new(
-            "workspace:show_settings_teams_page",
-            BindingDescription::new("Open Settings: Teams")
-                .with_custom_description(bindings::MAC_MENUS_CONTEXT, "Open Team Settings"),
-            WorkspaceAction::ShowSettingsPage(SettingsSection::Teams),
-        )
-        .with_group(bindings::BindingGroup::Settings.as_str())
-        .with_custom_action(CustomAction::OpenTeamSettings)
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
             "workspace:show_settings_privacy_page",
             BindingDescription::new("Open Settings: Privacy"),
             WorkspaceAction::ShowSettingsPage(SettingsSection::Privacy),
@@ -1511,13 +1487,6 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
             WorkspaceAction::ShowSettingsPage(SettingsSection::WarpAgent),
         )
         .with_enabled(|| FeatureFlag::AgentMode.is_enabled())
-        .with_group(bindings::BindingGroup::Settings.as_str())
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:show_settings_billing_and_usage_page",
-            BindingDescription::new("Open Settings: Billing and usage"),
-            WorkspaceAction::ShowSettingsPage(SettingsSection::BillingAndUsage),
-        )
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(

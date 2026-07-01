@@ -42,7 +42,6 @@ use crate::settings::QuakeModeSettings;
 use crate::settings::ThemeSettings;
 use crate::settings_view::flags;
 use crate::settings_view::mcp_servers_page::MCPServersSettingsPage;
-use crate::settings_view::OpenTeamsSettingsModalArgs;
 use crate::settings_view::SettingsSection;
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::general_settings::GeneralSettings;
@@ -103,8 +102,6 @@ use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::ai::onboarding::{
     apply_free_tier_default_model_override, build_onboarding_models, current_onboarding_auth_state,
 };
-use crate::pricing::{PricingInfoModel, PricingInfoModelEvent};
-use warp_graphql::billing::StripeSubscriptionPlan;
 
 use warpui::elements::{
     Border, ChildAnchor, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Stack,
@@ -322,10 +319,6 @@ pub fn init(app: &mut AppContext) {
         RootView::handle_team_intent_link_action,
     );
     app.add_action(
-        "root_view:open_team_settings_page",
-        RootView::open_team_settings_page,
-    );
-    app.add_action(
         "root_view:handle_notification_click",
         RootView::handle_notification_click,
     );
@@ -385,15 +378,6 @@ pub fn init(app: &mut AppContext) {
     app.add_action(
         "root_view:open_drive_object_existing_window",
         RootView::open_warp_drive_object_in_existing_window,
-    );
-
-    app.add_global_action(
-        "root_view:open_team_settings_with_email_invite_in_new_window",
-        open_team_settings_with_email_invite_in_new_window,
-    );
-    app.add_action(
-        "root_view:open_team_settings_with_email_invite_in_existing_window",
-        RootView::open_team_settings_with_email_invite_in_existing_window,
     );
 
     app.add_global_action(
@@ -962,26 +946,6 @@ fn create_environment_and_run(arg: &CreateEnvironmentArg, ctx: &mut AppContext) 
 
     ctx.windows().show_window_and_focus_app(window_id);
 }
-fn open_team_settings_with_email_invite_in_new_window(
-    arg: &OpenTeamsSettingsModalArgs,
-    ctx: &mut AppContext,
-) {
-    let root_handle = open_new_window_get_handles(None, ctx).1;
-    root_handle.update(ctx, |root_view, ctx| {
-        if let AuthOnboardingState::Terminal(workspace_view_handle) =
-            &root_view.auth_onboarding_state
-        {
-            let initial_load_complete = UpdateManager::as_ref(ctx).initial_load_complete();
-            let email_invite = arg.invite_email.clone();
-            workspace_view_handle.update(ctx, |_, ctx| {
-                let _ = ctx.spawn(initial_load_complete, move |workspace, _, ctx| {
-                    workspace.show_team_settings_page_with_email_invite(email_invite.as_ref(), ctx)
-                });
-            });
-        }
-    });
-}
-
 fn open_settings_page_in_new_window(section: &SettingsSection, ctx: &mut AppContext) {
     let root_handle = open_new_window_get_handles(None, ctx).1;
     root_handle.update(ctx, |root_view, ctx| {
@@ -1918,12 +1882,6 @@ impl RootView {
         true
     }
 
-    fn build_plan_yearly_price_cents(ctx: &AppContext) -> Option<i32> {
-        PricingInfoModel::as_ref(ctx)
-            .plan_pricing(&StripeSubscriptionPlan::Build)
-            .map(|p| p.yearly_plan_price_per_month_usd_cents)
-    }
-
     fn create_agent_onboarding_view(
         ctx: &mut ViewContext<Self>,
     ) -> ViewHandle<AgentOnboardingView> {
@@ -1942,7 +1900,8 @@ impl RootView {
                 .ai_autonomy_settings()
                 .has_any_overrides();
 
-            let agent_price_cents = Self::build_plan_yearly_price_cents(ctx);
+            // Hosted plan pricing is unavailable in the local/OSS build.
+            let agent_price_cents = None;
 
             let auth_state = current_onboarding_auth_state(ctx);
 
@@ -1959,20 +1918,6 @@ impl RootView {
                 ctx,
             )
         });
-
-        // Subscribe to pricing updates so the badge stays current.
-        let onboarding_view_for_pricing = onboarding_view.clone();
-        ctx.subscribe_to_model(
-            &PricingInfoModel::handle(ctx),
-            move |_, _, event, ctx| match event {
-                PricingInfoModelEvent::PricingInfoUpdated => {
-                    let cents = Self::build_plan_yearly_price_cents(ctx);
-                    onboarding_view_for_pricing.update(ctx, |view, ctx| {
-                        view.set_agent_price_cents(cents, ctx);
-                    });
-                }
-            },
-        );
 
         let onboarding_view_clone = onboarding_view.clone();
         ctx.subscribe_to_model(
@@ -2542,22 +2487,6 @@ impl RootView {
         true
     }
 
-    pub fn open_team_settings_with_email_invite_in_existing_window(
-        &mut self,
-        arg: &OpenTeamsSettingsModalArgs,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        if let AuthOnboardingState::Terminal(handle) = &self.auth_onboarding_state {
-            handle.update(ctx, |workspace, ctx| {
-                workspace.show_team_settings_page_with_email_invite(arg.invite_email.as_ref(), ctx)
-            });
-            return true;
-        } else {
-            log::warn!("Auth not complete before trying to open settings pane");
-        }
-        false
-    }
-
     pub fn open_warp_drive_object_in_existing_window(
         &mut self,
         arg: &OpenWarpDriveObjectArgs,
@@ -2834,21 +2763,6 @@ impl RootView {
         TeamTesterStatus::handle(ctx).update(ctx, |model, ctx| {
             model.initiate_data_pollers(true, ctx);
         });
-        true
-    }
-
-    pub fn open_team_settings_page(&mut self, _: &(), ctx: &mut ViewContext<Self>) -> bool {
-        let window_id = ctx.window_id();
-        if let AuthOnboardingState::Terminal(handle) = &self.auth_onboarding_state {
-            ctx.dispatch_typed_action_for_view(
-                window_id,
-                handle.id(),
-                &WorkspaceAction::ShowSettingsPage(SettingsSection::Teams),
-            );
-            ctx.windows().show_window_and_focus_app(window_id);
-        } else {
-            log::error!("Auth not complete before trying to open team settings page");
-        }
         true
     }
 

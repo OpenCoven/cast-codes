@@ -23,7 +23,7 @@ use crate::{drive::OpenWarpDriveObjectArgs, view_components::DismissibleToast};
 use crate::{features::FeatureFlag, workspace::active_terminal_in_window};
 
 use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
-use crate::settings_view::{OpenTeamsSettingsModalArgs, SettingsSection};
+use crate::settings_view::SettingsSection;
 use crate::user_config::load_launch_configs;
 use crate::{
     quake_mode_window_id, quake_mode_window_is_open, safe_info, send_telemetry_from_app_ctx,
@@ -143,26 +143,13 @@ impl UriHost {
                     });
             }
             UriHost::Team => {
-                match url.path_segments().into_iter().flatten().last() {
-                    // If the last segment of the URL is "settings", open the team settings page.
-                    Some("settings") => {
-                        open_window_with_action(
-                            primary_window_id,
-                            "root_view:open_team_settings_page",
-                            ctx,
-                        );
-                    }
-                    // Otherwise default to previous behavior.
-                    _ => {
-                        // TODO: Parse URL to ensure the user is logged into the right account
-                        // Shows the user the settings view of their newly joined team within the app.
-                        open_window_with_action(
-                            primary_window_id,
-                            "root_view:handle_team_intent_link_action",
-                            ctx,
-                        );
-                    }
-                };
+                // TODO: Parse URL to ensure the user is logged into the right account
+                // Shows the user the settings view of their newly joined team within the app.
+                open_window_with_action(
+                    primary_window_id,
+                    "root_view:handle_team_intent_link_action",
+                    ctx,
+                );
                 send_telemetry_from_app_ctx!(TelemetryEvent::OpenTeamFromURI, ctx);
             }
             UriHost::Action => {
@@ -330,8 +317,6 @@ impl UriHost {
             }
             UriHost::Settings => {
                 // We support opening different settings pages through URI:
-                // - warp://settings/teams?invite={email} - opens team settings with invite modal
-                // - warp://settings/billing_and_usage - opens billing and usage settings page
                 // - warp://settings/environments - opens environments settings page
                 // - warp://settings/mcp - opens MCP servers settings page
                 // - warp://settings/platform - opens platform settings page
@@ -346,26 +331,6 @@ impl UriHost {
 
                 if let Some(settings_sub_page) = settings_sub_page {
                     match settings_sub_page.as_str() {
-                        "teams" => {
-                            let invite_email = query_string.get("invite").map(|s| s.to_string());
-                            let args = OpenTeamsSettingsModalArgs { invite_email };
-                            dispatch_action_in_new_or_existing_window(
-                                primary_window_id,
-                                "root_view:open_team_settings_with_email_invite_in_existing_window",
-                                "root_view:open_team_settings_with_email_invite_in_new_window",
-                                &args,
-                                ctx,
-                            );
-                        }
-                        "billing_and_usage" => {
-                            dispatch_action_in_new_or_existing_window(
-                                primary_window_id,
-                                "root_view:open_settings_page_in_existing_window",
-                                "root_view:open_settings_page_in_new_window",
-                                &SettingsSection::BillingAndUsage,
-                                ctx,
-                            );
-                        }
                         "environments" => {
                             // Notify that GitHub auth completed so views can refresh
                             GitHubAuthNotifier::handle(ctx).update(ctx, |notifier, ctx| {

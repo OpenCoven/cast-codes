@@ -10,7 +10,7 @@ use crate::workspaces::{
     user_workspaces::UserWorkspaces,
     workspace::{
         AiOverages, ByoApiKeyPolicy, CustomerType, EnterpriseCreditsAutoReloadPolicy,
-        EnterprisePayAsYouGoPolicy, PurchaseAddOnCreditsPolicy, Workspace, WorkspaceUid,
+        EnterprisePayAsYouGoPolicy, Workspace, WorkspaceUid,
     },
 };
 
@@ -166,107 +166,6 @@ fn test_has_any_ai_remaining_true_with_remaining_requests() {
     });
 }
 
-#[test]
-fn test_buy_credits_banner_shows_with_only_ambient_bonus_credits() {
-    App::test((), |mut app| async move {
-        let (_uid, mut workspace) = create_test_workspace();
-        workspace
-            .billing_metadata
-            .tier
-            .purchase_add_on_credits_policy = Some(PurchaseAddOnCreditsPolicy { enabled: true });
-
-        add_user_workspaces_with_workspace(&mut app, workspace);
-        let request_usage_model = add_request_usage_model(&mut app);
-
-        request_usage_model.update(&mut app, |model, ctx| {
-            model.request_limit_info = RequestLimitInfo::new_for_test(10, 10);
-            model.bonus_grants = vec![BonusGrant {
-                created_at: Utc::now(),
-                cost_cents: 0,
-                expiration: Some(Utc::now() + chrono::Duration::days(7)),
-                grant_type: BonusGrantType::AmbientOnly,
-                reason: "ambient trial credits".to_string(),
-                user_facing_message: None,
-                request_credits_granted: 1000,
-                request_credits_remaining: 1000,
-                scope: BonusGrantScope::User,
-            }];
-
-            assert_eq!(
-                model.compute_buy_addon_credits_banner_display_state(ctx),
-                BuyCreditsBannerDisplayState::OutOfCredits,
-            );
-        });
-    });
-}
-
-#[test]
-fn test_buy_credits_banner_hidden_with_non_ambient_bonus_credits() {
-    App::test((), |mut app| async move {
-        let (_uid, mut workspace) = create_test_workspace();
-        workspace
-            .billing_metadata
-            .tier
-            .purchase_add_on_credits_policy = Some(PurchaseAddOnCreditsPolicy { enabled: true });
-
-        add_user_workspaces_with_workspace(&mut app, workspace);
-        let request_usage_model = add_request_usage_model(&mut app);
-
-        request_usage_model.update(&mut app, |model, ctx| {
-            model.request_limit_info = RequestLimitInfo::new_for_test(10, 10);
-            model.bonus_grants = vec![BonusGrant {
-                created_at: Utc::now(),
-                cost_cents: 0,
-                expiration: Some(Utc::now() + chrono::Duration::days(7)),
-                grant_type: BonusGrantType::Any,
-                reason: "standard bonus credits".to_string(),
-                user_facing_message: None,
-                request_credits_granted: 100,
-                request_credits_remaining: 100,
-                scope: BonusGrantScope::User,
-            }];
-
-            assert_eq!(
-                model.compute_buy_addon_credits_banner_display_state(ctx),
-                BuyCreditsBannerDisplayState::Hidden,
-            );
-        });
-    });
-}
-
-#[test]
-fn test_buy_credits_banner_shows_when_non_ambient_bonus_credits_are_depleted() {
-    App::test((), |mut app| async move {
-        let (_uid, mut workspace) = create_test_workspace();
-        workspace
-            .billing_metadata
-            .tier
-            .purchase_add_on_credits_policy = Some(PurchaseAddOnCreditsPolicy { enabled: true });
-
-        add_user_workspaces_with_workspace(&mut app, workspace);
-        let request_usage_model = add_request_usage_model(&mut app);
-
-        request_usage_model.update(&mut app, |model, ctx| {
-            model.request_limit_info = RequestLimitInfo::new_for_test(10, 10);
-            model.bonus_grants = vec![BonusGrant {
-                created_at: Utc::now(),
-                cost_cents: 0,
-                expiration: Some(Utc::now() + chrono::Duration::days(7)),
-                grant_type: BonusGrantType::Any,
-                reason: "depleted standard bonus credits".to_string(),
-                user_facing_message: None,
-                request_credits_granted: 100,
-                request_credits_remaining: 0,
-                scope: BonusGrantScope::User,
-            }];
-
-            assert_eq!(
-                model.compute_buy_addon_credits_banner_display_state(ctx),
-                BuyCreditsBannerDisplayState::OutOfCredits,
-            );
-        });
-    });
-}
 #[test]
 fn test_has_any_ai_remaining_false_when_no_requests_or_bonus() {
     App::test((), |mut app| async move {

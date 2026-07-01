@@ -850,9 +850,6 @@ impl Input {
                     )
                 });
             }
-            _usage if command.name == commands::USAGE.name => {
-                ctx.dispatch_typed_action(&TerminalAction::OpenBillingAndUsagePane);
-            }
             _remote_control if command.name == commands::REMOTE_CONTROL.name => {
                 if !FeatureFlag::CreatingSharedSessions.is_enabled()
                     || !FeatureFlag::HOARemoteControl.is_enabled()

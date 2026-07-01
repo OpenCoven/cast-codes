@@ -636,7 +636,7 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
             "Agents",
             SettingsSection::ai_subpages().to_vec(),
         )),
-        SettingsNavItem::Page(SettingsSection::BillingAndUsage),
+        SettingsNavItem::Page(SettingsSection::Appearance),
         SettingsNavItem::Umbrella(SettingsUmbrella::new(
             "Code",
             SettingsSection::code_subpages().to_vec(),
@@ -645,7 +645,7 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
             "Platform",
             SettingsSection::cloud_platform_subpages().to_vec(),
         )),
-        SettingsNavItem::Page(SettingsSection::Teams),
+        SettingsNavItem::Page(SettingsSection::Features),
     ]
 }
 
@@ -664,8 +664,8 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
     // All umbrellas default to collapsed.
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    // Expect: Account, <Agents umbrella>, BillingAndUsage, <Code umbrella>,
-    // <Platform umbrella>, Teams.
+    // Expect: Account, <Agents umbrella>, Appearance, <Code umbrella>,
+    // <Platform umbrella>, Features.
     assert_eq!(stops.len(), 6);
     assert!(matches!(
         stops[0],
@@ -681,7 +681,7 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
     ));
     assert!(matches!(
         stops[2],
-        NavStop::Section(SettingsSection::BillingAndUsage)
+        NavStop::Section(SettingsSection::Appearance)
     ));
     assert!(matches!(
         stops[3],
@@ -699,7 +699,10 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
             last_subpage: SettingsSection::OzCloudAPIKeys,
         }
     ));
-    assert!(matches!(stops[5], NavStop::Section(SettingsSection::Teams)));
+    assert!(matches!(
+        stops[5],
+        NavStop::Section(SettingsSection::Features)
+    ));
 }
 
 #[test]
@@ -801,12 +804,12 @@ fn umbrella_with_no_visible_subpages_is_skipped_entirely() {
 fn filtered_out_top_level_page_is_skipped() {
     let nav_items = realistic_nav_items();
 
-    let stops = build_nav_stops(&nav_items, |section| section != SettingsSection::Teams);
+    let stops = build_nav_stops(&nav_items, |section| section != SettingsSection::Features);
 
     assert!(
         !stops
             .iter()
-            .any(|s| matches!(s, NavStop::Section(SettingsSection::Teams))),
+            .any(|s| matches!(s, NavStop::Section(SettingsSection::Features))),
         "Teams should be filtered out entirely"
     );
     // But other pages remain.
@@ -822,7 +825,7 @@ fn current_stop_index_matches_section_stop() {
     let nav_items = realistic_nav_items();
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    let idx = current_stop_index(&stops, &nav_items, SettingsSection::BillingAndUsage);
+    let idx = current_stop_index(&stops, &nav_items, SettingsSection::Appearance);
     assert_eq!(idx, Some(2));
 }
 
@@ -930,7 +933,7 @@ fn arrow_up_from_billing_and_usage_with_collapsed_agents_lands_on_last_subpage()
     let next = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::BillingAndUsage,
+        SettingsSection::Appearance,
         CycleDirection::Up,
     );
     assert_eq!(next, SettingsSection::ThirdPartyCLIAgents);
@@ -955,7 +958,7 @@ fn arrow_up_into_collapsed_umbrella_respects_search_filter_for_last_subpage() {
     let next = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::BillingAndUsage,
+        SettingsSection::Appearance,
         CycleDirection::Up,
     );
     assert_eq!(next, SettingsSection::AgentMCPServers);
@@ -975,7 +978,7 @@ fn arrow_down_from_expanded_last_subpage_leaves_umbrella() {
         SettingsSection::ThirdPartyCLIAgents,
         CycleDirection::Down,
     );
-    assert_eq!(next, SettingsSection::BillingAndUsage);
+    assert_eq!(next, SettingsSection::Appearance);
 }
 
 #[test]
@@ -989,7 +992,7 @@ fn arrow_down_across_adjacent_collapsed_umbrellas() {
     let next_after_billing = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::BillingAndUsage,
+        SettingsSection::Appearance,
         CycleDirection::Down,
     );
     assert_eq!(next_after_billing, SettingsSection::CodeIndexing);

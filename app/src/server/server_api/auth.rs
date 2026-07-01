@@ -15,10 +15,6 @@ use warp_graphql::client::Operation;
 use warp_graphql::mutations::expire_api_key::{
     ExpireApiKey, ExpireApiKeyResult, ExpireApiKeyVariables,
 };
-use warp_graphql::queries::get_conversation_usage::{
-    ConversationUsage, GetConversationUsage, GetConversationUsageVariables, UserResult,
-};
-
 use warp_graphql::mutations::set_user_is_onboarded::{
     SetUserIsOnboarded, SetUserIsOnboardedResult, SetUserIsOnboardedVariables,
 };
@@ -174,16 +170,6 @@ pub trait AuthClient: 'static + Send + Sync {
     /// for any of the settings in [`SyncedUserSettings`]. If the fetched settings object exists
     /// but is missing required fields, or if the request itself failed, returns an error.
     async fn get_user_settings(&self) -> Result<Option<SyncedUserSettings>>;
-
-    /// Returns conversation usage history for the current user over the past n days.
-    /// If last_updated_end_timestamp is provided, only conversations with
-    /// lastUpdated earlier than this timestamp are returned.
-    async fn get_conversation_usage_history(
-        &self,
-        days: Option<i32>,
-        limit: Option<i32>,
-        last_updated_end_timestamp: Option<warp_graphql::scalars::Time>,
-    ) -> Result<Vec<ConversationUsage>>;
 
     async fn set_is_telemetry_enabled(&self, value: bool) -> Result<()>;
 
@@ -424,26 +410,6 @@ impl AuthClient for ServerApi {
             warp_graphql::queries::get_user_settings::UserResult::Unknown => {
                 Err(anyhow!("Unable to fetch user settings"))
             }
-        }
-    }
-
-    // Returns a history of the current user's conversation usage over the past n days.
-    async fn get_conversation_usage_history(
-        &self,
-        days: Option<i32>,
-        limit: Option<i32>,
-        last_updated_end_timestamp: Option<warp_graphql::scalars::Time>,
-    ) -> Result<Vec<ConversationUsage>> {
-        let operation = GetConversationUsage::build(GetConversationUsageVariables {
-            request_context: get_request_context(),
-            days,
-            limit,
-            last_updated_end_timestamp,
-        });
-        let response = self.send_graphql_request(operation, None).await?;
-        match response.user {
-            UserResult::UserOutput(out) => Ok(out.user.conversation_usage),
-            UserResult::Unknown => Err(anyhow!("Unable to fetch conversation usage")),
         }
     }
 

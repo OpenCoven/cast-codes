@@ -1227,15 +1227,7 @@ impl AmbientAgentViewModel {
                     ctx.emit(event);
                 }
             }
-            AmbientAgentEvent::AtCapacity => {
-                if ignore_events {
-                    return;
-                }
-
-                if matches!(self.status, Status::WaitingForSession { .. }) {
-                    ctx.emit(AmbientAgentViewModelEvent::ShowCloudAgentCapacityModal);
-                }
-            }
+            AmbientAgentEvent::AtCapacity => {}
             AmbientAgentEvent::TimedOut => {}
         }
     }
@@ -1261,7 +1253,6 @@ impl AmbientAgentViewModel {
         }
         if let Some(capacity_error) = err.downcast_ref::<CloudAgentCapacityError>() {
             self.handle_spawn_error(capacity_error.error.clone(), ctx);
-            ctx.emit(AmbientAgentViewModelEvent::ShowCloudAgentCapacityModal);
             return;
         }
         if let Some(ai_api_error) = err.downcast_ref::<AIApiError>() {
@@ -1528,8 +1519,6 @@ pub enum AmbientAgentViewModelEvent {
     Failed {
         error_message: String,
     },
-    /// Request to show the cloud agent concurrency/capacity modal.
-    ShowCloudAgentCapacityModal,
     /// Request to show the cloud agent AI credits modal.
     ShowAICreditModal,
     /// The ambient agent needs GitHub authentication.

@@ -57,12 +57,6 @@ struct Word {
     mouse_state_handle: MouseStateHandle,
 }
 
-pub struct ChipEditorState {
-    pub is_valid: bool,   // track whether list of words is valid (based on validator)
-    pub is_empty: bool,   // track whether there are any elements in the list of words so far
-    pub num_chips: usize, // track the # of chipped words
-}
-
 // Wrapper class to editor view that will separate word chips into visual blocks delimited
 // by a user specified `separator` char. Can additionally pass in a validator to mark
 // invalid words in an error color.
@@ -137,20 +131,6 @@ impl WordBlockEditorView {
         words
     }
 
-    pub fn num_chips(&self) -> usize {
-        self.list_of_words.len()
-    }
-
-    pub fn with_validator(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-        word_validator: Box<dyn Fn(&str) -> bool>,
-    ) {
-        self.word_validator = word_validator;
-        ctx.emit(WordBlockEditorViewEvent::WordListValidityChanged);
-        ctx.notify();
-    }
-
     pub fn with_layout(mut self, layout: WordBlockLayout) -> Self {
         // No need for ctx.notify - because this takes `self`, it can only be called when adding
         // the view.
@@ -188,15 +168,6 @@ impl WordBlockEditorView {
         self.editor_view.update(ctx, |editor, ctx| {
             editor.clear_buffer_and_reset_undo_stack(ctx);
         });
-        ctx.notify();
-    }
-
-    pub fn add_word(&mut self, word: &String, ctx: &mut ViewContext<Self>) {
-        self.list_of_words.push(Word {
-            text: word.to_owned(),
-            mouse_state_handle: Default::default(),
-        });
-        ctx.emit(WordBlockEditorViewEvent::WordListValidityChanged);
         ctx.notify();
     }
 
