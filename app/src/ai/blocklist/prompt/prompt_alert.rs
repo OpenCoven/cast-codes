@@ -323,6 +323,7 @@ impl PromptAlertView {
             }
             PromptAlertState::OveragesToggleableButNotEnabled => {
                 if has_admin_permissions {
+                    text_fragments.push(FormattedTextFragment::plain_text("  "));
                     text_fragments.push(FormattedTextFragment::plain_text(
                         OVERAGES_TOGGLEABLE_BUT_NOT_ENABLED_ACTION_TEXT,
                     ));
@@ -334,6 +335,7 @@ impl PromptAlertView {
             }
             PromptAlertState::MonthlyOveragesSpendLimitReached => {
                 if has_admin_permissions {
+                    text_fragments.push(FormattedTextFragment::plain_text("  "));
                     text_fragments.push(FormattedTextFragment::plain_text(
                         MONTHLY_OVERAGES_SPEND_LIMIT_REACHED_ACTION_TEXT,
                     ));
