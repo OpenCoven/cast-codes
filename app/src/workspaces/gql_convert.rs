@@ -54,11 +54,10 @@ use warp_graphql::{
         EnterpriseCreditsAutoReloadPolicy as GqlEnterpriseCreditsAutoReloadPolicy,
         EnterprisePayAsYouGoPolicy as GqlEnterprisePayAsYouGoPolicy,
         InstanceShape as GqlInstanceShape, MultiAdminPolicy as GqlMultiAdminPolicy,
-        PurchaseAddOnCreditsPolicy as GqlPurchaseAddOnCreditsPolicy, ServiceAgreementType,
+        PurchaseAddOnCreditsPolicy as GqlPurchaseAddOnCreditsPolicy,
         SessionSharingPolicy as GqlSessionSharingPolicy,
         SharedNotebooksPolicy as GqlSharedNotebooksPolicy,
-        SharedWorkflowsPolicy as GqlSharedWorkflowsPolicy, StripeSubscriptionPlan,
-        TeamSizePolicy as GqlTeamSizePolicy,
+        SharedWorkflowsPolicy as GqlSharedWorkflowsPolicy, TeamSizePolicy as GqlTeamSizePolicy,
         TelemetryDataCollectionPolicy as GqlTelemetryDataCollectionPolicy, Tier as GqlTier,
         UgcDataCollectionPolicy as GqlUgcDataCollectionPolicy,
         UsageBasedPricingPolicy as GqlUsageBasedPricingPolicy, WarpAiPolicy as GqlWarpAiPolicy,
@@ -531,40 +530,6 @@ impl From<GqlBillingMetadata> for BillingMetadata {
                 current_monthly_requests_used: overages.current_monthly_requests_used,
                 current_period_end: overages.current_period_end.utc(),
             }),
-        }
-    }
-}
-
-impl TryFrom<&BillingMetadata> for StripeSubscriptionPlan {
-    type Error = ();
-
-    fn try_from(billing_metadata: &BillingMetadata) -> Result<Self, Self::Error> {
-        match billing_metadata.customer_type {
-            CustomerType::Turbo => Ok(StripeSubscriptionPlan::Turbo),
-            CustomerType::SelfServe => Ok(StripeSubscriptionPlan::Team),
-            CustomerType::Prosumer => Ok(StripeSubscriptionPlan::Pro),
-            CustomerType::Business => {
-                // Check if this is a legacy Business Plan, or a new Build Business plan based on service agreement type
-                // See: https://github.com/warpdotdev/warp-server/pull/6828#discussion_r2496242091
-                match billing_metadata
-                    .service_agreements
-                    .first()
-                    .map(|sa| sa.type_.clone())
-                {
-                    Some(ServiceAgreementType::SelfServe) => {
-                        Ok(StripeSubscriptionPlan::BuildBusiness)
-                    }
-                    _ => Ok(StripeSubscriptionPlan::Business),
-                }
-            }
-            CustomerType::Lightspeed => Ok(StripeSubscriptionPlan::Lightspeed),
-            CustomerType::Build => Ok(StripeSubscriptionPlan::Build),
-            CustomerType::BuildMax => Ok(StripeSubscriptionPlan::BuildMax),
-            // legacy customer types we don't support anymore, or customer types that don't get billed via stripe
-            CustomerType::Free
-            | CustomerType::Legacy
-            | CustomerType::Enterprise
-            | CustomerType::Unknown => Err(()),
         }
     }
 }

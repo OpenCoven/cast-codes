@@ -116,7 +116,6 @@ pub fn create_cloud_mode_view(
                 | AmbientAgentViewModelEvent::ProgressUpdated
                 | AmbientAgentViewModelEvent::EnvironmentSelected
                 | AmbientAgentViewModelEvent::Failed { .. }
-                | AmbientAgentViewModelEvent::ShowCloudAgentCapacityModal
                 | AmbientAgentViewModelEvent::ShowAICreditModal
                 | AmbientAgentViewModelEvent::NeedsGithubAuth
                 | AmbientAgentViewModelEvent::Cancelled
