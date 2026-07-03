@@ -45,8 +45,7 @@ use crate::{
     appearance::Appearance,
     auth::auth_manager::AuthManager,
     channel::ChannelState,
-    report_if_error, send_telemetry_from_ctx,
-    server::telemetry::TelemetryEvent,
+    report_if_error,
     settings::{AISettings, PrivacySettings},
     terminal::safe_mode_settings::{SafeModeEnabled, SafeModeSettings},
     ui_components::icons::Icon,
@@ -267,11 +266,6 @@ impl PrivacyPageView {
     fn toggle_safe_mode(&mut self, ctx: &mut ViewContext<Self>) {
         let safe_mode_settings = SafeModeSettings::handle(ctx);
         let new_value = { !*safe_mode_settings.as_ref(ctx).safe_mode_enabled.value() };
-
-        send_telemetry_from_ctx!(
-            TelemetryEvent::ToggleSecretRedaction { enabled: new_value },
-            ctx
-        );
 
         ctx.update_model(&safe_mode_settings, move |safe_mode_settings, ctx| {
             report_if_error!(safe_mode_settings

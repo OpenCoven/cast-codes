@@ -26,18 +26,11 @@ use ai::api_keys::{ApiKeyManager, AwsCredentialsRefreshStrategy};
 use anyhow::Context;
 use warp_cli::{
     agent::{AgentCommand, AgentProfileCommand, OutputFormat},
-    artifact::ArtifactCommand,
     environment::{EnvironmentCommand, ImageCommand},
-    federate::FederateCommand,
-    harness_support::{HarnessSupportCommand, ReportArtifactCommand, TaskStatus},
-    integration::IntegrationCommand,
     mcp::MCPCommand,
     model::ModelCommand,
-    provider::ProviderCommand,
-    schedule::ScheduleSubcommand,
-    secret::SecretCommand,
     share::ShareRequest,
-    task::{MessageCommand, TaskCommand},
+    task::TaskCommand,
     CliCommand, GlobalOptions,
 };
 use warp_core::{channel::ChannelState, features::FeatureFlag};
@@ -52,7 +45,6 @@ use crate::{
     ai::ambient_agents::{task::HarnessConfig, AmbientAgentTaskId},
     ai::cloud_environments::CloudAmbientAgentEnvironment,
     auth::AuthStateProvider,
-    send_telemetry_sync_from_app_ctx,
     server::{
         ids::{ServerId, SyncId},
         server_api::{ai::AgentConfigSnapshot, ServerApiProvider},
@@ -69,9 +61,7 @@ use crate::ai::skills::{
 
 pub(crate) use driver::harness::{task_env_vars, validate_cli_installed, ClaudeHarness};
 pub use driver::AgentDriver;
-use telemetry::CliTelemetryEvent;
 use warp_cli::agent::{Harness, Prompt, RunAgentArgs};
-use warp_cli::OZ_HARNESS_ENV;
 
 mod admin;
 mod agent_config;
@@ -98,7 +88,6 @@ mod provider;
 pub(crate) mod retry;
 mod schedule;
 mod secret;
-mod telemetry;
 #[cfg(test)]
 mod test_support;
 mod text_layout;
@@ -123,9 +112,6 @@ pub fn run(
     command: CliCommand,
     global_options: GlobalOptions,
 ) -> anyhow::Result<()> {
-    let event = command_to_telemetry_event(&command);
-    send_telemetry_sync_from_app_ctx!(event, ctx);
-
     launch_command(ctx, command, global_options)
 }
 
@@ -1541,135 +1527,6 @@ fn report_fatal_error(err: anyhow::Error, ctx: &mut AppContext) {
 
     let error = anyhow::anyhow!(message);
     ctx.terminate_app(TerminationMode::ForceTerminate, Some(Err(error)));
-}
-
-fn resolve_orchestration_harness_label() -> &'static str {
-    let Ok(raw) = std::env::var(OZ_HARNESS_ENV) else {
-        return "unknown";
-    };
-    match Harness::parse_orchestration_harness(&raw) {
-        Some(Harness::Oz) => "oz",
-        Some(Harness::Claude) => "claude",
-        Some(Harness::OpenCode) => "opencode",
-        Some(Harness::Gemini) => "gemini",
-        Some(Harness::Codex) => "codex",
-        Some(Harness::Unknown) | None => "unknown",
-    }
-}
-
-/// Map each CLI command into a telemetry event to emit when it's executed.
-fn command_to_telemetry_event(command: &CliCommand) -> CliTelemetryEvent {
-    match command {
-        CliCommand::Agent(AgentCommand::Run(args)) => CliTelemetryEvent::AgentRun {
-            gui: args.gui,
-            requested_mcp_servers: args.mcp_specs.len() + args.mcp_servers.len(),
-            has_environment: args.environment.is_some(),
-            task_id: args.task_id.clone(),
-            harness: args.harness.to_string(),
-        },
-        CliCommand::Agent(AgentCommand::RunCloud(_)) => CliTelemetryEvent::AgentRunAmbient,
-        CliCommand::Agent(AgentCommand::Profile(sub)) => match sub {
-            AgentProfileCommand::List => CliTelemetryEvent::AgentProfileList,
-        },
-        CliCommand::Agent(AgentCommand::List(_)) => CliTelemetryEvent::AgentList,
-        CliCommand::Environment(EnvironmentCommand::List) => CliTelemetryEvent::EnvironmentList,
-        CliCommand::Environment(EnvironmentCommand::Create { .. }) => {
-            CliTelemetryEvent::EnvironmentCreate
-        }
-        CliCommand::Environment(EnvironmentCommand::Delete { .. }) => {
-            CliTelemetryEvent::EnvironmentDelete
-        }
-        CliCommand::Environment(EnvironmentCommand::Update { .. }) => {
-            CliTelemetryEvent::EnvironmentUpdate
-        }
-        CliCommand::Environment(EnvironmentCommand::Get { .. }) => {
-            CliTelemetryEvent::EnvironmentGet
-        }
-        CliCommand::Environment(EnvironmentCommand::Image(ImageCommand::List)) => {
-            CliTelemetryEvent::EnvironmentImageList
-        }
-        CliCommand::MCP(MCPCommand::List) => CliTelemetryEvent::MCPList,
-        CliCommand::Run(TaskCommand::List(_)) => CliTelemetryEvent::TaskList,
-        CliCommand::Run(TaskCommand::Get(args)) => {
-            if args.conversation {
-                CliTelemetryEvent::RunConversationGet
-            } else {
-                CliTelemetryEvent::TaskGet
-            }
-        }
-        CliCommand::Run(TaskCommand::Conversation(_)) => CliTelemetryEvent::ConversationGet,
-        CliCommand::Run(TaskCommand::Message(message_cmd)) => match message_cmd {
-            MessageCommand::Watch(_) => CliTelemetryEvent::RunMessageWatch {
-                harness: resolve_orchestration_harness_label(),
-            },
-            MessageCommand::Send(_) => CliTelemetryEvent::RunMessageSend {
-                harness: resolve_orchestration_harness_label(),
-            },
-            MessageCommand::List(_) => CliTelemetryEvent::RunMessageList {
-                harness: resolve_orchestration_harness_label(),
-            },
-            MessageCommand::Read(_) => CliTelemetryEvent::RunMessageRead {
-                harness: resolve_orchestration_harness_label(),
-            },
-            MessageCommand::MarkDelivered(_) => CliTelemetryEvent::RunMessageMarkDelivered {
-                harness: resolve_orchestration_harness_label(),
-            },
-        },
-        CliCommand::Model(ModelCommand::List) => CliTelemetryEvent::ModelList,
-        CliCommand::Login => CliTelemetryEvent::Login,
-        CliCommand::Logout => CliTelemetryEvent::Logout,
-        CliCommand::Whoami => CliTelemetryEvent::Whoami,
-        CliCommand::Provider(ProviderCommand::Setup(_)) => CliTelemetryEvent::ProviderSetup,
-        CliCommand::Provider(ProviderCommand::List) => CliTelemetryEvent::ProviderList,
-        CliCommand::Integration(integration_cmd) => match integration_cmd {
-            IntegrationCommand::Create(_) => CliTelemetryEvent::IntegrationCreate,
-            IntegrationCommand::Update(_) => CliTelemetryEvent::IntegrationUpdate,
-            IntegrationCommand::List => CliTelemetryEvent::IntegrationList,
-        },
-        CliCommand::Schedule(c) => match c.subcommand() {
-            None | Some(ScheduleSubcommand::Create(_)) => CliTelemetryEvent::ScheduleCreate,
-            Some(ScheduleSubcommand::List) => CliTelemetryEvent::ScheduleList,
-            Some(ScheduleSubcommand::Get(_)) => CliTelemetryEvent::ScheduleGet,
-            Some(ScheduleSubcommand::Pause(_)) => CliTelemetryEvent::SchedulePause,
-            Some(ScheduleSubcommand::Unpause(_)) => CliTelemetryEvent::ScheduleUnpause,
-            Some(ScheduleSubcommand::Update(_)) => CliTelemetryEvent::ScheduleUpdate,
-            Some(ScheduleSubcommand::Delete(_)) => CliTelemetryEvent::ScheduleDelete,
-        },
-        CliCommand::Secret(secret_cmd) => match secret_cmd {
-            SecretCommand::Create(_) => CliTelemetryEvent::SecretCreate,
-            SecretCommand::Delete(_) => CliTelemetryEvent::SecretDelete,
-            SecretCommand::Update(_) => CliTelemetryEvent::SecretUpdate,
-            SecretCommand::List(_) => CliTelemetryEvent::SecretList,
-        },
-        CliCommand::Federate(federate_cmd) => match federate_cmd {
-            FederateCommand::IssueToken(_) => CliTelemetryEvent::FederateIssueToken,
-            FederateCommand::IssueGcpToken(_) => CliTelemetryEvent::FederateIssueGcpToken,
-        },
-        CliCommand::HarnessSupport(args) => match &args.command {
-            HarnessSupportCommand::Ping => CliTelemetryEvent::HarnessSupportPing,
-            HarnessSupportCommand::ReportArtifact(report_args) => match &report_args.command {
-                ReportArtifactCommand::PullRequest(_) => {
-                    CliTelemetryEvent::HarnessSupportReportArtifact {
-                        artifact_type: "pull_request",
-                    }
-                }
-            },
-            HarnessSupportCommand::NotifyUser(_) => CliTelemetryEvent::HarnessSupportNotifyUser,
-            HarnessSupportCommand::FinishTask(finish_args) => {
-                CliTelemetryEvent::HarnessSupportFinishTask {
-                    success: finish_args.status == TaskStatus::Success,
-                }
-            }
-            HarnessSupportCommand::ReportShutdown(_) => {
-                CliTelemetryEvent::HarnessSupportReportShutdown
-            }
-        },
-        CliCommand::Artifact(artifact_cmd) => match artifact_cmd {
-            ArtifactCommand::Upload(_) => CliTelemetryEvent::ArtifactUpload,
-            ArtifactCommand::Get(_) => CliTelemetryEvent::ArtifactGet,
-            ArtifactCommand::Download(_) => CliTelemetryEvent::ArtifactDownload,
-        },
-    }
 }
 
 #[cfg(test)]

@@ -19,12 +19,10 @@ use warp_core::ui::theme::color::internal_colors;
 use crate::ai::agent::conversation::ConversationStatus;
 use crate::ai::agent_management::notifications::item::NotificationSourceAgent;
 use crate::ai::agent_management::notifications::{NotificationCategory, NotificationItem};
-use crate::ai::agent_management::telemetry::{AgentManagementTelemetryEvent, ArtifactType};
 use crate::ai::artifacts::{
     open_screenshot_lightbox, Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent,
 };
 use crate::appearance::Appearance;
-use crate::send_telemetry_from_ctx;
 use crate::ui_components::icon_with_status::{render_icon_with_status, IconWithStatusVariant};
 use crate::util::time_format::format_elapsed_since;
 use crate::view_components::action_button::ActionButtonTheme;
@@ -458,45 +456,21 @@ pub(crate) fn handle_notification_artifact_buttons_event(
 ) {
     match event {
         ArtifactButtonsRowEvent::OpenPlan { notebook_uid } => {
-            send_telemetry_from_ctx!(
-                AgentManagementTelemetryEvent::ArtifactClicked {
-                    artifact_type: ArtifactType::Plan
-                },
-                ctx
-            );
             ctx.dispatch_typed_action(&WorkspaceAction::OpenNotebook {
                 id: (*notebook_uid).into(),
             });
         }
         ArtifactButtonsRowEvent::CopyBranch { branch } => {
-            send_telemetry_from_ctx!(
-                AgentManagementTelemetryEvent::ArtifactClicked {
-                    artifact_type: ArtifactType::Branch
-                },
-                ctx
-            );
             ctx.clipboard()
                 .write(ClipboardContent::plain_text(branch.clone()));
         }
         ArtifactButtonsRowEvent::OpenPullRequest { url } => {
-            send_telemetry_from_ctx!(
-                AgentManagementTelemetryEvent::ArtifactClicked {
-                    artifact_type: ArtifactType::PullRequest
-                },
-                ctx
-            );
             ctx.open_url(url);
         }
         ArtifactButtonsRowEvent::ViewScreenshots { artifact_uids } => {
             open_screenshot_lightbox(artifact_uids, ctx);
         }
         ArtifactButtonsRowEvent::DownloadFile { artifact_uid } => {
-            send_telemetry_from_ctx!(
-                AgentManagementTelemetryEvent::ArtifactClicked {
-                    artifact_type: ArtifactType::File
-                },
-                ctx
-            );
             crate::ai::artifacts::download_file_artifact(artifact_uid, ctx);
         }
     }

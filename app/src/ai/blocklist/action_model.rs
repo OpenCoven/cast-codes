@@ -28,14 +28,11 @@ use chrono::Local;
 pub(crate) use execute::apply_edits;
 pub(crate) use execute::coerce_integer_args;
 pub(crate) use execute::FileReadResult;
-pub(crate) use execute::MalformedFinalLineProxyEvent;
 #[cfg(test)]
 pub(crate) use execute::{compose_run_agents_child_prompt, run_agents_to_start_agent_mode};
 pub use execute::{
-    read_local_file_context, EditAcceptAndContinueClickedEvent, EditAcceptClickedEvent,
-    EditResolvedEvent, EditStats, NewConversationDecision, PromptSuggestionExecutor,
-    ReadFileContextResult, RequestFileEditsExecutor, RequestFileEditsFormatKind,
-    RequestFileEditsTelemetryEvent, RunAgentsExecutor, RunAgentsExecutorEvent,
+    read_local_file_context, NewConversationDecision, PromptSuggestionExecutor,
+    ReadFileContextResult, RequestFileEditsExecutor, RunAgentsExecutor, RunAgentsExecutorEvent,
     RunAgentsSpawningSnapshot, ShellCommandExecutor, ShellCommandExecutorEvent, StartAgentExecutor,
     StartAgentExecutorEvent, StartAgentRequest, StartAgentRequestId,
 };
@@ -74,7 +71,6 @@ use self::execute::{
 use super::BlocklistAIHistoryModel;
 use crate::ai::ai_document_view::DEFAULT_PLANNING_DOCUMENT_TITLE;
 use crate::ai::document::ai_document_model::AIDocumentModel;
-use crate::{send_telemetry_from_ctx, TelemetryEvent};
 
 /// The status of an action from an AI output.
 #[derive(Clone, Debug)]
@@ -1138,24 +1134,6 @@ impl BlocklistAIActionModel {
         reason: Option<CancellationReason>,
         ctx: &mut ModelContext<Self>,
     ) {
-        if matches!(
-            pending_action.action,
-            AIAgentActionType::RequestComputerUse(_)
-        ) {
-            let server_conversation_id = BlocklistAIHistoryModel::as_ref(ctx)
-                .conversation(&conversation_id)
-                .and_then(|c| c.server_conversation_token())
-                .map(|t| t.as_str().to_string());
-            send_telemetry_from_ctx!(
-                TelemetryEvent::ComputerUseCancelled {
-                    client_conversation_id: conversation_id,
-                    server_conversation_id,
-                    ambient_agent_task_id: self.ambient_agent_task_id,
-                },
-                ctx
-            );
-        }
-
         let result = Arc::new(AIAgentActionResult {
             id: pending_action.id,
             task_id: pending_action.task_id,

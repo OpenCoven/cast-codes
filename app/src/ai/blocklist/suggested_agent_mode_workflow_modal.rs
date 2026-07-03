@@ -9,11 +9,10 @@ use crate::{
         WorkflowSelectionSource, WorkflowSource, WorkflowType,
     },
     workspaces::user_workspaces::UserWorkspaces,
-    TelemetryEvent,
 };
 use pathfinder_geometry::vector::vec2f;
 use std::{collections::HashMap, default::Default, sync::Arc};
-use warp_core::{send_telemetry_from_ctx, ui::appearance::Appearance};
+use warp_core::ui::appearance::Appearance;
 use warpui::{
     elements::{
         ChildAnchor, Empty, OffsetPositioning, PositionedElementAnchor,
@@ -179,17 +178,10 @@ impl SuggestedAgentModeWorkflowModal {
                 self.close(ctx);
             }
             WorkflowViewEvent::CreatedWorkflow(created_workflow_id) => {
-                if let Some(SuggestedAgentModeWorkflowAndId { sync_id, workflow }) =
-                    &self.workflow_and_id
+                if let Some(SuggestedAgentModeWorkflowAndId { sync_id, .. }) = &self.workflow_and_id
                 {
                     if sync_id == created_workflow_id {
                         ctx.emit(SuggestedAgentModeWorkflowModalEvent::WorkflowCreated);
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AISuggestedAgentModeWorkflowAdded {
-                                logging_id: workflow.logging_id.clone(),
-                            },
-                            ctx
-                        );
                     }
                 }
                 self.close(ctx);

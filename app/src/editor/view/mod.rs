@@ -38,7 +38,7 @@ use pathfinder_color::ColorU;
 use settings::Setting as _;
 use snapshot::{EditorHeightShrinkDelay, ViewSnapshot};
 use vec1::{vec1, Vec1};
-use warp_core::{safe_error, send_telemetry_from_ctx};
+use warp_core::safe_error;
 use warp_util::{path::ShellFamily, user_input::UserInput};
 use warpui::platform::keyboard::KeyCode;
 use warpui::ui_components::button::ButtonTooltipPosition;
@@ -56,7 +56,6 @@ use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
 use crate::search::ai_context_menu::view::{
     AIContextMenu, AIContextMenuCategory, AIContextMenuEvent,
 };
-use crate::server::telemetry::TelemetryEvent;
 use crate::settings_view::flags;
 use crate::suggestions::ignored_suggestions_model::{IgnoredSuggestionsModel, SuggestionType};
 use crate::ui_components::buttons::icon_button;
@@ -3054,59 +3053,21 @@ impl EditorView {
             let ai_context_menu = ctx.add_typed_action_view(AIContextMenu::new);
             ctx.subscribe_to_view(
                 &ai_context_menu,
-                |me, _, event: &AIContextMenuEvent, ctx| {
-                    let is_udi_enabled =
-                        InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
-                    let current_input_mode = if me.is_ai_input {
-                        InputType::AI
-                    } else {
-                        InputType::Shell
-                    };
-                    match event {
-                        AIContextMenuEvent::Close {
-                            item_count,
-                            query_length,
-                        } => {
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::AtMenuInteracted {
-                                    action: "cancelled".to_string(),
-                                    item_count: *item_count,
-                                    query_length: Some(*query_length),
-                                    is_udi_enabled,
-                                    current_input_mode,
-                                },
-                                ctx
-                            );
-
-                            ctx.emit(Event::SetAIContextMenuOpen(false));
-                            ctx.focus_self();
-                            ctx.notify();
-                        }
-                        AIContextMenuEvent::ResultAccepted {
-                            action,
-                            item_count,
-                            query_length,
-                        } => {
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::AtMenuInteracted {
-                                    action: "item_selected".to_string(),
-                                    item_count: *item_count,
-                                    query_length: Some(*query_length),
-                                    is_udi_enabled,
-                                    current_input_mode,
-                                },
-                                ctx
-                            );
-
-                            ctx.emit(Event::AcceptAIContextMenuItem(action.clone()));
-                            ctx.focus_self();
-                            ctx.notify();
-                        }
-                        AIContextMenuEvent::CategorySelected { category } => {
-                            ctx.emit(Event::SelectAIContextMenuCategory(*category));
-                            ctx.focus_self();
-                            ctx.notify();
-                        }
+                |_me, _, event: &AIContextMenuEvent, ctx| match event {
+                    AIContextMenuEvent::Close { .. } => {
+                        ctx.emit(Event::SetAIContextMenuOpen(false));
+                        ctx.focus_self();
+                        ctx.notify();
+                    }
+                    AIContextMenuEvent::ResultAccepted { action, .. } => {
+                        ctx.emit(Event::AcceptAIContextMenuItem(action.clone()));
+                        ctx.focus_self();
+                        ctx.notify();
+                    }
+                    AIContextMenuEvent::CategorySelected { category } => {
+                        ctx.emit(Event::SelectAIContextMenuCategory(*category));
+                        ctx.focus_self();
+                        ctx.notify();
                     }
                 },
             );
@@ -5207,16 +5168,6 @@ impl EditorView {
             }
             return;
         }
-
-        let is_udi_enabled = InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
-
-        send_telemetry_from_ctx!(
-            TelemetryEvent::AttachedImagesToAgentModeQuery {
-                num_images: pending_images.len(),
-                is_udi_enabled,
-            },
-            ctx
-        );
 
         self.process_attached_images_future_handle = Some(ctx.spawn(
             async move {

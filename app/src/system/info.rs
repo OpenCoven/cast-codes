@@ -1,20 +1,14 @@
-use std::collections::VecDeque;
 use std::ffi::OsStr;
 
 use byte_unit::Byte;
 use chrono::{DateTime, Local, Utc};
 use itertools::Itertools as _;
-use num_traits::Zero;
-use ordered_float::OrderedFloat;
 use serde::Serialize;
 use sysinfo::ProcessesToUpdate;
 use warp_core::channel::ChannelState;
 use warpui::{App, AppContext, Entity, ModelContext, SingletonEntity};
 
-use crate::{
-    send_telemetry_from_app_ctx, send_telemetry_sync_from_ctx, server::telemetry,
-    system::memory_footprint, terminal::TerminalView, TelemetryEvent,
-};
+use crate::{system::memory_footprint, terminal::TerminalView};
 
 /// The threshold at which we emit a memory usage warning.
 const MEMORY_USAGE_WARNING_THRESHOLD: Option<Byte> = byte_unit::Byte::GIGABYTE.multiply(10);
@@ -24,15 +18,6 @@ const REFRESH_INTERVAL_S: usize = 5;
 /// The refresh interval for system information.
 const REFRESH_INTERVAL: std::time::Duration =
     std::time::Duration::from_secs(REFRESH_INTERVAL_S as u64);
-
-/// The time window that a resource usage report covers, in seconds.
-const REPORT_WINDOW_S: usize = 300;
-/// The number of data points aggregated into a resource usage report.
-const REPORT_SAMPLE_COUNT: usize = REPORT_WINDOW_S / REFRESH_INTERVAL_S;
-
-// Make sure the refresh interval cleanly divides the report window into an
-// integral number of samples.
-static_assertions::const_assert_eq!(REPORT_WINDOW_S % REFRESH_INTERVAL_S, 0);
 
 pub enum SystemInfoEvent {
     /// There is new system info available for consumers to query.
@@ -46,12 +31,8 @@ pub struct SystemInfo {
     system: sysinfo::System,
     /// Whether or not we've already emitted an event due to high memory usage.
     has_emitted_memory_warning_event: bool,
-    /// A circular buffer storing resource usage data.
-    stats: StatsBuffer,
     /// A helper structure for reporting resource usage via telemetry events.
     resource_usage_reporter: ResourceUsageReporter,
-    /// The long OS version.
-    long_os_version: Option<String>,
 }
 
 impl SystemInfo {
@@ -64,9 +45,7 @@ impl SystemInfo {
         let mut me = Self {
             system: sysinfo::System::new(),
             has_emitted_memory_warning_event: false,
-            stats: Default::default(),
             resource_usage_reporter: Default::default(),
-            long_os_version: sysinfo::System::long_os_version(),
         };
 
         // Initialize the underlying system info.  This is necessary in order
@@ -89,40 +68,13 @@ impl SystemInfo {
         self.resource_usage_reporter.handle_block_created();
     }
 
-    /// Returns the amount of memory being used by the current process, in
-    /// bytes.
-    pub fn used_memory(&self) -> Byte {
-        self.system
-            .process(Self::current_pid())
-            .expect("current process should exist")
-            .memory()
-            .into()
-    }
-
     /// Returns the full memory footprint of the current process, in bytes.
     ///
-    /// Unlike [`used_memory`] (RSS), this includes memory that has been
+    /// Unlike the RSS (resident set size), this includes memory that has been
     /// swapped out or compressed by the OS.  On macOS this matches the value
     /// shown by Activity Monitor.
     pub fn memory_footprint(&self) -> Byte {
         memory_footprint::memory_footprint_bytes().into()
-    }
-
-    /// Returns the average CPU usage over the refresh interval.
-    ///
-    /// If one CPU core is utilized at 100%, this will return 1.  It may return
-    /// a value >1 on multi-core machines.
-    pub fn cpu_usage(&self) -> f32 {
-        let total_usage = self
-            .system
-            .process(Self::current_pid())
-            .expect("current process should exist")
-            .cpu_usage();
-        total_usage / 100.
-    }
-
-    pub fn long_os_version(&self) -> Option<&str> {
-        self.long_os_version.as_deref()
     }
 
     fn schedule_refresh(ctx: &mut ModelContext<Self>) {
@@ -145,32 +97,21 @@ impl SystemInfo {
         );
         ctx.emit(SystemInfoEvent::Refreshed);
 
-        // Add resource usage information to our circular buffer.
-        self.stats.push(Sample {
-            cpu: self.cpu_usage(),
-        });
-
-        let rss = self.used_memory();
         let footprint = self.memory_footprint();
-        self.check_for_excessive_memory_usage(rss, footprint, ctx);
+        self.check_for_excessive_memory_usage(footprint, ctx);
 
-        // Once we have a full buffer of statistics, consider sending a report
-        // each time we store new resource usage data.
-        if self.stats.is_full() {
-            self.resource_usage_reporter.maybe_send_report(ctx);
-        }
+        // Once we have new resource usage data, consider sending a report.
+        self.resource_usage_reporter.maybe_send_report(ctx);
     }
 
-    /// Checks for excessive memory usage.  This may send a telemetry event
-    /// and trigger a Sentry heap profile dump if excessive usage is detected.
+    /// Checks for excessive memory usage.  This may emit a
+    /// [`SystemInfoEvent::MemoryUsageHigh`] event and trigger a Sentry heap
+    /// profile dump if excessive usage is detected.
     ///
     /// The threshold check uses `memory_footprint` (which includes swapped
     /// and compressed pages) so we actually detect high memory situations.
-    /// The Rudderstack telemetry event still reports `rss` so existing
-    /// dashboards are unaffected.
     fn check_for_excessive_memory_usage(
         &mut self,
-        rss: Byte,
         memory_footprint: Byte,
         ctx: &mut ModelContext<Self>,
     ) {
@@ -186,30 +127,17 @@ impl SystemInfo {
             return;
         }
 
-        // Collect a detailed memory breakdown for diagnostics.
-        let memory_breakdown = memory_footprint::memory_breakdown();
-
         // If we're tracking heap usage and detect excessive memory usage,
         // dump and upload the current heap profiling data.
         #[cfg(feature = "heap_usage_tracking")]
         {
-            let breakdown_for_sentry = memory_breakdown.clone();
+            // Collect a detailed memory breakdown for diagnostics.
+            let memory_breakdown = memory_footprint::memory_breakdown();
             ctx.spawn(
-                crate::profiling::dump_jemalloc_heap_profile(breakdown_for_sentry),
+                crate::profiling::dump_jemalloc_heap_profile(memory_breakdown),
                 |_, _, _| {},
             );
         }
-
-        // Send a telemetry event indicating that memory usage is extreme.
-        // Report RSS here to keep Rudderstack dashboards consistent.
-        let total_application_usage_bytes = rss.as_u64();
-        send_telemetry_sync_from_ctx!(
-            TelemetryEvent::MemoryUsageHigh {
-                total_application_usage_bytes,
-                memory_breakdown,
-            },
-            ctx
-        );
 
         ctx.emit(SystemInfoEvent::MemoryUsageHigh);
         self.has_emitted_memory_warning_event = true;
@@ -292,12 +220,7 @@ impl ResourceUsageReporter {
             // mutable access to it.
             ctx.spawn(futures::future::ready(()), |me, _, ctx| {
                 me.refresh(ctx);
-                let total_application_usage = me.used_memory();
-                me.resource_usage_reporter.send_report(
-                    total_application_usage,
-                    me.stats.iter(),
-                    ctx,
-                );
+                me.resource_usage_reporter.send_report(ctx);
             });
         }
     }
@@ -327,66 +250,19 @@ impl ResourceUsageReporter {
         true
     }
 
-    /// Sends a resource usage report.
-    fn send_report<'a>(
-        &mut self,
-        total_application_usage: Byte,
-        samples: impl Iterator<Item = &'a Sample>,
-        ctx: &mut AppContext,
-    ) {
-        let cpu_usage_stats = Self::compute_cpu_usage_stats(samples);
-        let memory_usage_stats = Self::compute_memory_usage_stats(total_application_usage, ctx);
+    /// Computes a resource usage report.
+    fn send_report(&mut self, ctx: &mut AppContext) {
+        let _memory_usage_stats = Self::compute_memory_usage_stats(ctx);
 
-        // We send two different events at the moment, as one contains general
-        // resource usage information, and one contains more detailed info
-        // about memory consumption caused by the blocklist.
-        //
-        // TODO(vorporeal): Clean up the memory usage one, either eliminating it
-        // or merging it into the general resource usage telemetry event.
-        send_telemetry_from_app_ctx!(
-            TelemetryEvent::ResourceUsageStats {
-                cpu: cpu_usage_stats.into(),
-                mem: memory_usage_stats.into(),
-            },
-            ctx
-        );
-
-        // Only send detailed memory usage reports in dogfood, for the time being.
-        if ChannelState::channel().is_dogfood() {
-            // Only send the detailed memory usage report if the user has created
-            // enough blocks since the last detailed memory usage report.
-            if self.blocks_created_since_last_report >= Self::MIN_BLOCKS_CREATED_PER_MEMORY_REPORT {
-                send_telemetry_from_app_ctx!(TelemetryEvent::from(memory_usage_stats), ctx);
-                self.blocks_created_since_last_report = 0;
-            }
+        if ChannelState::channel().is_dogfood()
+            && self.blocks_created_since_last_report >= Self::MIN_BLOCKS_CREATED_PER_MEMORY_REPORT
+        {
+            self.blocks_created_since_last_report = 0;
         }
     }
 
-    fn compute_cpu_usage_stats<'a>(samples: impl Iterator<Item = &'a Sample>) -> CpuUsageStats {
-        let mut num_samples = 0;
-        let mut avg_usage = 0.;
-        let mut max_usage = OrderedFloat::zero();
-        for sample in samples {
-            num_samples += 1;
-            avg_usage += sample.cpu;
-            max_usage = std::cmp::max(max_usage, sample.cpu.into());
-        }
-
-        avg_usage /= num_samples as f32;
-
-        let num_cpus = num_cpus::get();
-        CpuUsageStats {
-            num_cpus,
-            avg_usage,
-            max_usage: max_usage.into_inner(),
-        }
-    }
-
-    fn compute_memory_usage_stats(
-        total_application_usage: Byte,
-        ctx: &mut AppContext,
-    ) -> MemoryUsageStats {
-        let mut stats = MemoryUsageStats::new(total_application_usage);
+    fn compute_memory_usage_stats(ctx: &mut AppContext) -> MemoryUsageStats {
+        let mut stats = MemoryUsageStats::new();
 
         // Don't compute detailed memory usage statistics outside of debug builds.
         if !ChannelState::enable_debug_features() {
@@ -423,32 +299,8 @@ impl Default for ResourceUsageReporter {
     }
 }
 
-/// Statistics about CPU usage.
-struct CpuUsageStats {
-    /// The number of "CPUs" on the machine.  This actually measure the number
-    /// of _logical_ CPUs, i.e.: CPU cores (including SMT pseudo-cores).
-    num_cpus: usize,
-    /// The maximum CPU usage over the measurement interval, represented as a
-    /// value in the range [0, num_cpus].
-    max_usage: f32,
-    /// The average CPU usage over the measurement interval, represented as a
-    /// value in the range [0, num_cpus].
-    avg_usage: f32,
-}
-
-impl From<CpuUsageStats> for telemetry::CpuUsageStats {
-    fn from(value: CpuUsageStats) -> Self {
-        Self {
-            num_cpus: value.num_cpus,
-            max_usage: value.max_usage,
-            avg_usage: value.avg_usage,
-        }
-    }
-}
-
 #[derive(Copy, Clone)]
 struct MemoryUsageStats {
-    total_application_usage_bytes: usize,
     total_blocks: usize,
     total_lines: usize,
 
@@ -463,9 +315,8 @@ struct MemoryUsageStats {
 }
 
 impl MemoryUsageStats {
-    fn new(total_application_usage: Byte) -> Self {
+    fn new() -> Self {
         Self {
-            total_application_usage_bytes: total_application_usage.as_u64() as usize,
             total_blocks: 0,
             total_lines: 0,
             active_block_stats: Default::default(),
@@ -509,34 +360,6 @@ impl MemoryUsageStats {
     }
 }
 
-impl From<MemoryUsageStats> for TelemetryEvent {
-    fn from(value: MemoryUsageStats) -> Self {
-        TelemetryEvent::MemoryUsageStats {
-            total_application_usage_bytes: value.total_application_usage_bytes,
-            total_blocks: value.total_blocks,
-            total_lines: value.total_lines,
-            active_block_stats: value.active_block_stats.into(),
-            inactive_5m_stats: value.inactive_5m_stats.into(),
-            inactive_1h_stats: value.inactive_1h_stats.into(),
-            inactive_24h_stats: value.inactive_24h_stats.into(),
-        }
-    }
-}
-
-impl From<MemoryUsageStats> for telemetry::MemoryUsageStats {
-    fn from(value: MemoryUsageStats) -> Self {
-        Self {
-            total_application_usage_bytes: value.total_application_usage_bytes,
-            total_blocks: value.total_blocks,
-            total_lines: value.total_lines,
-            active_block_stats: value.active_block_stats.into(),
-            inactive_5m_stats: value.inactive_5m_stats.into(),
-            inactive_1h_stats: value.inactive_1h_stats.into(),
-            inactive_24h_stats: value.inactive_24h_stats.into(),
-        }
-    }
-}
-
 #[derive(Copy, Clone, Default, Serialize, PartialEq)]
 struct BlockMemoryStats {
     num_blocks: usize,
@@ -555,65 +378,6 @@ impl std::fmt::Debug for BlockMemoryStats {
                     .get_adjusted_unit(byte_unit::Unit::MB),
             )
             .finish()
-    }
-}
-
-impl From<BlockMemoryStats> for telemetry::BlockMemoryUsageStats {
-    fn from(value: BlockMemoryStats) -> Self {
-        Self {
-            num_blocks: value.num_blocks,
-            num_lines: value.num_lines,
-            estimated_memory_usage_bytes: value.estimated_memory_usage_bytes,
-        }
-    }
-}
-
-/// A single resource usage sample point.
-struct Sample {
-    /// The CPU usage since the last sample, represented as a value in the
-    /// range [0, num_cpus].
-    cpu: f32,
-}
-
-/// A simple fixed-size circular buffer for storing resource usage sample
-/// points.
-struct StatsBuffer {
-    stats: VecDeque<Sample>,
-}
-
-impl StatsBuffer {
-    /// Constructs a new [`StatsBuffer`].
-    fn new() -> Self {
-        Self {
-            stats: VecDeque::with_capacity(REPORT_SAMPLE_COUNT),
-        }
-    }
-
-    /// Returns whether or not the buffer is full of samples.
-    ///
-    /// If true, adding a sample will replace the oldest sample in the buffer.
-    fn is_full(&self) -> bool {
-        self.stats.len() == self.stats.capacity()
-    }
-
-    /// Pushes a new sample into the buffer.  If the buffer is at capacity,
-    /// the oldest sample will be removed to make room for the new one.
-    fn push(&mut self, sample: Sample) {
-        if self.is_full() {
-            self.stats.pop_front();
-        }
-        self.stats.push_back(sample);
-    }
-
-    /// Returns an iterator over all samples in the buffer.
-    fn iter(&self) -> impl Iterator<Item = &Sample> {
-        self.stats.iter()
-    }
-}
-
-impl Default for StatsBuffer {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

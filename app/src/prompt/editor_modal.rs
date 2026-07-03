@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use warp_core::ui::theme::Fill;
 
 use pathfinder_geometry::vector::vec2f;
@@ -19,18 +18,17 @@ use crate::context_chips::{
     available_chips, ChipAvailability, ChipRuntimeCapabilities, ContextChipKind,
 };
 
-use crate::server::telemetry::{PromptChoice, TelemetryEvent};
 use crate::settings::{FontSettings, WarpPromptSeparator};
 use crate::terminal::blockgrid_element::BlockGridElement;
 use crate::terminal::SizeInfo;
 use settings::Setting as _;
 
+use crate::report_if_error;
 use crate::terminal::model::blockgrid::BlockGrid;
 use crate::terminal::model::ObfuscateSecrets;
 use crate::terminal::session_settings::SessionSettings;
 use crate::view_components::{Dropdown, DropdownItem};
 use crate::Appearance;
-use crate::{report_if_error, send_telemetry_from_ctx};
 use warpui::elements::{
     Align, Border, ChildAnchor, ChildView, Clipped, ConstrainedBox, Container, CornerRadius,
     CrossAxisAlignment, Empty, Flex, Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle,
@@ -329,18 +327,6 @@ impl EditorModal {
                         .iter()
                         .filter_map(|r| r.chip_kind().cloned());
 
-                    let session_settings = SessionSettings::as_ref(ctx);
-                    let current_same_line_prompt_enabled =
-                        session_settings.saved_prompt.same_line_prompt_enabled();
-                    if self.same_line_prompt_enabled != current_same_line_prompt_enabled {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::ToggleSameLinePrompt {
-                                enabled: self.same_line_prompt_enabled,
-                            },
-                            ctx
-                        );
-                    }
-
                     // Updating the `Prompt` handles turning off PS1.
                     Prompt::handle(ctx).update(ctx, |prompt, ctx| {
                         report_if_error!(prompt.update(
@@ -352,26 +338,6 @@ impl EditorModal {
                     });
                 }
             }
-
-            let prompt_info = match self.prompt_type {
-                PromptType::PS1 => PromptChoice::PS1,
-                PromptType::WarpDefault => PromptChoice::Default,
-                PromptType::Warp => PromptChoice::Custom {
-                    builtin_chips: self
-                        .chip_configurator
-                        .used_chips
-                        .iter()
-                        .filter_map(|r| r.chip_kind().and_then(|k| k.telemetry_name()))
-                        .collect_vec(),
-                },
-            };
-            send_telemetry_from_ctx!(
-                TelemetryEvent::PromptEdited {
-                    prompt: prompt_info,
-                    entrypoint: "prompt_editor".to_string()
-                },
-                ctx
-            );
         }
     }
 

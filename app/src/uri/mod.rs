@@ -12,7 +12,7 @@ use crate::launch_configs::launch_config::LaunchConfig;
 use crate::linear::{LinearAction, LinearIssueWork};
 use crate::root_view::{open_new_window_get_handles, OpenLaunchConfigArg};
 use crate::server::ids::ServerId;
-use crate::server::telemetry::{LaunchConfigUiLocation, TelemetryEvent};
+use crate::server::telemetry::LaunchConfigUiLocation;
 use crate::util::openable_file_type::{
     is_file_openable_in_warp, is_markdown_file, starts_with_shebang,
 };
@@ -25,10 +25,7 @@ use crate::{drive::OpenWarpDriveObjectArgs, view_components::DismissibleToast};
 use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
 use crate::settings_view::SettingsSection;
 use crate::user_config::load_launch_configs;
-use crate::{
-    quake_mode_window_id, quake_mode_window_is_open, safe_info, send_telemetry_from_app_ctx,
-    ChannelState, OpenPath,
-};
+use crate::{quake_mode_window_id, quake_mode_window_is_open, safe_info, ChannelState, OpenPath};
 use anyhow::{anyhow, ensure, Result};
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -144,7 +141,6 @@ impl UriHost {
                     "root_view:handle_team_intent_link_action",
                     ctx,
                 );
-                send_telemetry_from_app_ctx!(TelemetryEvent::OpenTeamFromURI, ctx);
             }
             UriHost::Action => {
                 match Action::parse(url) {
@@ -1119,8 +1115,6 @@ fn open_file(window_id: Option<WindowId>, path: PathBuf, ctx: &mut AppContext) {
                 }
             }
         }
-
-        send_telemetry_from_app_ctx!(TelemetryEvent::OpenNewSessionFromFilePath, ctx);
     }
 }
 
@@ -1131,8 +1125,6 @@ fn execute_file(window_id: WindowId, path_str: &str, ctx: &mut AppContext) {
             input.set_pending_command(&path_str, i_ctx);
         })
     });
-
-    send_telemetry_from_app_ctx!(TelemetryEvent::CommandFileRun, ctx);
 }
 
 fn open_window_with_action(active_window_id: Option<WindowId>, action: &str, ctx: &mut AppContext) {

@@ -11,7 +11,6 @@ pub mod github_auth_notifier;
 pub mod scheduled;
 pub mod spawn;
 pub mod task;
-pub mod telemetry;
 
 pub use task::{
     cancel_task_with_toast, AgentConfigSnapshot, AgentSource, AmbientAgentTask,

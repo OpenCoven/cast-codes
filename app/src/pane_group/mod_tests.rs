@@ -42,7 +42,6 @@ use crate::{
         cloud_objects::{listener::Listener, update_manager::UpdateManager},
         server_api::ServerApiProvider,
         sync_queue::SyncQueue,
-        telemetry::context_provider::AppTelemetryContextProvider,
     },
     settings::PrivacySettings,
     settings_view::keybindings::KeybindingChangedNotifier,
@@ -97,7 +96,6 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(|_ctx| ServerApiProvider::new_for_test());
     app.add_singleton_model(|ctx| ChangelogModel::new(ServerApiProvider::as_ref(ctx).get()));
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);
     app.add_singleton_model(|_ctx| PtySpawner::new_for_test());
     app.add_singleton_model(|_| NetworkStatus::new());

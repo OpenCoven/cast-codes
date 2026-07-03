@@ -1,11 +1,7 @@
 use anyhow::Result;
 use warpui::{AppContext, Entity, SingletonEntity};
 
-use crate::{
-    send_telemetry_from_app_ctx,
-    server::telemetry::{PtySpawnMode, TelemetryEvent},
-    terminal::local_tty::{self},
-};
+use crate::terminal::local_tty::{self};
 
 #[cfg(target_os = "windows")]
 use super::PseudoConsoleChild;
@@ -179,13 +175,8 @@ impl PtySpawner {
         #[cfg(windows)] event_loop_tx: super::mio_channel::Sender<
             crate::terminal::writeable_pty::Message,
         >,
-        ctx: &mut AppContext,
+        _ctx: &mut AppContext,
     ) -> Result<(PtySpawnResult, Box<dyn PtyHandle>)> {
-        #[cfg(not(unix))]
-        let is_fallback = false;
-        #[cfg(unix)]
-        let mut is_fallback = false;
-
         #[cfg(unix)]
         if let Some(server) = &self.server {
             let result = Self::spawn_pty_via_server(server, options.clone()).context(
@@ -193,24 +184,10 @@ impl PtySpawner {
             );
             if let Err(err) = result {
                 report_error!(err);
-                is_fallback = true;
             } else {
-                send_telemetry_from_app_ctx!(
-                    TelemetryEvent::PtySpawned {
-                        mode: PtySpawnMode::TerminalServer
-                    },
-                    ctx
-                );
                 return result;
             }
         }
-
-        let mode = if is_fallback {
-            PtySpawnMode::FallbackToDirect
-        } else {
-            PtySpawnMode::Direct
-        };
-        send_telemetry_from_app_ctx!(TelemetryEvent::PtySpawned { mode }, ctx);
 
         Self::spawn_pty_directly(
             options,

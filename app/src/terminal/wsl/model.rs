@@ -1,4 +1,3 @@
-use crate::{send_telemetry_from_ctx, server::telemetry::TelemetryEvent};
 use itertools::Itertools as _;
 use warpui::{Entity, ModelContext, SingletonEntity};
 use warpui_extras::user_preferences::registry_backed::KEY_NOT_FOUND_ERR;
@@ -27,13 +26,12 @@ pub(crate) struct Distribution {
 }
 
 impl WslInfo {
-    pub(crate) fn new(ctx: &mut ModelContext<Self>) -> Self {
+    pub(crate) fn new(_ctx: &mut ModelContext<Self>) -> Self {
         let distributions = Self::find_available_distributions()
             .inspect_err(|err| match err {
                 // This error merely occurs when user doesn't have WSL installed/enabled.
                 Error::MainKey(err) => {
                     log::info!("{err:#}");
-                    send_telemetry_from_ctx!(TelemetryEvent::WSLRegistryError, ctx);
                 }
                 _ => {
                     log::error!("{err:#}");

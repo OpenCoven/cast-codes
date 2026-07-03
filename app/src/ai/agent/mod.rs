@@ -48,7 +48,6 @@ use crate::ai_assistant::execution_context::WarpAiExecutionContext;
 use crate::terminal::model::block::BlockId;
 use crate::terminal::shell::ShellType;
 use crate::terminal::view::block_onboarding::onboarding_agentic_suggestions_block::OnboardingChipType;
-use crate::TelemetryEvent;
 use derivative::Derivative;
 use markdown_parser::{parse_markdown, FormattedTable, FormattedText, FormattedTextInline};
 use serde::{Deserialize, Serialize};
@@ -385,11 +384,6 @@ pub struct AIAgentOutput {
 
     /// Information about the model that generated this output.
     pub model_info: Option<OutputModelInfo>,
-
-    /// Telemetry events related to the AI Agent Output that we want to send after completion.
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub telemetry_events: Vec<TelemetryEvent>,
 
     /// The number of requests that the request cost.
     pub request_cost: Option<RequestCost>,

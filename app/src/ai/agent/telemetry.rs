@@ -1,45 +1,10 @@
 use serde::Serialize;
-use warpui::{AppContext, SingletonEntity};
 
 use crate::ai::llms::LLMId;
-use crate::CloudModel;
-use crate::{
-    server::telemetry::AgentModeCitation as CitationForTelemetry,
-    terminal::view::block_onboarding::onboarding_agentic_suggestions_block::OnboardingChipType,
-};
+use crate::terminal::view::block_onboarding::onboarding_agentic_suggestions_block::OnboardingChipType;
 
 use super::conversation::AIConversationId;
-use super::{
-    AIAgentCitation, AIAgentExchangeId, EntrypointType, PassiveSuggestionTriggerType,
-    ServerOutputId,
-};
-
-pub trait ForTelemetry {
-    type Output;
-
-    fn for_telemetry(&self, ctx: &AppContext) -> Option<Self::Output>;
-}
-
-impl ForTelemetry for AIAgentCitation {
-    type Output = CitationForTelemetry;
-
-    fn for_telemetry(&self, ctx: &AppContext) -> Option<Self::Output> {
-        match self {
-            Self::WarpDriveObject { uid } => {
-                CloudModel::as_ref(ctx).get_by_uid(uid).map(|object| {
-                    CitationForTelemetry::WarpDriveObject {
-                        object_type: object.object_type(),
-                        uid: object.uid(),
-                    }
-                })
-            }
-            Self::WarpDocumentation { path } => {
-                Some(CitationForTelemetry::WarpDocs { page: path.clone() })
-            }
-            Self::WebPage { url } => Some(CitationForTelemetry::WebPage { url: url.clone() }),
-        }
-    }
-}
+use super::{AIAgentExchangeId, EntrypointType, PassiveSuggestionTriggerType, ServerOutputId};
 
 impl EntrypointType {
     pub fn entrypoint(&self) -> String {

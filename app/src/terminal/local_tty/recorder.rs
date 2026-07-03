@@ -1,7 +1,4 @@
-use crate::{
-    auth::auth_state::AuthState, send_telemetry_on_executor, server::telemetry::TelemetryEvent,
-    terminal::TerminalModel,
-};
+use crate::{auth::auth_state::AuthState, terminal::TerminalModel};
 use async_broadcast::Receiver;
 use futures_lite::StreamExt;
 use instant::{Duration, Instant};
@@ -20,7 +17,7 @@ const PTY_THROUGHPUT_METRIC_INTERVAL: Duration = Duration::from_secs(10);
 pub fn record_pty_throughput(
     mut pty_reads_rx: Receiver<Arc<Vec<u8>>>,
     model: Arc<FairMutex<TerminalModel>>,
-    auth_state: Arc<AuthState>,
+    _auth_state: Arc<AuthState>,
     executor: Arc<Background>,
 ) {
     let num_bytes_read_in_last_second = Arc::new(Mutex::new(0));
@@ -47,8 +44,7 @@ pub fn record_pty_throughput(
         })
         .detach();
 
-    // Every second, update the max throughput and check if it's time to emit an event.
-    let executor_clone = executor.clone();
+    // Every second, update the max throughput and reset the throughput window.
     executor
         .spawn(async move {
             while async_io::Timer::interval(PTY_THROUGHPUT_TIME_INTERVAL)
@@ -69,20 +65,10 @@ pub fn record_pty_throughput(
                 *max_throughput = std::cmp::max(*max_throughput, *num_bytes_read_in_last_second);
                 *num_bytes_read_in_last_second = 0;
 
-                // If the max throughput was non-zero and it's been 10 minutes,
-                // let's emit an event.
+                // Reset the throughput window every interval.
                 if Instant::now().duration_since(*last_emitted_event_time)
                     >= PTY_THROUGHPUT_METRIC_INTERVAL
                 {
-                    if *max_throughput > 0 {
-                        send_telemetry_on_executor!(
-                            auth_state,
-                            TelemetryEvent::PtyThroughput {
-                                max_bytes_per_second: *max_throughput,
-                            },
-                            executor_clone
-                        );
-                    }
                     *max_throughput = 0;
                     *last_emitted_event_time = Instant::now();
                 }

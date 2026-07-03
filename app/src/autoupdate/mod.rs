@@ -8,14 +8,9 @@ mod mac;
 mod windows;
 
 use crate::features::FeatureFlag;
-use crate::send_telemetry_sync_from_app_ctx;
 use crate::server::server_api::ServerApi;
-use crate::server::telemetry::TelemetryEvent;
 use crate::workspace::Workspace;
-use crate::{
-    channel::Channel, report_if_error, send_telemetry_from_ctx, server::datetime_ext::DateTimeExt,
-    ChannelState,
-};
+use crate::{channel::Channel, report_if_error, server::datetime_ext::DateTimeExt, ChannelState};
 use ::channel_versions::{ParsedVersion, VersionInfo};
 use anyhow::{anyhow, Context as _, Result};
 use chrono::{DateTime, FixedOffset, NaiveDate};
@@ -526,7 +521,6 @@ impl AutoupdateState {
                 })
             }
             Ok(DownloadReady::NeedsAuthorization) => {
-                send_telemetry_from_ctx!(TelemetryEvent::UnableToAutoUpdateToNewVersion, ctx);
                 self.stage = AutoupdateStage::UnableToUpdateToNewVersion { new_version };
                 Ok(UpdateReady::No)
             }
@@ -963,7 +957,6 @@ pub fn initiate_relaunch_for_update(app: &mut AppContext) {
         } => {
             // There's a pending update, and we haven't finished applying it.
             let new_version = new_version.clone();
-            let new_version_string = new_version.version.clone();
             let update_id = update_id.clone();
 
             // First, record that we're applying an update.
@@ -988,14 +981,6 @@ pub fn initiate_relaunch_for_update(app: &mut AppContext) {
                     // finalize_update reports the error itself.
                     return;
                 }
-
-                // Report that we're attempting to relaunch for an update, so that we can track failed
-                // relaunches (e.g. if the update got corrupted). This is sent synchronously because
-                // the app is about to quit.
-                let event = TelemetryEvent::AutoupdateRelaunchAttempt {
-                    new_version: new_version_string,
-                };
-                send_telemetry_sync_from_app_ctx!(event, app);
 
                 // Request termination of the app.
                 app.terminate_app(TerminationMode::Cancellable, None);

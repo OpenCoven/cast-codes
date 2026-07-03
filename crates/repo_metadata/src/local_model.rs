@@ -11,7 +11,7 @@ use std::{
 };
 
 use futures::future::{self, BoxFuture, FutureExt as _};
-use warp_core::{safe_warn, send_telemetry_from_ctx};
+use warp_core::safe_warn;
 use warp_util::sync::Condition;
 use warpui::ModelHandle;
 
@@ -28,7 +28,6 @@ use crate::{
     entry::{Entry, FileId, IgnoredPathStrategy},
     gitignores_for_directory, matches_gitignores,
     repository::Repository,
-    telemetry::RepoMetadataTelemetryEvent,
     RepoMetadataError,
 };
 cfg_if::cfg_if! {
@@ -966,7 +965,6 @@ impl LocalRepoMetadataModel {
                             safe: ("Failed to build file tree for repository: {e:?}"),
                             full: ("Failed to build file tree for repository {repo_path_str}: {e:?}")
                         );
-                        send_telemetry_from_ctx!(RepoMetadataTelemetryEvent::BuildTreeFailed { error: format!("{e:#}") }, ctx);
                         model.mark_repository_failed(
                             std_repo_path,
                             RepoMetadataError::BuildTree(e),

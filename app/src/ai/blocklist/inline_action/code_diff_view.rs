@@ -1,5 +1,4 @@
 use crate::ai::blocklist::view_util::render_provider_icon_button;
-use crate::ai::skills::{SkillOpenOrigin, SkillTelemetryEvent};
 use anyhow::Result;
 use lazy_static::lazy_static;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
@@ -50,28 +49,21 @@ use warpui::{
     ViewContext, ViewHandle,
 };
 
-use super::malformed_line_heuristics::has_malformed_terminal_correction_signal;
 use crate::view_components::action_button::{ActionButton, NakedTheme};
 use crate::{
     ai::{
         agent::{
             icons::{self, yellow_stop_icon},
-            AIAgentActionId, AIIdentifiers, FileEdit, FileLocations, ServerOutputId,
+            AIAgentActionId, AIIdentifiers, FileEdit, FileLocations,
         },
         blocklist::{
-            action_model::{
-                AIActionStatus, BlocklistAIActionEvent, BlocklistAIActionModel,
-                EditAcceptAndContinueClickedEvent, EditAcceptClickedEvent, EditResolvedEvent,
-                EditStats, MalformedFinalLineProxyEvent, RequestFileEditsFormatKind,
-                RequestFileEditsTelemetryEvent,
-            },
+            action_model::{AIActionStatus, BlocklistAIActionEvent, BlocklistAIActionModel},
             history_model::BlocklistAIHistoryModel,
             inline_action::{
                 inline_action_header::INLINE_ACTION_HORIZONTAL_PADDING,
                 inline_action_icons::{cancelled_icon, green_check_icon, icon_size, reverted_icon},
             },
             model::{AIBlockModel, AIBlockModelHelper},
-            RequestedEditResolution,
         },
         mcp::{mcp_provider_from_file_path, MCPProvider},
         paths::host_native_absolute_path,
@@ -98,8 +90,6 @@ use crate::{
         pane::{view, PaneId},
         BackingView, PaneEvent,
     },
-    send_telemetry_from_ctx,
-    server::telemetry::{AgentModeCodeFileNavigationSource, ToggleCodeSuggestionsSettingSource},
     settings::AISettings,
     terminal::{input::SET_INPUT_MODE_AGENT_ACTION_NAME, ShellLaunchData},
     ui_components::{blended_colors, icons::Icon},
@@ -115,7 +105,6 @@ use crate::{
         DismissibleToast,
     },
     workspace::ToastStack,
-    TelemetryEvent,
 };
 use ai::diff_validation::{
     fuzzy_match_diffs, fuzzy_match_v4a_diffs, parse_line_numbers, DiffDelta, DiffType, ParsedDiff,
@@ -500,7 +489,6 @@ pub struct CodeDiffView {
     focus_handle: Option<PaneFocusHandle>,
     /// Client and server identifiers for the AI output associated with the code diffs.
     identifiers: AIIdentifiers,
-    edit_format_kind: RequestFileEditsFormatKind,
     /// `False` until a user makes the first edit to one of the diffs in the view.
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     user_edited_file_contents: bool,
@@ -671,15 +659,6 @@ impl CodeDiffView {
                     return;
                 }
                 me.user_edited_file_contents = true;
-
-                let Some(output_id) = me.server_output_id() else {
-                    return;
-                };
-
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeCodeSuggestionEditedByUser { output_id },
-                    ctx
-                );
             }
         });
     }
@@ -690,7 +669,6 @@ impl CodeDiffView {
         model: &dyn AIBlockModel<View = crate::ai::blocklist::AIBlock>,
         title: Option<String>,
         identifiers: AIIdentifiers,
-        edit_format_kind: RequestFileEditsFormatKind,
         should_show_speedbump: bool,
         action_model: ModelHandle<BlocklistAIActionModel>,
         session_platform: Option<SessionPlatform>,
@@ -711,7 +689,6 @@ impl CodeDiffView {
             initial_state,
             title,
             identifiers,
-            edit_format_kind,
             should_show_speedbump,
             session_platform,
             ctx,
@@ -762,7 +739,6 @@ impl CodeDiffView {
         action_id: &AIAgentActionId,
         title: Option<String>,
         identifiers: AIIdentifiers,
-        edit_format_kind: RequestFileEditsFormatKind,
         should_show_speedbump: bool,
         session_platform: Option<SessionPlatform>,
         ctx: &mut ViewContext<Self>,
@@ -773,7 +749,6 @@ impl CodeDiffView {
             CodeDiffState::WaitingForUser,
             title,
             identifiers,
-            edit_format_kind,
             should_show_speedbump,
             session_platform,
             ctx,
@@ -787,7 +762,6 @@ impl CodeDiffView {
         initial_state: CodeDiffState,
         title: Option<String>,
         identifiers: AIIdentifiers,
-        edit_format_kind: RequestFileEditsFormatKind,
         should_show_speedbump: bool,
         session_platform: Option<SessionPlatform>,
         ctx: &mut ViewContext<Self>,
@@ -942,7 +916,6 @@ impl CodeDiffView {
             title,
             focus_handle: None,
             identifiers,
-            edit_format_kind,
             user_edited_file_contents: false,
             original_pane_id: None,
             scrollable_state: Default::default(),
@@ -1066,7 +1039,7 @@ impl CodeDiffView {
     /// Returns Err when acceptance is disallowed (e.g. view-only mode).
     fn try_accept_action_with_selection(
         &mut self,
-        selection: AcceptSelection,
+        _selection: AcceptSelection,
         ctx: &mut ViewContext<Self>,
     ) -> Result<()> {
         if matches!(self.state, CodeDiffState::ViewOnly { .. }) {
@@ -1074,29 +1047,6 @@ impl CodeDiffView {
             return Err(anyhow::anyhow!(
                 "Attempted to accept diff in view-only mode"
             ));
-        }
-
-        match selection {
-            AcceptSelection::Only => {
-                send_telemetry_from_ctx!(
-                    RequestFileEditsTelemetryEvent::EditAcceptClicked(EditAcceptClickedEvent {
-                        identifiers: self.identifiers.clone(),
-                        passive_diff: self.is_passive,
-                    }),
-                    ctx
-                );
-            }
-            AcceptSelection::AndContinueWithAgent => {
-                send_telemetry_from_ctx!(
-                    RequestFileEditsTelemetryEvent::EditAcceptAndContinueClicked(
-                        EditAcceptAndContinueClickedEvent {
-                            identifiers: self.identifiers.clone(),
-                        }
-                    ),
-                    ctx
-                );
-            }
-            AcceptSelection::AndAutoExecute => {}
         }
 
         if self.display_mode().is_inline_banner() {
@@ -1129,10 +1079,6 @@ impl CodeDiffView {
         ctx.notify();
 
         self.minimize(ctx);
-
-        // Handled in `CodeDiffView` instead of `CodeDiffModel` so we emit one event for all files.
-        // This isn't emitted in the executor because rejected diffs aren't executed.
-        self.send_telemetry_for_edit_resolution(RequestedEditResolution::Reject, ctx);
     }
 
     /// Revert all changes by replacing file contents with the base version.
@@ -2113,13 +2059,6 @@ impl CodeDiffView {
                 .diff_view
                 .update(ctx, |v, ctx| v.navigate_previous_diff_hunk(ctx)),
         };
-
-        if let Some(output_id) = self.server_output_id() {
-            send_telemetry_from_ctx!(
-                TelemetryEvent::AgentModeCodeDiffHunksNavigated { output_id },
-                ctx
-            );
-        }
     }
 
     fn select_file(&mut self, direction: Direction, ctx: &mut ViewContext<Self>) {
@@ -2146,16 +2085,6 @@ impl CodeDiffView {
             mode: ScrollToPositionMode::FullyIntoView,
         });
         ctx.notify();
-
-        if let Some(output_id) = self.server_output_id() {
-            send_telemetry_from_ctx!(
-                TelemetryEvent::AgentModeCodeFilesNavigated {
-                    output_id,
-                    source: AgentModeCodeFileNavigationSource::NavigationCommand
-                },
-                ctx
-            );
-        }
     }
 
     fn set_display_mode(&mut self, display_mode: DisplayMode, ctx: &mut ViewContext<Self>) {
@@ -2253,33 +2182,6 @@ impl CodeDiffView {
         }
     }
 
-    fn server_output_id(&self) -> Option<ServerOutputId> {
-        self.identifiers.server_output_id.clone()
-    }
-
-    /// Helper function to send telemetry for edit resolution.
-    /// Consolidates the common telemetry logic for reject operations.
-    fn send_telemetry_for_edit_resolution(
-        &self,
-        response: RequestedEditResolution,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let (lines_added, lines_removed) = self.pending_diffs_line_counts(ctx);
-        send_telemetry_from_ctx!(
-            RequestFileEditsTelemetryEvent::EditResolved(EditResolvedEvent {
-                identifiers: self.identifiers.clone(),
-                response,
-                stats: EditStats {
-                    files_edited: self.pending_diffs.len(),
-                    lines_added,
-                    lines_removed,
-                },
-                passive_diff: self.is_passive,
-            }),
-            ctx
-        );
-    }
-
     /// We are processing unified diff and saving files concurrently. That's why
     /// we need to have separate handlers for diff calculation and save completed.
     ///
@@ -2346,10 +2248,6 @@ impl CodeDiffView {
 
                 let mut updated_files = Vec::new();
                 let mut deleted_files = Vec::new();
-                let mut edited_file_count = 0;
-                let mut correction_count = 0;
-                let mut edited_correction_count = 0;
-                let mut unedited_correction_count = 0;
 
                 for diff in self.pending_diffs.iter() {
                     let Some(path) = diff.diff_view.as_ref(ctx).file_path() else {
@@ -2374,28 +2272,6 @@ impl CodeDiffView {
                         }
                         let was_edited = diff.diff_view.as_ref(ctx).was_edited();
                         let changed_lines = diff.diff_view.as_ref(ctx).changed_lines(ctx);
-                        let has_malformed_terminal_signal = diff
-                            .diff_view
-                            .as_ref(ctx)
-                            .diff()
-                            .is_some_and(|editor_diff| {
-                                has_malformed_terminal_correction_signal(
-                                    editor_diff,
-                                    &changed_lines,
-                                )
-                            });
-
-                        if was_edited {
-                            edited_file_count += 1;
-                        }
-                        if has_malformed_terminal_signal {
-                            correction_count += 1;
-                            if was_edited {
-                                edited_correction_count += 1;
-                            } else {
-                                unedited_correction_count += 1;
-                            }
-                        }
                         updated_files.push((
                             FileLocations {
                                 name: file_path_str,
@@ -2410,24 +2286,6 @@ impl CodeDiffView {
                         ));
                     }
                 }
-                if correction_count > 0 {
-                    send_telemetry_from_ctx!(
-                        RequestFileEditsTelemetryEvent::MalformedFinalLineProxy(
-                            MalformedFinalLineProxyEvent {
-                                identifiers: self.identifiers.clone(),
-                                file_count: self.pending_diffs.len(),
-                                edited_file_count,
-                                correction_count,
-                                edited_correction_count,
-                                unedited_correction_count,
-                                format_kind: self.edit_format_kind,
-                                passive_diff: self.is_passive,
-                            }
-                        ),
-                        ctx
-                    );
-                }
-
                 // Extract accepted file contents from editor buffers so the
                 // executor doesn't need to re-read from disk or the network.
                 let file_contents: Vec<(String, String)> = self
@@ -2787,16 +2645,6 @@ impl TypedActionView for CodeDiffView {
                 if *idx < self.pending_diffs.len() {
                     self.selected_tab = *idx;
                     ctx.notify();
-
-                    if let Some(output_id) = self.server_output_id() {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AgentModeCodeFilesNavigated {
-                                output_id,
-                                source: AgentModeCodeFileNavigationSource::SelectedFileTab
-                            },
-                            ctx
-                        );
-                    }
                 }
             }
             CodeDiffViewAction::Edit => {
@@ -2815,30 +2663,14 @@ impl TypedActionView for CodeDiffView {
             }
             CodeDiffViewAction::ScrollToExpand => {
                 self.expand_inline_banner(ctx);
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::ExpandedCodeSuggestions {
-                        identifiers: self.identifiers.clone(),
-                    },
-                    ctx
-                );
             }
             CodeDiffViewAction::ToggleCodeSuggestions => {
-                let checked = AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                let _ = AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     settings
                         .code_suggestions_enabled_internal
                         .toggle_and_save_value(ctx)
                 });
                 ctx.notify();
-
-                if let Ok(checked) = checked {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::ToggleCodeSuggestionsSetting {
-                            source: ToggleCodeSuggestionsSettingSource::Speedbump,
-                            is_code_suggestions_enabled: checked,
-                        },
-                        ctx
-                    );
-                }
             }
             CodeDiffViewAction::OpenSettings => {
                 ctx.emit(CodeDiffViewEvent::OpenSettings);
@@ -2860,18 +2692,6 @@ impl TypedActionView for CodeDiffView {
                 path,
                 mouse_state,
             } => {
-                // Sends a telemetry event when a skill is opened from a code diff view
-                send_telemetry_from_ctx!(
-                    SkillTelemetryEvent::Opened {
-                        reference: reference.clone(),
-                        name: SkillManager::as_ref(ctx)
-                            .skill_by_reference(reference)
-                            .map(|skill| skill.name.clone()),
-                        origin: SkillOpenOrigin::EditFiles,
-                    },
-                    ctx
-                );
-
                 // Resets the interaction state of the skill button to avoid an immediate re-hover
                 if let Ok(mut state) = mouse_state.lock() {
                     state.reset_interaction_state();

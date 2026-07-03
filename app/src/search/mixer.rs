@@ -1,8 +1,6 @@
 use super::data_source::{Query, QueryResult};
 use crate::debounce::debounce;
 use crate::search::QueryFilter;
-use crate::send_telemetry_from_ctx;
-use crate::server::telemetry::TelemetryEvent;
 use async_channel::Sender;
 use async_trait::async_trait;
 use futures_util::stream::AbortHandle;
@@ -417,7 +415,6 @@ impl<T: Action + Clone> SearchMixer<T> {
                 // If we get here, then we should run the query against the data source right now.
                 let query_generation = self.query_generation;
                 let source = source.clone();
-                let filters = registered_source.filters.to_owned();
                 let new_abort_handle = ctx.spawn(
                     source.run_query(&query, ctx),
                     move |mixer, new_results, ctx| {
@@ -427,15 +424,6 @@ impl<T: Action + Clone> SearchMixer<T> {
                             source.on_query_finished(ctx);
                             return;
                         }
-                        let error_payload =
-                            new_results.as_ref().err().map(|e| e.telemetry_payload());
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::CommandSearchAsyncQueryCompleted {
-                                filters,
-                                error_payload,
-                            },
-                            ctx
-                        );
                         mixer.add_new_results(data_source_id, new_results, ctx);
                         source.on_query_finished(ctx);
                     },

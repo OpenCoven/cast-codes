@@ -1,13 +1,10 @@
-use byte_unit::Byte;
-
 use crate::{terminal::model::test_utils::TestBlockBuilder, test_util::mock_blockgrid};
 
 use super::*;
 
 #[test]
 fn test_memory_usage_stats_construction() {
-    let total_application_usage_bytes = 1024;
-    let mut stats = MemoryUsageStats::new(Byte::from_u64(total_application_usage_bytes));
+    let mut stats = MemoryUsageStats::new();
 
     let now = Local::now();
 
@@ -35,10 +32,6 @@ fn test_memory_usage_stats_construction() {
 
     stats.add_blocks(now, blocks.iter());
 
-    assert_eq!(
-        stats.total_application_usage_bytes,
-        total_application_usage_bytes as usize
-    );
     assert_eq!(stats.total_blocks, 5);
     assert_eq!(stats.total_lines, 3);
 

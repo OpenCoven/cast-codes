@@ -52,15 +52,6 @@ pub enum NotificationSourceAgent {
     CLI { agent: CLIAgent, is_ambient: bool },
 }
 
-impl NotificationSourceAgent {
-    pub fn is_ambient(&self) -> bool {
-        match self {
-            NotificationSourceAgent::Oz { is_ambient }
-            | NotificationSourceAgent::CLI { is_ambient, .. } => *is_ambient,
-        }
-    }
-}
-
 /// Identifies the conversation or session a notification belongs to.
 /// Used for de-duplication (replacing stale notifications on update)
 /// and cleanup (removing notifications when the source closes).

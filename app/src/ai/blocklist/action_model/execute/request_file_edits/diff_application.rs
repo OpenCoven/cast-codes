@@ -22,12 +22,7 @@ use crate::{
         paths::host_native_absolute_path,
     },
     auth::auth_state::AuthState,
-    safe_debug, safe_warn, send_telemetry_on_executor,
-};
-
-use super::telemetry::{
-    DiffInvalidFileEvent, DiffMatchFailedEvent, MissingLineNumbersEvent,
-    RequestFileEditsTelemetryEvent,
+    safe_debug, safe_warn,
 };
 
 /// Result of reading a file from disk or a remote server.
@@ -167,10 +162,10 @@ impl DiffApplicationError {
 pub(crate) async fn apply_edits<F, Fut>(
     edits: Vec<FileEdit>,
     session_context: &SessionContext,
-    ai_identifiers: &AIIdentifiers,
-    background_executor: Arc<Background>,
-    auth_state: Arc<AuthState>,
-    passive_diff: bool,
+    _ai_identifiers: &AIIdentifiers,
+    _background_executor: Arc<Background>,
+    _auth_state: Arc<AuthState>,
+    _passive_diff: bool,
     read_file: F,
 ) -> Result<Vec<AIRequestedCodeDiff>, Vec1<DiffApplicationError>>
 where
@@ -178,71 +173,6 @@ where
     Fut: Future<Output = FileReadResult>,
 {
     let result = apply_edits_internal(edits, session_context, &read_file).await;
-
-    // Send telemetry for all diff application errors.
-
-    // Count of attempts to edit a file that doesn't exist or create a file that already exists.
-    let mut invalid_file_count = 0;
-
-    for error in result.errors.iter() {
-        match error {
-            DiffApplicationError::UnmatchedDiffs { match_failures, .. } => {
-                send_telemetry_on_executor!(
-                    auth_state,
-                    RequestFileEditsTelemetryEvent::DiffMatchFailed(DiffMatchFailedEvent {
-                        identifiers: ai_identifiers.clone(),
-                        failures: *match_failures,
-                        passive_diff,
-                    }),
-                    background_executor
-                );
-            }
-            DiffApplicationError::MissingFile { .. }
-            | DiffApplicationError::ReadFailed { .. }
-            | DiffApplicationError::AlreadyExists { .. }
-            | DiffApplicationError::MultipleFileCreation { .. }
-            | DiffApplicationError::MutatedDeletedFile { .. }
-            | DiffApplicationError::MultipleFileRenames { .. }
-            | DiffApplicationError::RemoteFileOperationsUnsupported => {
-                invalid_file_count += 1;
-            }
-            DiffApplicationError::EmptyDiff => {}
-        }
-    }
-
-    if invalid_file_count > 0 {
-        send_telemetry_on_executor!(
-            auth_state,
-            RequestFileEditsTelemetryEvent::DiffInvalidFile(DiffInvalidFileEvent {
-                count: invalid_file_count,
-                identifiers: ai_identifiers.clone(),
-                passive_diff,
-            }),
-            background_executor
-        );
-    }
-
-    // Send telemetry for any warnings, which don't necessarily prevent diff application.
-
-    let total_missing_line_numbers: u8 = result
-        .warnings
-        .iter()
-        .map(|warning| match warning {
-            DiffWarning::MissingLineNumbers { count, .. } => *count,
-        })
-        .sum();
-
-    if total_missing_line_numbers > 0 {
-        send_telemetry_on_executor!(
-            auth_state,
-            RequestFileEditsTelemetryEvent::MissingLineNumbers(MissingLineNumbersEvent {
-                identifiers: ai_identifiers.clone(),
-                count: total_missing_line_numbers,
-                passive_diff,
-            }),
-            background_executor
-        );
-    }
 
     match Vec1::try_from_vec(result.errors) {
         Ok(errors) => Err(errors),
@@ -258,7 +188,7 @@ where
 #[derive(Debug, Clone)]
 pub enum DiffWarning {
     /// Search blocks that are missing line numbers.
-    MissingLineNumbers { count: u8 },
+    MissingLineNumbers,
 }
 
 #[derive(Default)]
@@ -578,9 +508,7 @@ async fn apply_search_replace<F, Fut>(
             // fatal and non-fatal errors.
             if let Some(failures) = fuzzy_match_diffs.failures.as_ref() {
                 if failures.missing_line_numbers > 0 {
-                    result.warnings.push(DiffWarning::MissingLineNumbers {
-                        count: failures.missing_line_numbers,
-                    });
+                    result.warnings.push(DiffWarning::MissingLineNumbers);
                 }
             }
 

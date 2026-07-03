@@ -19,15 +19,11 @@ use warpui::{
 
 use crate::{
     ai::generate_code_review_content::api::{GenerateCodeReviewContentRequest, OutputType},
-    code_review::{
-        git_dialog::{
-            interactive_path_future,
-            pr::{create_pr_with_ai_content, show_pr_created_toast},
-            render_branch_section, render_file_changes_box, should_send_git_ops_ai_request,
-            show_toast, user_facing_git_error, GitDialog, GitDialogAction, GitDialogEvent,
-            GitDialogMode,
-        },
-        telemetry_event::{CodeReviewTelemetryEvent, GitDialogStatus, GitOperationKind},
+    code_review::git_dialog::{
+        interactive_path_future,
+        pr::{create_pr_with_ai_content, show_pr_created_toast},
+        render_branch_section, render_file_changes_box, should_send_git_ops_ai_request, show_toast,
+        user_facing_git_error, GitDialog, GitDialogAction, GitDialogEvent, GitDialogMode,
     },
     editor::{
         EditorOptions, EditorView, Event as EditorEvent, InteractionState,
@@ -41,7 +37,6 @@ use crate::{
     },
     view_components::action_button::{ActionButton, ButtonSize, SecondaryTheme},
 };
-use warp_core::send_telemetry_from_ctx;
 
 /// What should happen after a successful commit.
 #[allow(clippy::enum_variant_names)] // `Commit` prefix is intentional: describes the always-present first stage.
@@ -428,15 +423,6 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
             anyhow::Ok(outcome)
         },
         move |_me, result, ctx| {
-            let operation = match intent {
-                CommitIntent::CommitOnly => GitOperationKind::CommitOnly,
-                CommitIntent::CommitAndPush => GitOperationKind::CommitAndPush,
-                CommitIntent::CommitAndCreatePr => GitOperationKind::CommitAndCreatePr,
-            };
-            let (status, error) = match &result {
-                Ok(_) => (GitDialogStatus::Succeeded, None),
-                Err(err) => (GitDialogStatus::Failed, Some(err.to_string())),
-            };
             match result {
                 Ok(CommitOutcome::Committed) => {
                     show_toast("Changes successfully committed.", ctx);
@@ -452,14 +438,6 @@ pub(super) fn start_confirm(me: &mut GitDialog, ctx: &mut ViewContext<GitDialog>
                     show_toast(user_facing_git_error(&err.to_string()), ctx);
                 }
             }
-            send_telemetry_from_ctx!(
-                CodeReviewTelemetryEvent::GitDialogCompleted {
-                    operation,
-                    status,
-                    error,
-                },
-                ctx
-            );
             // Success or failure, the dialog is done and the parent should
             // close it and refresh.
             ctx.emit(GitDialogEvent::Completed);

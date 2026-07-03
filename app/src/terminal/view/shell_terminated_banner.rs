@@ -13,7 +13,7 @@ use warpui::{
     Entity, SingletonEntity as _, TypedActionView, View, ViewContext,
 };
 
-use crate::{terminal::model::terminal_model::ExitReason, ui_components, util::links};
+use crate::{ui_components, util::links};
 
 const FILE_ISSUE_TEXT: &str = "File issue";
 const MORE_INFO_TEXT: &str = "More info";
@@ -132,10 +132,7 @@ pub enum TerminationType {
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     PtySpawnFailure { pty_spawn_error: anyhow::Error },
     /// The shell process terminated before we were able to bootstrap.
-    Premature {
-        shell_detail: String,
-        reason: ExitReason,
-    },
+    Premature { shell_detail: String },
 }
 
 impl TerminationType {

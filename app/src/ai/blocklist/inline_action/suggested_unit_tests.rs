@@ -21,8 +21,6 @@ use crate::{
             ACCEPT_PROMPT_SUGGESTION_KEYBINDING, REJECT_PROMPT_SUGGESTION_KEYSTROKE,
         },
     },
-    send_telemetry_from_ctx,
-    server::telemetry::ToggleCodeSuggestionsSettingSource,
     settings::AISettings,
     ui_components::{blended_colors, icons::Icon},
     view_components::{
@@ -32,7 +30,6 @@ use crate::{
             MEDIUM_SIZE_SWITCH_THRESHOLD,
         },
     },
-    TelemetryEvent,
 };
 
 const ACCEPT_LABEL: &str = "Generate tests";
@@ -407,22 +404,12 @@ impl TypedActionView for SuggestedUnitTestsView {
             SuggestedUnitTestsAction::Accept => ctx.emit(SuggestedUnitTestsEvent::Accept),
             SuggestedUnitTestsAction::Cancel => ctx.emit(SuggestedUnitTestsEvent::Cancel),
             SuggestedUnitTestsAction::ToggleSetting => {
-                let checked = AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                let _ = AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     settings
                         .code_suggestions_enabled_internal
                         .toggle_and_save_value(ctx)
                 });
                 ctx.notify();
-
-                if let Ok(checked) = checked {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::ToggleCodeSuggestionsSetting {
-                            source: ToggleCodeSuggestionsSettingSource::Speedbump,
-                            is_code_suggestions_enabled: checked,
-                        },
-                        ctx
-                    );
-                }
             }
             SuggestedUnitTestsAction::OpenSettings => {
                 ctx.emit(SuggestedUnitTestsEvent::OpenSettings)

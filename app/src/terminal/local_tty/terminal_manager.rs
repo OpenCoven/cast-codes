@@ -37,8 +37,6 @@ use crate::features::FeatureFlag;
 use crate::pane_group::TerminalViewResources;
 use crate::persistence::ModelEvent;
 
-use crate::send_telemetry_on_executor;
-use crate::server::telemetry::TelemetryEvent;
 use crate::settings::DebugSettings;
 use crate::settings::{PrivacySettings, SshSettings};
 
@@ -856,8 +854,8 @@ pub fn get_shell_starter(
 
 fn get_shell_starter_internal(
     shell_starter_source: ShellStarterSource,
-    background_executor: Arc<Background>,
-    auth_state: &AuthState,
+    _background_executor: Arc<Background>,
+    _auth_state: &AuthState,
 ) -> ShellStarter {
     match shell_starter_source {
         ShellStarterSource::Override(shell_starter) => shell_starter,
@@ -865,21 +863,9 @@ fn get_shell_starter_internal(
             ShellStarter::Direct(starter)
         }
         ShellStarterSource::Fallback {
-            unsupported_shell,
+            unsupported_shell: _,
             starter,
-        } => {
-            if let Some(unsupported_shell) = unsupported_shell {
-                send_telemetry_on_executor!(
-                    auth_state,
-                    TelemetryEvent::UnsupportedShell {
-                        shell: unsupported_shell
-                    },
-                    background_executor
-                );
-            }
-
-            ShellStarter::Direct(starter)
-        }
+        } => ShellStarter::Direct(starter),
     }
 }
 

@@ -48,7 +48,6 @@ use crate::{
     pane_group::{
         focus_state::PaneFocusHandle, pane::view, BackingView, PaneConfiguration, PaneEvent,
     },
-    send_telemetry_from_ctx,
     server::{
         cloud_objects::update_manager::{
             FetchSingleObjectOption, ObjectOperation, OperationSuccessType, UpdateManager,
@@ -56,10 +55,7 @@ use crate::{
         },
         ids::{ClientId, ServerId, SyncId},
         server_api::{ai::AIClient, ServerApiProvider},
-        telemetry::{
-            CloudObjectTelemetryMetadata, SharingDialogSource, TelemetryCloudObjectType,
-            TelemetryEvent,
-        },
+        telemetry::SharingDialogSource,
     },
     settings::{
         app_installation_detection::{UserAppInstallDetectionSettings, UserAppInstallStatus},
@@ -901,24 +897,6 @@ impl WorkflowView {
         }
 
         None
-    }
-
-    /// Generic object telemetry metadata for the currently-open object.
-    #[cfg_attr(not(target_family = "wasm"), allow(dead_code))]
-    fn telemetry_metadata(&self, ctx: &mut ViewContext<Self>) -> CloudObjectTelemetryMetadata {
-        let space = CloudModel::as_ref(ctx)
-            .get_workflow(&self.workflow_id)
-            .map(|workflow| workflow.space(ctx));
-
-        CloudObjectTelemetryMetadata {
-            object_type: TelemetryCloudObjectType::Workflow,
-            object_uid: self.workflow_id.into_server(),
-            space: space.map(Into::into),
-            team_uid: match self.owner {
-                Some(Owner::Team { team_uid, .. }) => Some(team_uid),
-                _ => None,
-            },
-        }
     }
 
     pub fn is_team_workflow(&self) -> bool {
@@ -2650,11 +2628,6 @@ impl WorkflowView {
                             environment_variables: None,
                         };
 
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AutoGenerateMetadataSuccess,
-                            ctx
-                        );
-
                         pane.populate_missing_field_with_suggestion(workflow, ctx);
                         ctx.notify();
                     }
@@ -2690,13 +2663,6 @@ impl WorkflowView {
                                 ctx,
                             );
                         }
-
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AutoGenerateMetadataError {
-                                error_payload: serde_json::json!(err)
-                            },
-                            ctx
-                        );
 
                         pane.ai_metadata_assist_state = AiAssistState::PreRequest;
                         pane.enable_editors(ctx);
@@ -3156,21 +3122,11 @@ impl TypedActionView for WorkflowView {
             WorkflowAction::AiAssist => self.issue_request(ctx),
             WorkflowAction::Duplicate => self.duplicate_object(ctx),
             WorkflowAction::CopyLink(link) => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::ObjectLinkCopied { link: link.clone() },
-                    ctx
-                );
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(link.to_owned()));
             }
             #[cfg(target_family = "wasm")]
             WorkflowAction::OpenLinkOnDesktop(url) => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::WebCloudObjectOpenedOnDesktop {
-                        object_metadata: self.telemetry_metadata(ctx)
-                    },
-                    ctx
-                );
                 open_url_on_desktop(url);
             }
             #[cfg(not(target_family = "wasm"))]

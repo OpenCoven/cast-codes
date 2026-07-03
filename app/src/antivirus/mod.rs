@@ -1,14 +1,18 @@
 //! Module containing utilities to query the currently running antivirus / EDR software on the
 //! user's machine.
 
-mod telemetry;
 #[cfg(windows)]
 mod windows;
 
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 /// Singleton model that reports the currently running antivirus software.
+///
+/// The stored antivirus name is only consumed by the crash-reporting Sentry
+/// integration, so the field/accessor are dead code in builds without the
+/// `crash_reporting` feature.
 #[derive(Debug, Clone)]
+#[cfg_attr(not(feature = "crash_reporting"), allow(dead_code))]
 pub struct AntivirusInfo(Option<String>);
 
 impl AntivirusInfo {
@@ -25,6 +29,7 @@ impl AntivirusInfo {
     ///
     /// ## Platform-specific
     /// This function always returns `None` on non-Windows platforms.
+    #[cfg_attr(not(feature = "crash_reporting"), allow(dead_code))]
     pub fn get(&self) -> Option<&str> {
         self.0.as_deref()
     }

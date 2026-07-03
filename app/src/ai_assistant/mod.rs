@@ -3,7 +3,6 @@ use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     ai::{RequestLimitInfo, RequestLimitRefreshDuration},
-    server::telemetry::OpenedWarpAISource,
     terminal::model::terminal_model::BlockIndex,
     workflows::workflow::{Argument, Workflow},
 };
@@ -69,18 +68,6 @@ pub enum AskAIType {
     FromAICommandSearch {
         query: Arc<String>,
     },
-}
-
-impl From<&AskAIType> for OpenedWarpAISource {
-    fn from(value: &AskAIType) -> Self {
-        match value {
-            AskAIType::FromAICommandSearch { .. } => OpenedWarpAISource::FromAICommandSearch,
-            AskAIType::FromBlock { .. } | AskAIType::FromBlocks { .. } => {
-                OpenedWarpAISource::HelpWithBlock
-            }
-            AskAIType::FromTextSelection { .. } => OpenedWarpAISource::HelpWithTextSelection,
-        }
-    }
 }
 
 pub struct AIGeneratedCommand {
