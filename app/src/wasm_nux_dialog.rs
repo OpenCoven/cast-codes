@@ -219,7 +219,6 @@ impl View for WasmNUXDialog {
         } else {
             let object_kind = match web_intent_parser::current_web_intent() {
                 Some(WebIntent::DriveObject(_)) => "Cast Drive objects",
-                Some(WebIntent::SessionView(_)) => "shared sessions",
                 _ => "CastCodes links",
             };
 

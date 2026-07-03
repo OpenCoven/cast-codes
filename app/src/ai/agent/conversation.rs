@@ -14,9 +14,7 @@ use crate::terminal::model::block::{
 };
 use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationConfigStatus};
 
-use crate::ai::agent::api::convert_conversation::{
-    compute_time_to_first_token_ms_from_messages, ConvertToExchanges,
-};
+use crate::ai::agent::api::convert_conversation::ConvertToExchanges;
 use ai::document::AIDocumentId;
 use chrono::{DateTime, Local, TimeZone};
 use itertools::Itertools as _;
@@ -126,9 +124,6 @@ pub struct AIConversation {
     /// Unique ID for this conversation.
     id: AIConversationId,
 
-    /// Whether this conversation is being shared from a different warp instance
-    /// (i.e. is not a local conversation).
-    is_viewing_shared_session: bool,
     task_store: TaskStore,
     optimistic_cli_subagent_subtask_id: Option<TaskId>,
 
@@ -255,14 +250,13 @@ pub(crate) fn artifact_from_fork_proto(
 }
 
 impl AIConversation {
-    pub fn new(is_viewing_shared_session: bool) -> Self {
+    pub fn new(_is_viewing_shared_session: bool) -> Self {
         let root_task = Task::new_optimistic_root();
         Self {
             id: AIConversationId::new(),
             task_store: TaskStore::with_root_task(root_task),
             optimistic_cli_subagent_subtask_id: None,
             code_review: None,
-            is_viewing_shared_session,
             todo_lists: vec![],
             status: ConversationStatus::InProgress,
             status_error_message: None,
@@ -451,7 +445,6 @@ impl AIConversation {
 
         Ok(Self {
             id,
-            is_viewing_shared_session: false,
             task_store,
             status,
             status_error_message: None,
@@ -503,13 +496,14 @@ impl AIConversation {
         }
     }
 
+    /// Session sharing has been removed; all conversations are local.
+    /// Retained as a stub returning `false` for callers that still branch on it.
     pub fn is_viewing_shared_session(&self) -> bool {
-        self.is_viewing_shared_session
+        false
     }
 
-    pub fn set_is_viewing_shared_session(&mut self, is_viewing_shared_session: bool) {
-        self.is_viewing_shared_session = is_viewing_shared_session;
-    }
+    /// No-op stub: session sharing has been removed.
+    pub fn set_is_viewing_shared_session(&mut self, _is_viewing_shared_session: bool) {}
 
     pub fn was_summarized(&self) -> bool {
         self.conversation_usage_metadata.was_summarized
@@ -572,20 +566,6 @@ impl AIConversation {
                 })
             })
             .max()
-    }
-
-    /// Derive an exchange's start time from the latest input's context.
-    fn start_time_from_exchange_messages(exchange: &AIAgentExchange) -> Option<DateTime<Local>> {
-        exchange
-            .input
-            .last()
-            .and_then(|input| input.context())
-            .and_then(|contexts| {
-                contexts.iter().find_map(|context| match context {
-                    AIAgentContext::CurrentTime { current_time } => Some(*current_time),
-                    _ => None,
-                })
-            })
     }
 
     /// Derive the conversation status from the root task's exchanges.
@@ -1071,9 +1051,6 @@ impl AIConversation {
             // Orphaned CLI subagent conversations (invoked from within a terminal block) are
             // internal and shouldn't appear in navigation.
             || self.is_orphaned_cli_subagent_conversation()
-            // Shared session viewer conversations are excluded because the shared session itself
-            // is visible/represented elsewhere.
-            || self.is_viewing_shared_session()
             // Child agent conversations spawned by an orchestrator are managed via the parent's
             // status card and shouldn't clutter the navigation list.
             || self.is_child_agent_conversation()
@@ -1823,7 +1800,6 @@ impl AIConversation {
             task_id,
         } in added_exchanges.into_iter()
         {
-            let is_viewing_shared_session = self.is_viewing_shared_session;
             let task = self
                 .task_store
                 .get(&task_id)
@@ -1844,22 +1820,6 @@ impl AIConversation {
 
             let finish_time = Self::finish_time_from_exchange_messages(&task, exchange)
                 .unwrap_or_else(Local::now);
-
-            // For shared-session viewers, derive start time and time to first token from server messages
-            // (in the same way we do when restoring/forking conversations).
-            if is_viewing_shared_session {
-                if let Some(start_time) = Self::start_time_from_exchange_messages(exchange) {
-                    exchange.start_time = start_time;
-                }
-
-                exchange.time_to_first_token_ms = compute_time_to_first_token_ms_from_messages(
-                    exchange.start_time,
-                    task.messages().filter(|m| {
-                        let id = MessageId::new(m.id.clone());
-                        exchange.added_message_ids.contains(&id)
-                    }),
-                );
-            }
 
             exchange.finish_time = Some(finish_time);
 
@@ -1943,7 +1903,6 @@ impl AIConversation {
             task_id,
         } in added_exchanges.into_iter()
         {
-            let is_viewing_shared_session = self.is_viewing_shared_session;
             let task = self
                 .task_store
                 .get(&task_id)
@@ -1962,22 +1921,6 @@ impl AIConversation {
 
             let finish_time = Self::finish_time_from_exchange_messages(&task, exchange)
                 .unwrap_or_else(Local::now);
-
-            // For shared-session viewers, derive start time and time to first token from server messages
-            // (in the same way we do when restoring/forking conversations).
-            if is_viewing_shared_session {
-                if let Some(start_time) = Self::start_time_from_exchange_messages(exchange) {
-                    exchange.start_time = start_time;
-                }
-
-                exchange.time_to_first_token_ms = compute_time_to_first_token_ms_from_messages(
-                    exchange.start_time,
-                    task.messages().filter(|m| {
-                        let id = MessageId::new(m.id.clone());
-                        exchange.added_message_ids.contains(&id)
-                    }),
-                );
-            }
 
             exchange.finish_time = Some(finish_time);
 
@@ -2010,7 +1953,6 @@ impl AIConversation {
             .get(task_id)
             .ok_or(UpdateConversationError::TaskNotFound)?
             .clone();
-        let is_viewing_shared_session = self.is_viewing_shared_session;
         let exchange = self.get_exchange_to_update(exchange_id)?;
         let AIAgentOutputStatus::Streaming {
             output: Some(output),
@@ -2030,21 +1972,6 @@ impl AIConversation {
         let finish_time =
             Self::finish_time_from_exchange_messages(&task, exchange).unwrap_or_else(Local::now);
 
-        // For shared-session viewers, derive start time and time to first token from server messages
-        // (in the same way we do when restoring/forking conversations).
-        if is_viewing_shared_session {
-            if let Some(start_time) = Self::start_time_from_exchange_messages(exchange) {
-                exchange.start_time = start_time;
-            }
-
-            exchange.time_to_first_token_ms = compute_time_to_first_token_ms_from_messages(
-                exchange.start_time,
-                task.messages().filter(|m| {
-                    let id = MessageId::new(m.id.clone());
-                    exchange.added_message_ids.contains(&id)
-                }),
-            );
-        }
         exchange.finish_time = Some(finish_time);
 
         let exchange = self
@@ -2170,12 +2097,9 @@ impl AIConversation {
                             existing_exchange,
                             self.todo_lists.last(),
                             self.code_review.as_ref(),
-                            // In shared-session viewers, we have to reconstruct what the original user input
-                            // was using subsequent conversation messages (as the original input was not
-                            // sent on this client). Once we reconstruct these inputs, we will insert them
-                            // to mimic the normal conversation flow. (If this is not a shared session, the
-                            // exchange inputs will already be populated).
-                            self.is_viewing_shared_session,
+                            // Session sharing has been removed; inputs are always populated locally.
+                            /* is_viewing_shared_session */
+                            false,
                         );
 
                         // Subtasks can come pre-populated with messages (for example: an advice subagent
@@ -2197,26 +2121,7 @@ impl AIConversation {
                             Vec::new()
                         };
 
-                        if self.is_viewing_shared_session {
-                            // shared session viewers should move the current stream's new exchange from the root to the
-                            // newly created subtask so there's exactly one "new" exchange and it
-                            // belongs to the subtask (mirrors sharer semantics after optimistic upgrade).
-                            let last_subtask_exchange_id = subtask
-                                .exchanges()
-                                .last()
-                                .map(|e| e.id)
-                                .ok_or(UpdateConversationError::ExchangeNotFound)?;
-
-                            let new_exchanges = self
-                                .added_exchanges_by_response
-                                .get_mut(response_stream_id)
-                                .ok_or(UpdateConversationError::NoPendingRequest)?;
-
-                            let first = new_exchanges.first_mut();
-                            // we're updating first's id is because it should correspond with the newly generated subtask's new exchange
-                            first.task_id = task_id.clone();
-                            first.exchange_id = last_subtask_exchange_id;
-                        } else {
+                        {
                             let new_exchanges = self
                                 .added_exchanges_by_response
                                 .get_mut(response_stream_id)
@@ -2482,12 +2387,9 @@ impl AIConversation {
                     exchange_id,
                     current_todo_list.as_ref(),
                     current_comment_state.as_ref(),
-                    // In shared-session viewers, we have to reconstruct what the original user input
-                    // was using subsequent conversation messages (as the original input was not
-                    // sent on this client). Once we reconstruct these inputs, we will insert them
-                    // to mimic the normal conversation flow. (If this is not a shared session, the
-                    // exchange inputs will already be populated).
-                    self.is_viewing_shared_session,
+                    // Session sharing has been removed; inputs are always populated locally.
+                    /* is_viewing_shared_session */
+                    false,
                 )?;
 
                 self.task_store.insert(task);
@@ -2546,12 +2448,7 @@ impl AIConversation {
 
                 let current_todo_list = self.todo_lists.last().cloned();
                 let current_comment_state = self.code_review.as_ref().cloned();
-                let is_viewing_shared_session = self.is_viewing_shared_session;
-                // In shared-session viewers, we have to reconstruct what the original user input
-                // was using subsequent conversation messages (as the original input was not
-                // sent on this client). Once we reconstruct these inputs, we will insert them
-                // to mimic the normal conversation flow. (If this is not a shared session, the
-                // exchange inputs will already be populated).
+                // Session sharing has been removed; inputs are always populated locally.
                 let todos_op = self
                     .task_store
                     .modify_task(&task_id, |task| {
@@ -2561,7 +2458,7 @@ impl AIConversation {
                             current_todo_list.as_ref(),
                             current_comment_state.as_ref(),
                             mask,
-                            is_viewing_shared_session,
+                            /* is_viewing_shared_session */ false,
                         )
                         .map(|msg| msg.todos_op().cloned())
                     })
@@ -2870,11 +2767,6 @@ impl AIConversation {
         &mut self,
         ctx: &mut ModelContext<BlocklistAIHistoryModel>,
     ) {
-        // We should not persist non-local conversations (e.g. shared sessions).
-        if self.is_viewing_shared_session {
-            return;
-        }
-
         // Check if session restoration is enabled before writing any state.
         if !*GeneralSettings::as_ref(ctx).restore_session
             || !AppExecutionMode::as_ref(ctx).can_save_session()

@@ -117,8 +117,6 @@ pub enum AgentViewEntryOrigin {
     AutoFollowUp,
     /// Entered agent view due to conversation restoration on startup or forking.
     RestoreExistingConversation,
-    /// Entered agent view due to shared-session synchronization.
-    SharedSessionSelection,
     /// Entered agent view due to a server-driven conversation split (StartNewConversation client action).
     AgentRequestedNewConversation,
     /// Entered agent view via accepting a prompt suggestion.

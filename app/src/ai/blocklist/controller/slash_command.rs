@@ -138,7 +138,6 @@ impl SlashCommandRequest {
             inputs,
             conversation.get_root_task_id().clone(),
             &controller.active_session,
-            controller.get_current_response_initiator(),
             conversation_id,
             controller.terminal_view_id,
             ctx,

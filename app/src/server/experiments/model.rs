@@ -49,11 +49,6 @@ impl ServerExperiments {
         ctx.emit(Event::ExperimentsUpdated);
     }
 
-    /// Returns true iff the `experiment` is enabled.
-    pub fn is_experiment_enabled(&self, experiment: &ServerExperiment) -> bool {
-        self.latest.contains(experiment)
-    }
-
     /// Saves the latest experiment state in-memory and to the local cache.
     fn cache_latest_state(
         &mut self,

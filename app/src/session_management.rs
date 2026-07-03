@@ -5,9 +5,7 @@ use chrono::NaiveDateTime;
 use warpui::{AppContext, Entity, EntityId, WindowId};
 
 use crate::context_chips::prompt_snapshot::PromptSnapshot;
-use crate::pane_group::PaneGroup;
 use crate::terminal::model::blockgrid::BlockGrid;
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::{
     pane_group::PaneId,
     workspace::{PaneViewLocator, Workspace},
@@ -30,8 +28,6 @@ pub struct SessionNavigationData {
     last_focus_ts: Option<NaiveDateTime>,
     /// Whether or not the session is in a read-only state.
     is_read_only: bool,
-    /// The sharing status of the session.
-    shared_session_status: SharedSessionStatus,
 }
 
 impl SessionNavigationData {
@@ -103,7 +99,6 @@ impl SessionNavigationData {
         last_focus_ts: Option<NaiveDateTime>,
         is_read_only: bool,
         window_id: WindowId,
-        shared_session_status: SharedSessionStatus,
     ) -> Self {
         SessionNavigationData {
             prompt,
@@ -113,7 +108,6 @@ impl SessionNavigationData {
             last_focus_ts,
             is_read_only,
             window_id,
-            shared_session_status,
         }
     }
 
@@ -145,10 +139,6 @@ impl SessionNavigationData {
         self.is_read_only
     }
 
-    pub fn shared_session_status(&self) -> SharedSessionStatus {
-        self.shared_session_status.clone()
-    }
-
     /// Fetches all sessions currently open in the app.
     pub fn all_sessions(app: &AppContext) -> impl Iterator<Item = SessionNavigationData> + '_ {
         app.window_ids()
@@ -176,8 +166,7 @@ impl<'a> RunningSessionSummary<'a> {
                 matches!(
                     session.command_context(),
                     CommandContext::RunningCommand { .. } | CommandContext::RunningAIBlock { .. }
-                ) && !session.shared_session_status().is_viewer()
-                    && !session.is_read_only()
+                ) && !session.is_read_only()
             })
             .collect();
         Self { long_running_cmds }
@@ -217,22 +206,6 @@ pub enum SessionSource {
 
 impl Entity for SessionSource {
     type Event = ();
-}
-
-pub fn num_shared_sessions(ctx: &AppContext) -> usize {
-    let mut num_shared_sessions = 0;
-    let window_ids: Vec<WindowId> = ctx.window_ids().collect();
-    for window_id in window_ids {
-        let Some(pane_group_views) = ctx.views_of_type::<PaneGroup>(window_id) else {
-            continue;
-        };
-        for pane_group_view in pane_group_views {
-            pane_group_view.read(ctx, |pane_group, ctx| {
-                num_shared_sessions += pane_group.number_of_shared_sessions(ctx);
-            })
-        }
-    }
-    num_shared_sessions
 }
 
 /// Metadata for a single tab, used by the Ctrl+Tab MRU switcher.

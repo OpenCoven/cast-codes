@@ -12,12 +12,11 @@ use warpui::{
         components::{Coords, UiComponent, UiComponentStyles},
         text::Span,
     },
-    AppContext, Element, Entity, EntityId, SingletonEntity, TypedActionView, View, ViewContext,
+    AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext,
 };
 
 use crate::{
     appearance::Appearance,
-    pane_group::PaneId,
     ui_components::dialog::{dialog_styles, Dialog},
     workspace::TabMovement,
 };
@@ -26,11 +25,6 @@ use crate::{
 #[derive(Copy, Clone)]
 /// Describes the action which opened the close session confirmation dialog
 pub enum OpenDialogSource {
-    /// Close a specific pane
-    ClosePane {
-        pane_group_id: EntityId,
-        pane_id: PaneId,
-    },
     /// Close a specific tab
     CloseTab { tab_index: usize },
     /// Close all tabs other than the tab_index

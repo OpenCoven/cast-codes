@@ -46,18 +46,6 @@ pub enum FeatureFlag {
     /// menu bar.
     ToggleBootstrapBlock,
 
-    /// A runtime flag to enable the creation of shared sessions.
-    ///
-    /// It is enabled if the logged in user is part of a paying team
-    /// or part of the allowlist (via [`ServerExperiment::SessionSharingExperiment`]).
-    ///
-    /// We also use [`ServerExperiment::SessionSharingControl`] as a
-    /// killswitch for abuse prevention.
-    CreatingSharedSessions,
-
-    /// Enables the joining / viewing of shared sessions (_not_ creation).
-    ViewingSharedSessions,
-
     /// Enabling context chips functionality for prompt
     ContextChips,
 
@@ -149,9 +137,6 @@ pub enum FeatureFlag {
     /// Enables the shell selector, allowing us to open a new tab in
     /// a shell other than the default shell.
     ShellSelector,
-
-    /// Enables writing to long-running commands in shared sessions.
-    SharedSessionWriteToLongRunningCommands,
 
     /// Replaces the bookmark button with a "save as workflow" button.
     BlockToolbeltSaveAsWorkflow,
@@ -469,9 +454,6 @@ pub enum FeatureFlag {
 
     /// Enables find/search in code review pane
     CodeReviewFind,
-
-    /// Enables using Agent Mode in shared sessions.
-    AgentSharedSessions,
 
     /// Enables auto-opening code review pane on first agent change and its setting UI.
     AutoOpenCodeReviewPane,
@@ -903,7 +885,6 @@ pub const DEBUG_FLAGS: &[FeatureFlag] = &[FeatureFlag::DebugMode, FeatureFlag::R
 pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::LogExpensiveFramesInSentry,
     FeatureFlag::ToggleBootstrapBlock,
-    FeatureFlag::CreatingSharedSessions,
     FeatureFlag::RemoveAutosuggestionDuringTabCompletions,
     FeatureFlag::ResizeFix,
     FeatureFlag::AgentModeWorkflows,
@@ -1039,9 +1020,6 @@ impl FeatureFlag {
         // very least, the feature flag should be removed from the Preview changelog by removing it from PREVIEW_FLAGS.
         // ** ONLY Preview-exclusive features should be added to this list! **
         match self {
-            AgentSharedSessions => {
-                Some("Enables viewing agent conversations within shared sessions.")
-            }
             CodeReviewFind => Some("Enables the find bar in the code review pane."),
             BlocklistMarkdownImages => {
                 Some("Enables rendering markdown images inline in AI block list responses.")

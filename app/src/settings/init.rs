@@ -19,7 +19,6 @@ use crate::{
         safe_mode_settings::SafeModeSettings,
         session_settings::{SessionSettings, SessionSettingsChangedEvent},
         settings::TerminalSettings,
-        shared_session::settings::SharedSessionSettings,
         warpify::settings::WarpifySettings,
         BlockListSettings,
     },
@@ -92,7 +91,6 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     UndoCloseSettings::register(ctx);
     SshSettings::register(ctx);
     VimBannerSettings::register(ctx);
-    SharedSessionSettings::register(ctx);
     WarpDriveSettings::register(ctx);
     WorkflowAliases::register(ctx);
     EmacsBindingsSettings::register(ctx);

@@ -17,11 +17,6 @@ use crate::server::ids::ServerId;
 use crate::server::telemetry::CloudObjectTelemetryMetadata;
 use crate::server::telemetry::OpenedSharingDialogEvent;
 use crate::server::telemetry::SharingDialogSource;
-use crate::terminal::shared_session::permissions_manager::{
-    SessionPermissionsEvent, SessionPermissionsManager,
-};
-use crate::terminal::shared_session::SharedSessionActionSource;
-use crate::terminal::TerminalView;
 use crate::ui_components::icons::Icon;
 use crate::view_components::DismissibleToast;
 use crate::word_block_editor::{
@@ -35,7 +30,6 @@ use email_address::EmailAddress;
 use inheritance::{InheritanceDetails, InheritanceState};
 use itertools::Itertools;
 use pathfinder_geometry::vector::vec2f;
-use session_sharing_protocol::common::{Guest, PendingGuest, SessionId, TeamAclData};
 use warp_core::ui::appearance::Appearance;
 use warp_editor::editor::NavigationKey;
 use warpui::elements::{
@@ -63,7 +57,7 @@ use warpui::{
 
 use super::{
     style, ContentEditability, LinkSharingSubjectType, ShareableObject, SharingAccessLevel,
-    Subject, SubjectExt, TeamKind, UserKind,
+    Subject, SubjectExt,
 };
 
 mod inheritance;
@@ -85,7 +79,6 @@ struct UiStateHandles {
     invite_access_level_button: MouseStateHandle,
     owner_tooltip: MouseStateHandle,
     link_sharing_menu_button: MouseStateHandle,
-    team_sharing_menu_button: MouseStateHandle,
     copy_link_button: MouseStateHandle,
     guest_list_state: UniformListState,
     guest_scroll_state: ScrollStateHandle,
@@ -143,9 +136,7 @@ struct LinkSharingState {
 /// UI state for team sharing.
 #[derive(Default)]
 struct TeamSharingState {
-    team: Option<TeamKind>,
     access_level: Option<SharingAccessLevel>,
-    tooltip_handle: MouseStateHandle,
     inheritance: Option<InheritanceState>,
 }
 
@@ -231,13 +222,6 @@ impl SharingDialog {
         });
 
         ctx.subscribe_to_model(
-            &SessionPermissionsManager::handle(ctx),
-            |me, _, event, ctx| {
-                me.handle_session_permissions_event(event, ctx);
-            },
-        );
-
-        ctx.subscribe_to_model(
             &BlocklistAIHistoryModel::handle(ctx),
             |me, _, event, ctx| {
                 me.handle_ai_history_event(event, ctx);
@@ -320,32 +304,6 @@ impl SharingDialog {
         }
     }
 
-    fn handle_session_permissions_event(
-        &mut self,
-        event: &SessionPermissionsEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            SessionPermissionsEvent::GuestsUpdated {
-                session_id,
-                guests,
-                pending_guests,
-            } => {
-                self.update_session_guests(ctx, session_id, guests, pending_guests);
-            }
-            SessionPermissionsEvent::LinkPermissionsUpdated {
-                session_id,
-                access_level,
-            } => {
-                self.update_session_link_permissions(*session_id, *access_level, ctx);
-            }
-            SessionPermissionsEvent::TeamPermissionsUpdated {
-                session_id,
-                team_acl,
-            } => self.update_session_team_permissions(session_id, team_acl.clone(), ctx),
-        }
-    }
-
     fn handle_ai_history_event(
         &mut self,
         event: &BlocklistAIHistoryEvent,
@@ -374,12 +332,6 @@ impl SharingDialog {
 
     pub fn has_target(&self) -> bool {
         self.target.is_some()
-    }
-
-    pub fn has_shared_session_target(&self) -> bool {
-        self.target
-            .as_ref()
-            .is_some_and(|target| matches!(target, ShareableObject::Session { .. }))
     }
 
     /// Returns `true` if the target is an AI conversation that cannot be shared.
@@ -418,7 +370,6 @@ impl SharingDialog {
                 ShareableObject::WarpDriveObject(server_id) => CloudModel::as_ref(app)
                     .get_by_uid(&server_id.uid())
                     .map(|object| object.display_name()),
-                ShareableObject::Session { .. } => Some("session".to_string()),
                 ShareableObject::AIConversation(_) => Some("conversation".to_string()),
             })
             .unwrap_or_else(|| "unknown".to_string())
@@ -443,8 +394,6 @@ impl SharingDialog {
     /// * Users that are view-only do not need to see permissions
     pub fn editability(&self, app: &AppContext) -> ContentEditability {
         match self.target.as_ref() {
-            // Always treat session contents as "editable," so that the sharing dialog is shown.
-            Some(ShareableObject::Session { .. }) => ContentEditability::Editable,
             Some(ShareableObject::WarpDriveObject(id)) => {
                 CloudViewModel::as_ref(app).object_editability(&id.uid(), app)
             }
@@ -509,68 +458,6 @@ impl SharingDialog {
                     }
                 }
             }
-            Some(ShareableObject::Session { ref handle, .. }) => {
-                // Sharer always has Full access.
-                if handle.upgrade(app).is_some_and(|handle| {
-                    handle
-                        .as_ref(app)
-                        .sharer_session_kind()
-                        .is_some_and(|kind| kind.is_sharer())
-                }) {
-                    return SharingAccessLevel::Full;
-                }
-
-                if let Some(owner) = self.owner(app) {
-                    // If we are the user owner, we have Full access.
-                    if let Some(user_uid) = AuthStateProvider::as_ref(app).get().user_id() {
-                        if owner.is_user(user_uid) {
-                            return SharingAccessLevel::Full;
-                        }
-                    }
-                    // Team members of owning team have Full access.
-                    if let Subject::Team(team_kind) = owner {
-                        if UserWorkspaces::as_ref(app)
-                            .current_team_uid()
-                            .is_some_and(|current| current == team_kind.team_uid())
-                        {
-                            return SharingAccessLevel::Full;
-                        }
-                    }
-                }
-
-                // For viewers, compute effective access as the max across all channels.
-                let mut level = SharingAccessLevel::View;
-
-                if let Some(link_level) = self.link_sharing_state.access_level {
-                    level = level.max(link_level);
-                }
-
-                if let Some(team_level) = self.team_sharing_state.access_level {
-                    if let Some(TeamKind::SharedSessionTeam { ref team_uid, .. }) =
-                        self.team_sharing_state.team
-                    {
-                        if UserWorkspaces::as_ref(app)
-                            .current_team_uid()
-                            .is_some_and(|current| current == *team_uid)
-                        {
-                            level = level.max(team_level);
-                        }
-                    }
-                }
-
-                if let Some(user_uid) = AuthStateProvider::as_ref(app).get().user_id() {
-                    if let Some(guest_level) = self
-                        .guest_states
-                        .iter()
-                        .find(|guest| guest.subject.is_user(user_uid))
-                        .map(|guest| guest.current_access_level)
-                    {
-                        level = level.max(guest_level);
-                    }
-                }
-
-                level
-            }
             None => SharingAccessLevel::Full,
         }
     }
@@ -594,17 +481,9 @@ impl SharingDialog {
                                 Owner::User { .. } => None,
                             },
                         }),
-                        session_id: None,
                     }),
                     None => return,
                 }
-            }
-            Some(ShareableObject::Session { session_id, .. }) => {
-                TelemetryEvent::OpenedSharingDialog(OpenedSharingDialogEvent {
-                    source,
-                    object_metadata: None,
-                    session_id: Some(*session_id),
-                })
             }
             // Skip telemetry for AI conversations
             Some(ShareableObject::AIConversation(_)) => return,
@@ -628,37 +507,6 @@ impl SharingDialog {
                     .owner;
                 Some(Subject::from_owner(owner))
             }
-            ShareableObject::Session { handle, .. } => {
-                // Check if team has Full access - if so, team is the owner.
-                if let Some(TeamKind::SharedSessionTeam { team_uid, name }) =
-                    self.team_sharing_state.team.as_ref()
-                {
-                    if self.team_sharing_state.access_level == Some(SharingAccessLevel::Full) {
-                        return Some(Subject::Team(TeamKind::SharedSessionTeam {
-                            team_uid: *team_uid,
-                            name: name.clone(),
-                        }));
-                    }
-                }
-
-                // Otherwise, the sharer is the owner.
-                // The sharer doesn't store their own participant info, so if it's unset, we assume
-                // the current user.
-                handle
-                    .upgrade(app)
-                    .and_then(|handle| handle.as_ref(app).shared_session_presence_manager())
-                    .and_then(|presence| presence.as_ref(app).get_sharer())
-                    .map(|sharer| {
-                        UserKind::SharedSessionParticipant(sharer.info.profile_data.clone())
-                    })
-                    .or_else(|| {
-                        AuthStateProvider::as_ref(app)
-                            .get()
-                            .user_id()
-                            .map(UserKind::Account)
-                    })
-                    .map(Subject::User)
-            }
             ShareableObject::AIConversation(id) => {
                 // Get owner from conversation's server metadata
                 BlocklistAIHistoryModel::as_ref(app)
@@ -668,121 +516,8 @@ impl SharingDialog {
         }
     }
 
-    fn update_session_guests(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-        session_id: &SessionId,
-        guests: &[Guest],
-        pending_guests: &[PendingGuest],
-    ) {
-        // We should only update the guests if the dialog is targeting the
-        // correct session.
-        match self.target.as_ref() {
-            Some(ShareableObject::Session {
-                session_id: target_session_id,
-                ..
-            }) => {
-                if session_id != target_session_id {
-                    return;
-                }
-            }
-            _ => return,
-        }
-
-        let guests_iter = guests.iter().map(|guest| GuestState {
-            menu_button_handle: Default::default(),
-            tooltip_handle: Default::default(),
-            current_access_level: guest.direct_acl.into(),
-            subject: Subject::User(UserKind::SharedSessionParticipant(
-                guest.profile_data.clone(),
-            )),
-            inheritance: None,
-        });
-
-        let pending_guests_iter = pending_guests.iter().map(|guest| GuestState {
-            menu_button_handle: Default::default(),
-            tooltip_handle: Default::default(),
-            current_access_level: guest.direct_acl.into(),
-            subject: Subject::PendingUser {
-                email: Some(guest.email.clone()),
-            },
-            inheritance: None,
-        });
-
-        self.guest_states = guests_iter.chain(pending_guests_iter).collect();
-
-        self.guest_states
-            .sort_by_cached_key(|guest| guest.subject.name(ctx));
-
-        ctx.notify();
-    }
-
-    fn update_session_link_permissions(
-        &mut self,
-        session_id: SessionId,
-        access_level: Option<SharingAccessLevel>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // Ensure we're targeting the correct session.
-        let Some(ShareableObject::Session {
-            session_id: target_session_id,
-            ..
-        }) = self.target
-        else {
-            return;
-        };
-        if session_id != target_session_id {
-            return;
-        }
-
-        self.link_sharing_state = LinkSharingState {
-            access_level,
-            tooltip_handle: Default::default(),
-            inheritance: None,
-        };
-        ctx.notify()
-    }
-
-    fn update_session_team_permissions(
-        &mut self,
-        session_id: &SessionId,
-        team_acl: Option<TeamAclData>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // Ensure we're targeting the correct session.
-        match self.target.as_ref() {
-            Some(ShareableObject::Session {
-                session_id: target_session_id,
-                ..
-            }) => {
-                if session_id != target_session_id {
-                    return;
-                }
-            }
-            _ => return,
-        }
-
-        self.team_sharing_state = TeamSharingState {
-            access_level: team_acl.as_ref().map(|team_acl| team_acl.acl.into()),
-            team: team_acl.map(|team_acl| TeamKind::SharedSessionTeam {
-                team_uid: ServerId::from_string_lossy(team_acl.uid),
-                name: team_acl.name,
-            }),
-            tooltip_handle: Default::default(),
-            inheritance: None,
-        };
-        ctx.notify()
-    }
-
     /// Refreshes all permissions that have cached UI state.
     fn refresh_object_permission_states(&mut self, ctx: &mut ViewContext<Self>) {
-        // The permission states for shared sessions are managed differently
-        // than other cloud objects. We return to avoid resetting the
-        // permissions for sessions.
-        if matches!(self.target, Some(ShareableObject::Session { .. })) {
-            return;
-        }
-
         // Handle AI conversations separately
         if let Some(ShareableObject::AIConversation(conversation_id)) = &self.target {
             // Use the helper that checks both loaded conversations and historical metadata
@@ -905,11 +640,6 @@ impl SharingDialog {
     pub fn copy_link(&self, ctx: &mut ViewContext<Self>) {
         if let Some(url) = self.target.as_ref().and_then(|target| target.link(ctx)) {
             let event = match self.target {
-                Some(ShareableObject::Session { .. }) => {
-                    Some(TelemetryEvent::CopiedSharedSessionLink {
-                        source: SharedSessionActionSource::SharingDialog,
-                    })
-                }
                 Some(ShareableObject::WarpDriveObject(_))
                 | Some(ShareableObject::AIConversation(_)) => {
                     Some(TelemetryEvent::ObjectLinkCopied { link: url.clone() })
@@ -951,9 +681,6 @@ impl SharingDialog {
             let inherited_access = guest.inheritance.is_some();
             let is_ai_conversation =
                 matches!(self.target, Some(ShareableObject::AIConversation(_)));
-            // Check if this is a team guest - team removal is only supported for non-session targets
-            let is_team_guest = matches!(guest.subject, Subject::Team(_));
-            let is_session = matches!(self.target, Some(ShareableObject::Session { .. }));
 
             self.guest_menu.update(ctx, |menu, ctx| {
                 let mut items = vec![MenuItemFields::new(SharingAccessLevel::View.label())
@@ -980,17 +707,14 @@ impl SharingDialog {
                     );
                 }
 
-                // Add Remove option for non-team guests, or for team guests in non-session contexts
-                // (team removal is supported for WarpDrive objects and AI conversations, but not sessions)
-                if !is_team_guest || !is_session {
-                    items.push(MenuItem::Separator);
-                    items.push(
-                        MenuItemFields::new("Remove")
-                            .with_on_select_action(SharingDialogAction::RemoveGuest)
-                            .with_disabled(inherited_access)
-                            .into_item(),
-                    );
-                }
+                // Team removal is supported for WarpDrive objects and AI conversations.
+                items.push(MenuItem::Separator);
+                items.push(
+                    MenuItemFields::new("Remove")
+                        .with_on_select_action(SharingDialogAction::RemoveGuest)
+                        .with_disabled(inherited_access)
+                        .into_item(),
+                );
 
                 menu.set_items(items, ctx);
                 menu.set_selected_by_index(
@@ -1036,9 +760,6 @@ impl SharingDialog {
                     });
                 }
             }
-            Some(ShareableObject::Session { handle, .. }) => {
-                self.remove_targeted_guest_for_session(idx, handle.clone(), ctx);
-            }
             Some(ShareableObject::AIConversation(conversation_id)) => {
                 self.remove_targeted_guest_for_conversation(idx, *conversation_id, ctx);
             }
@@ -1046,37 +767,6 @@ impl SharingDialog {
         }
 
         self.set_open_menu(OpenMenuState::None, ctx);
-    }
-
-    fn remove_targeted_guest_for_session(
-        &mut self,
-        guest_idx: usize,
-        handle: WeakViewHandle<TerminalView>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let Some(guest) = self.guest_states.get(guest_idx) else {
-            return;
-        };
-
-        let Some(handle) = handle.upgrade(ctx) else {
-            log::error!(
-                "Unable to upgrade handle to TerminalView when removing guest from session"
-            );
-            return;
-        };
-
-        if let Some(user_uid) = guest.subject.user_uid() {
-            // User is a full guest.
-            handle.update(ctx, |view, ctx| {
-                view.remove_guest(user_uid, ctx);
-            });
-        } else if let Some(email) = guest.subject.email(ctx) {
-            // User is a pending guest.
-            let email = email.to_owned();
-            handle.update(ctx, |view, ctx| {
-                view.remove_pending_guest(email, ctx);
-            });
-        }
     }
 
     /// Set the currently-targeted guest's access level.
@@ -1098,9 +788,6 @@ impl SharingDialog {
         match &self.target {
             Some(ShareableObject::WarpDriveObject(object_id)) => {
                 self.set_targeted_guest_access_for_object(idx, access_level, *object_id, ctx);
-            }
-            Some(ShareableObject::Session { handle, .. }) => {
-                self.set_targeted_guest_access_for_session(idx, access_level, handle.clone(), ctx);
             }
             Some(ShareableObject::AIConversation(conversation_id)) => {
                 self.set_targeted_guest_access_for_conversation(
@@ -1148,40 +835,6 @@ impl SharingDialog {
                 );
             }
         });
-
-        self.set_open_menu(OpenMenuState::None, ctx);
-    }
-
-    fn set_targeted_guest_access_for_session(
-        &mut self,
-        guest_idx: usize,
-        access_level: SharingAccessLevel,
-        handle: WeakViewHandle<TerminalView>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let Some(guest) = self.guest_states.get(guest_idx) else {
-            return;
-        };
-
-        let Some(handle) = handle.upgrade(ctx) else {
-            log::error!(
-                "Unable to upgrade handle to TerminalView when setting guest ACL for session"
-            );
-            return;
-        };
-
-        if let Some(user_uid) = guest.subject.user_uid() {
-            // User is a full guest.
-            handle.update(ctx, |view, ctx| {
-                view.update_role_for_user(user_uid.to_owned(), access_level.into(), ctx);
-            });
-        } else if let Some(email) = guest.subject.email(ctx) {
-            // User is a pending guest.
-            let email = email.to_owned();
-            handle.update(ctx, |view, ctx| {
-                view.update_role_for_pending_user(email, access_level.into(), ctx);
-            });
-        }
 
         self.set_open_menu(OpenMenuState::None, ctx);
     }
@@ -1590,20 +1243,6 @@ impl SharingDialog {
                     );
                 });
             }
-            Some(ShareableObject::Session { handle, .. }) => {
-                let Some(handle) = handle.upgrade(ctx) else {
-                    log::error!("Unable to upgrade handle to TerminalView when sending email invitations for session");
-                    return;
-                };
-
-                handle.update(ctx, |view, ctx| {
-                    view.add_guests(
-                        form_state.invitee_emails,
-                        self.invite_form.selected_access_level.into(),
-                        ctx,
-                    );
-                });
-            }
             Some(ShareableObject::AIConversation(conversation_id)) => {
                 self.add_guests_for_conversation(
                     form_state.invitee_emails,
@@ -1770,47 +1409,6 @@ impl SharingDialog {
             .with_horizontal_padding(style::ACL_ITEM_PADDING)
             .with_vertical_margin(style::ACL_ITEM_GAP / 2.)
             .finish()
-    }
-
-    /// Renders a header with live session details only for shared session sharers.
-    fn render_session_header(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Option<Box<dyn Element>> {
-        let Some(ShareableObject::Session { started_at, .. }) = self.target else {
-            return None;
-        };
-
-        if !self.can_edit_access(app) {
-            return None;
-        }
-
-        let text = appearance
-            .ui_builder()
-            .wrappable_text(
-                format!(
-                    "Live session started at {} on {}",
-                    started_at.format("%l:%M%P"),
-                    started_at.format("%m/%d"),
-                ),
-                true,
-            )
-            .with_style(UiComponentStyles {
-                font_color: Some(style::acl_primary_text_color(appearance)),
-                font_size: Some(style::HEADER_TEXT_SIZE),
-                ..Default::default()
-            })
-            .build()
-            .finish();
-
-        Some(
-            Container::new(text)
-                .with_horizontal_padding(style::ACL_ITEM_PADDING)
-                .with_padding_top(style::ACL_ITEM_PADDING / 2.)
-                .with_padding_bottom(style::ACL_ITEM_PADDING)
-                .finish(),
-        )
     }
 
     /// Renders a clarification label if the user is not allowed to edit permissions.
@@ -2054,125 +1652,6 @@ impl SharingDialog {
 
     fn team_sharing_menu_button_id(&self) -> String {
         format!("team_sharing_menu_button_{}", self.self_handle.id())
-    }
-
-    /// Renders the entry for the team sharing ACL, if the correct conditions
-    /// are met.
-    fn render_team_sharing_subject(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Option<Box<dyn Element>> {
-        // Currently, we only allow editing the team ACL for sessions.
-        if !matches!(self.target, Some(ShareableObject::Session { .. })) {
-            return None;
-        }
-
-        let can_edit_access = self.can_edit_access(app);
-
-        // If there's no team ACL, and the user can't edit it, show nothing.
-        if !can_edit_access && self.team_sharing_state.access_level.is_none() {
-            return None;
-        }
-
-        let (inherited_label, inherited_tooltip) = self
-            .team_sharing_state
-            .inheritance
-            .as_ref()
-            .map(|inheritance| {
-                let InheritanceDetails {
-                    source_label,
-                    tooltip_text,
-                } = inheritance.details(appearance, app);
-                (source_label, tooltip_text)
-            })
-            .unzip();
-
-        // This logic assumes that the sharer's team is the one we would want
-        // to add permissions for.
-        let team_kind = if can_edit_access {
-            TeamKind::Team {
-                team_uid: UserWorkspaces::as_ref(app).current_team_uid()?,
-            }
-        } else {
-            self.team_sharing_state.team.clone()?
-        };
-        // If this team is the owner of the object, don't render this team sharing ACL since
-        // we already rendered the team as the owner (and you can't change ACLs on it).
-        if let Some(Subject::Team(team_owner)) = self.owner(app) {
-            if team_owner.team_uid() == team_kind.team_uid() {
-                return None;
-            }
-        }
-
-        let mut subject_row = Flex::row();
-        subject_row.add_child(
-            Container::new(self.render_subject(
-                &Subject::Team(team_kind),
-                inherited_label,
-                appearance,
-                app,
-            ))
-            .with_horizontal_padding(style::ACL_ITEM_PADDING)
-            .with_vertical_margin(style::ACL_ITEM_GAP / 2.)
-            .finish(),
-        );
-
-        let menu_button = {
-            let label = match self.team_sharing_state.access_level {
-                Some(access_level) => access_level.label(),
-                None => NO_ACCESS_LABEL,
-            };
-            let button = appearance
-                .ui_builder()
-                .button(
-                    ButtonVariant::Text,
-                    self.ui_state_handles.team_sharing_menu_button.clone(),
-                )
-                .with_centered_text_label(label.to_string())
-                .with_style(UiComponentStyles {
-                    padding: Some(Coords::default()),
-                    ..Default::default()
-                });
-            if can_edit_access {
-                button
-            } else {
-                button.disabled()
-            }
-        };
-
-        let menu_button = SavePosition::new(
-            menu_button
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(SharingDialogAction::ToggleTeamSharingMenu);
-                })
-                .finish(),
-            &self.team_sharing_menu_button_id(),
-        )
-        .finish();
-
-        subject_row.add_child(match inherited_tooltip {
-            Some(tooltip) => render_with_detail_tooltip(
-                tooltip,
-                self.team_sharing_state.tooltip_handle.clone(),
-                menu_button,
-                appearance,
-            ),
-            None => menu_button,
-        });
-
-        Some(
-            Container::new(
-                subject_row
-                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                    .with_main_axis_size(MainAxisSize::Max)
-                    .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                    .finish(),
-            )
-            .with_padding_right(style::ACL_ITEM_PADDING)
-            .finish(),
-        )
     }
 
     fn reset_team_sharing_menu(&mut self, ctx: &mut ViewContext<Self>) {
@@ -2502,8 +1981,6 @@ impl View for SharingDialog {
 
         let mut contents = Flex::column();
 
-        contents.extend(self.render_session_header(appearance, app));
-
         if self.can_edit_access(app) && self.can_direct_link_share(app) {
             contents.add_child(self.render_invite_form(appearance, app));
         }
@@ -2513,7 +1990,6 @@ impl View for SharingDialog {
         if self.can_anyone_with_link_share(app) {
             contents.extend(self.render_link_sharing_subject(appearance, app));
         }
-        contents.extend(self.render_team_sharing_subject(appearance, app));
         contents.extend(self.render_owner(appearance, app));
 
         if let Some(guest_list) = self.render_guests(appearance) {
@@ -2564,13 +2040,6 @@ impl TypedActionView for SharingDialog {
                     UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
                         update_manager.set_object_link_permissions(*id, *access_level, ctx);
                     });
-                } else if let Some(ShareableObject::Session { handle, .. }) = self.target.as_ref() {
-                    if let Some(view) = handle.upgrade(ctx) {
-                        let role = access_level.map(|access_level| access_level.into());
-                        view.update(ctx, |view, ctx| {
-                            view.update_session_link_permissions(role, ctx)
-                        });
-                    }
                 } else if let Some(ShareableObject::AIConversation(conversation_id)) =
                     self.target.as_ref()
                 {
@@ -2596,22 +2065,8 @@ impl TypedActionView for SharingDialog {
                 }
                 ctx.notify();
             }
-            SharingDialogAction::SetTeamPermissions(access_level) => {
+            SharingDialogAction::SetTeamPermissions(_) => {
                 self.set_open_menu(OpenMenuState::None, ctx);
-                // So far, we only support setting team permissions for sessions.
-                if let Some(ShareableObject::Session { handle, .. }) = self.target.as_ref() {
-                    let Some(view) = handle.upgrade(ctx) else {
-                        return;
-                    };
-                    let Some(team_uid) = UserWorkspaces::as_ref(ctx).current_team_uid() else {
-                        return;
-                    };
-
-                    let role = access_level.map(|access_level| access_level.into());
-                    view.update(ctx, |view, ctx| {
-                        view.update_session_team_permissions(role, team_uid.uid(), ctx);
-                    });
-                }
                 ctx.notify();
             }
             SharingDialogAction::CopyLink => self.copy_link(ctx),

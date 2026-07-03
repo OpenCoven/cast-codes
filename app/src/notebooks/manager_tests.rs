@@ -23,9 +23,7 @@ use crate::{
     },
     settings::PrivacySettings,
     settings_view::keybindings::KeybindingChangedNotifier,
-    terminal::{
-        keys::TerminalKeybindings, shared_session::permissions_manager::SessionPermissionsManager,
-    },
+    terminal::keys::TerminalKeybindings,
     test_util::settings::initialize_settings_for_tests,
     workspace::ActiveSession,
     workspaces::{
@@ -93,7 +91,6 @@ fn initialize_app(app: &mut App) -> TestState {
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(TerminalKeybindings::new);
-    app.add_singleton_model(SessionPermissionsManager::new);
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);

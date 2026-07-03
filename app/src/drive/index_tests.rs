@@ -23,7 +23,6 @@ use crate::{
         telemetry::context_provider::AppTelemetryContextProvider,
     },
     settings_view::keybindings::KeybindingChangedNotifier,
-    terminal::shared_session::permissions_manager::SessionPermissionsManager,
     test_util::settings::initialize_settings_for_tests,
     workflows::{workflow::Workflow, CloudWorkflow, CloudWorkflowModel},
     workspaces::{
@@ -51,7 +50,6 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(CloudViewModel::mock);
     app.add_singleton_model(|_| ObjectActions::new(Vec::new()));
     app.add_singleton_model(|_| UserProfiles::new(Vec::new()));
-    app.add_singleton_model(SessionPermissionsManager::new);
     app.add_singleton_model(|_| KeybindingChangedNotifier::mock());
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     #[cfg(feature = "voice_input")]

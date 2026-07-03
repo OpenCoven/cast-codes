@@ -646,8 +646,6 @@ fn root_cloud_mode_pane_sets_root_cloud_mode_context_key() {
 
 #[test]
 fn set_input_mode_agent_does_not_enter_local_agent_from_root_cloud_mode_pane() {
-    use crate::terminal::shared_session::SharedSessionStatus;
-
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         FeatureFlag::AgentView.set_enabled(true);
@@ -661,9 +659,6 @@ fn set_input_mode_agent_does_not_enter_local_agent_from_root_cloud_mode_pane() {
                 .update(ctx, |model, ctx| {
                     model.enter_setup(ctx);
                 });
-            view.model
-                .lock()
-                .set_shared_session_status(SharedSessionStatus::FinishedViewer);
         });
 
         terminal.update(&mut app, |view, ctx| {
