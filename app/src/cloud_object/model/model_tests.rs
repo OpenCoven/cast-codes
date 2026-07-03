@@ -35,7 +35,6 @@ use crate::server::ids::ServerIdAndType;
 use crate::server::server_api::object::ObjectClient;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::sync_queue::SyncQueue;
-use crate::server::telemetry::context_provider::AppTelemetryContextProvider;
 use crate::settings::init_and_register_user_preferences;
 use crate::settings::Preference;
 use crate::system::SystemStats;
@@ -103,7 +102,6 @@ fn initialize_app(
     app.add_singleton_model(|_| SystemStats::new());
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);
     app.add_singleton_model(|ctx| {
         UserWorkspaces::mock(

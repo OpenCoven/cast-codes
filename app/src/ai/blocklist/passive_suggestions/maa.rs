@@ -9,10 +9,7 @@ use crate::ai::agent::PassiveSuggestionTrigger;
 use crate::ai::agent::{conversation::AIConversationId, ShellCommandCompletedTrigger};
 use crate::ai::block_context::BlockContext;
 use crate::ai::blocklist::inline_action::code_diff_view::FileDiff;
-use crate::ai::blocklist::{
-    apply_edits, BlocklistAIHistoryModel, FileReadResult, RequestFileEditsFormatKind,
-    SessionContext,
-};
+use crate::ai::blocklist::{apply_edits, BlocklistAIHistoryModel, FileReadResult, SessionContext};
 use crate::ai::paths::host_native_absolute_path;
 use crate::auth::auth_state::AuthStateProvider;
 use crate::server::server_api::ServerApiProvider;
@@ -60,7 +57,6 @@ pub enum PassiveSuggestionsEvent {
     },
     NewCodeDiffSuggestion {
         diffs: Vec<FileDiff>,
-        edit_format_kind: RequestFileEditsFormatKind,
         title: Option<String>,
         /// The original search/replace edits from the LLM response.
         original_edits: Vec<PassiveCodeDiffEntry>,
@@ -238,7 +234,6 @@ impl PassiveSuggestionsModel {
                             unreachable!()
                         };
 
-                        let edit_format_kind = classify_edit_format(&file_edits);
                         let original_edits = file_edits_to_passive_diffs(&file_edits);
 
                         let session_context =
@@ -293,7 +288,6 @@ impl PassiveSuggestionsModel {
 
                                 ctx.emit(PassiveSuggestionsEvent::NewCodeDiffSuggestion {
                                     diffs,
-                                    edit_format_kind,
                                     title,
                                     original_edits: original_edits.clone(),
                                     conversation_id: continuable_conversation_id,
@@ -804,21 +798,6 @@ fn file_edits_to_passive_diffs(file_edits: &[FileEdit]) -> Vec<PassiveCodeDiffEn
         }
     }
     entries
-}
-
-fn classify_edit_format(file_edits: &[FileEdit]) -> RequestFileEditsFormatKind {
-    let has_str_replace = file_edits
-        .iter()
-        .any(|e| matches!(e, FileEdit::Edit(ParsedDiff::StrReplaceEdit { .. })));
-    let has_v4a = file_edits
-        .iter()
-        .any(|e| matches!(e, FileEdit::Edit(ParsedDiff::V4AEdit { .. })));
-    match (has_str_replace, has_v4a) {
-        (true, false) => RequestFileEditsFormatKind::StrReplace,
-        (false, true) => RequestFileEditsFormatKind::V4A,
-        (true, true) => RequestFileEditsFormatKind::Mixed,
-        (false, false) => RequestFileEditsFormatKind::Unknown,
-    }
 }
 
 fn is_passive_code_diffs_enabled(ctx: &ModelContext<PassiveSuggestionsModel>) -> bool {

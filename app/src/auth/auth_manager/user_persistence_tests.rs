@@ -88,9 +88,7 @@ fn test_serialize_persisted_user() {
 #[allow(deprecated)]
 fn test_windows_user_persistence() {
     use crate::auth::{AuthManager, AuthStateProvider};
-    use crate::server::{
-        datetime_ext::DateTimeExt, telemetry::context_provider::AppTelemetryContextProvider,
-    };
+    use crate::server::datetime_ext::DateTimeExt;
     use crate::ServerApiProvider;
     use chrono::DateTime;
     use warp_core::channel::ChannelState;
@@ -100,7 +98,6 @@ fn test_windows_user_persistence() {
     App::test((), |mut app| async move {
         app.add_singleton_model(|_ctx| ServerApiProvider::new_for_test());
         app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-        app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
         app.add_singleton_model(|ctx| {
             secure_storage::register_with_dir(
                 ChannelState::data_domain().as_str(),

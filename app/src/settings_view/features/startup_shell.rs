@@ -8,8 +8,7 @@ use warpui::{
 use crate::{
     appearance::Appearance,
     editor::{EditorView, Event, SingleLineEditorOptions, TextOptions},
-    report_if_error, send_telemetry_from_ctx,
-    server::telemetry::TelemetryEvent,
+    report_if_error,
     terminal::{
         available_shells::{AvailableShell, AvailableShells},
         local_tty::shell::is_valid_path_or_command_for_supported_shell,
@@ -42,26 +41,6 @@ pub enum NewSessionShellAction {
     Set(AvailableShell),
     /// Displays the custom shell path editor.
     ShowCustomPathInput,
-}
-
-impl NewSessionShellAction {
-    /// Produces a [`TelemetryEvent`] that corresponds to this UI action.
-    ///
-    /// This tracks both high-level information about which shells users select
-    /// and when they switch to the custom path UI (so we can see if they're
-    /// trying to use a custom shell but are unable to).
-    fn telemetry_event(&self) -> TelemetryEvent {
-        match self {
-            NewSessionShellAction::Set(option) => TelemetryEvent::FeaturesPageAction {
-                action: "NewSessionShellOverride".to_string(),
-                value: option.telemetry_value(),
-            },
-            NewSessionShellAction::ShowCustomPathInput => TelemetryEvent::FeaturesPageAction {
-                action: "ShowCustomPathInput".to_string(),
-                value: String::new(),
-            },
-        }
-    }
 }
 
 impl StartupShellView {
@@ -269,6 +248,5 @@ impl TypedActionView for StartupShellView {
                 });
             }
         }
-        send_telemetry_from_ctx!(action.telemetry_event(), ctx);
     }
 }

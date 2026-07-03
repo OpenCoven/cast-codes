@@ -9,14 +9,12 @@ use super::{
 };
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::autoupdate::{self, AutoupdateStage, AutoupdateState};
-use crate::send_telemetry_from_ctx;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
     appearance::Appearance,
     auth::{auth_state::AuthState, auth_view_modal::AuthViewVariant},
     report_if_error,
     settings::cloud_preferences::CloudPreferencesSettings,
-    TelemetryEvent,
 };
 use crate::{auth::auth_manager::AuthManager, server::ids::ServerId};
 use crate::{auth::auth_manager::LoginGatedFeature, workspaces::workspace::CustomerType};
@@ -205,19 +203,11 @@ impl TypedActionView for MainSettingsPageView {
                 ctx.notify();
             }
             MainPageAction::ToggleSettingsSync => {
-                let new_value =
-                    CloudPreferencesSettings::handle(ctx).update(ctx, |prefs_settings, ctx| {
-                        report_if_error!(prefs_settings
-                            .settings_sync_enabled
-                            .toggle_and_save_value(ctx));
-                        *prefs_settings.settings_sync_enabled
-                    });
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::ToggleSettingsSync {
-                        is_settings_sync_enabled: new_value,
-                    },
-                    ctx
-                );
+                CloudPreferencesSettings::handle(ctx).update(ctx, |prefs_settings, ctx| {
+                    report_if_error!(prefs_settings
+                        .settings_sync_enabled
+                        .toggle_and_save_value(ctx));
+                });
                 ctx.notify();
             }
             MainPageAction::Upgrade { team_uid, user_id } => match team_uid {

@@ -22,7 +22,6 @@ fn main() -> Result<()> {
             logfile_name: brand::LOG_FILE_NAME.into(),
             server_config: ServerConfig::unavailable(),
             oz_config: OzConfig::unavailable(),
-            telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: Some(AutoupdateConfig {
                 releases_base_url: brand::PUBLIC_RELEASES_DOWNLOAD_BASE_URL.into(),

@@ -19,13 +19,12 @@ use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
 
 use crate::{
     ai::persisted_workspace::all_working_directories,
-    safe_info, safe_warn, send_telemetry_from_ctx,
+    safe_info, safe_warn,
     settings::{
         AISettings, AISettingsChangedEvent, CodeSettings, CodeSettingsChangedEvent, InputSettings,
         InputSettingsChangedEvent,
     },
     workspaces::user_workspaces::UserWorkspaces,
-    TelemetryEvent,
 };
 
 use super::OutlineStatus;
@@ -235,15 +234,7 @@ impl RepoOutlines {
                     // The abort handle doesn't always abort.
                     if me.should_build_outlines(ctx) {
                         match res {
-                            Ok((canonicalized_path, outline, parse_duration)) => {
-                                send_telemetry_from_ctx!(
-                                    TelemetryEvent::RepoOutlineConstructionSuccess {
-                                        total_parse_seconds: parse_duration.as_secs() as usize,
-                                        file_count: outline.file_count(),
-                                    },
-                                    ctx
-                                );
-
+                            Ok((canonicalized_path, outline, _parse_duration)) => {
                                 safe_info!(
                                     safe: ("Successfully constructed symbols outline for repo."),
                                     full: (
@@ -292,12 +283,6 @@ impl RepoOutlines {
                                     )
                                 );
 
-                                send_telemetry_from_ctx!(
-                                    TelemetryEvent::RepoOutlineConstructionFailed {
-                                        error: e.to_string()
-                                    },
-                                    ctx
-                                );
                                 if let Some(outline_state) = me.outlines.get_mut(&root_path_clone) {
                                     outline_state.status = OutlineStatus::Failed;
                                 }

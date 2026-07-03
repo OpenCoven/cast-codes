@@ -19,7 +19,7 @@ use crate::{
     search::files::model::FileSearchModel,
     server::{
         cloud_objects::update_manager::UpdateManager, server_api::ServerApiProvider,
-        sync_queue::SyncQueue, telemetry::context_provider::AppTelemetryContextProvider,
+        sync_queue::SyncQueue,
     },
     settings::PrivacySettings,
     settings_view::keybindings::KeybindingChangedNotifier,
@@ -92,7 +92,6 @@ fn initialize_app(app: &mut App) -> TestState {
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     #[cfg(feature = "voice_input")]

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     mem,
     ops::Range,
     path::{Path, PathBuf},
@@ -49,15 +49,8 @@ use crate::{
         },
         editor_state::CodeReviewEditorState,
         hidden_lines::calculate_hidden_lines,
-        telemetry_event::{
-            AddToContextOrigin, CodeReviewContextDestination, CodeReviewTelemetryEvent,
-            GitButtonKind, PaneStateChange,
-        },
     },
 };
-
-#[cfg(feature = "local_fs")]
-use crate::code_review::telemetry_event::DiffSetContextScope;
 
 use crate::{
     code::editor::line::EditorLineLocation,
@@ -74,7 +67,7 @@ use crate::{
     },
     quit_warning::UnsavedStateSummary,
     terminal::input::MenuPositioning,
-    terminal::view::{CliAgentRouting, InitProjectModel, TerminalAction, TerminalView},
+    terminal::view::{InitProjectModel, TerminalAction, TerminalView},
     util::bindings::{custom_tag_to_keystroke, CustomAction},
     view_components::{
         action_button::{
@@ -87,8 +80,6 @@ use crate::{
 };
 
 use crate::code_review::find_model::CodeReviewFindModel;
-#[cfg(feature = "local_fs")]
-use crate::server::telemetry::CodePanelsFileOpenEntrypoint;
 use crate::terminal::cli_agent::{
     build_selection_line_range_prompt, build_selection_substring_prompt,
 };
@@ -161,15 +152,12 @@ use crate::ui_components::{
     icons::Icon,
 };
 use crate::view_components::action_button::TooltipAlignment;
-#[cfg(feature = "local_fs")]
-use crate::TelemetryEvent;
 use crate::{
     appearance::Appearance,
     code::editor::{add_color, remove_color},
     code_review::diff_selector::{DiffSelector, DiffSelectorEvent, DiffTarget},
     editor::InteractionState,
     pane_group::pane::{view, BackingView, PaneEvent},
-    send_telemetry_from_ctx,
     themes::theme::WarpTheme,
 };
 
@@ -635,7 +623,6 @@ impl RepositoryState {
 
 struct RelocateCommentsResult {
     comments: Vec<AttachedReviewComment>,
-    fallback_count: usize,
 }
 
 /// State shared among the entire code review view.
@@ -1609,11 +1596,6 @@ impl CodeReviewView {
             return;
         }
 
-        send_telemetry_from_ctx!(
-            CodeReviewTelemetryEvent::BaseChanged { mode: mode.clone() },
-            ctx
-        );
-
         self.diff_state_model.update(ctx, |model, ctx| {
             model.set_diff_mode(mode, false, ctx);
         });
@@ -2267,10 +2249,6 @@ impl CodeReviewView {
             });
         }
 
-        send_telemetry_from_ctx!(
-            CodeReviewTelemetryEvent::FindBarToggled { is_open: true },
-            ctx
-        );
         ctx.focus(&self.find_bar);
         self.update_search_decorations(ctx);
         ctx.notify();
@@ -2281,11 +2259,6 @@ impl CodeReviewView {
             model.set_is_find_bar_open(false);
             model.clear_results();
         });
-
-        send_telemetry_from_ctx!(
-            CodeReviewTelemetryEvent::FindBarToggled { is_open: false },
-            ctx
-        );
 
         // Clear finder match decorations
         #[cfg(not(target_family = "wasm"))]
@@ -2701,20 +2674,9 @@ impl CodeReviewView {
             return;
         };
 
-        let is_existing = model.read(ctx, |batch, _| {
-            batch.get_review_comment_by_id(comment.id).is_some()
-        });
-
         model.update(ctx, move |batch, ctx| {
             batch.upsert_comment(comment.clone(), ctx);
         });
-
-        // Telemetry: record whether this was a new comment or an edit.
-        if is_existing {
-            send_telemetry_from_ctx!(CodeReviewTelemetryEvent::CommentEdited, ctx);
-        } else {
-            send_telemetry_from_ctx!(CodeReviewTelemetryEvent::CommentAdded, ctx);
-        }
     }
 
     /// Clears all review comments.
@@ -2728,22 +2690,9 @@ impl CodeReviewView {
 
     fn delete_comment_by_id(&mut self, id: CommentId, ctx: &mut ViewContext<Self>) {
         if let Some(model) = self.active_comment_model.clone() {
-            let is_imported = model
-                .read(ctx, |batch, _| {
-                    batch
-                        .get_review_comment_by_id(id)
-                        .map(|c| c.origin.is_imported_from_github())
-                })
-                .unwrap_or(false);
-
             model.update(ctx, |batch, ctx| {
                 batch.delete_comment(id, ctx);
             });
-
-            send_telemetry_from_ctx!(
-                CodeReviewTelemetryEvent::CommentDeleted { is_imported },
-                ctx
-            );
         }
     }
 
@@ -3122,8 +3071,6 @@ impl CodeReviewView {
     ) {
         match event {
             LocalCodeEditorEvent::FileSaved => {
-                send_telemetry_from_ctx!(CodeReviewTelemetryEvent::FileSaved, ctx);
-
                 ctx.emit(CodeReviewViewEvent::FileSaved {
                     path: full_file_path.to_path_buf(),
                 });
@@ -3416,14 +3363,13 @@ impl CodeReviewView {
     /// target location. Comments without matching editors or without matching line content are
     /// marked as outdated.
     ///
-    /// Returns a tuple of (all_comments_with_updated_targets, fallback_count).
+    /// Returns all comments with updated targets.
     fn relocate_comments(
         comments: impl IntoIterator<Item = AttachedReviewComment>,
         state: &LoadedState,
         repo_path: &Path,
         ctx: &mut ViewContext<Self>,
     ) -> RelocateCommentsResult {
-        let mut fallback_count = 0;
         let editor_file_paths = state.editor_absolute_file_paths(repo_path);
 
         let relocated_comments = comments
@@ -3474,7 +3420,6 @@ impl CodeReviewView {
                     });
 
                 if used_fallback {
-                    fallback_count += 1;
                     if FeatureFlag::PRCommentsSlashCommand.is_enabled() {
                         comment.outdated = true;
                     }
@@ -3493,7 +3438,6 @@ impl CodeReviewView {
 
         RelocateCommentsResult {
             comments: relocated_comments,
-            fallback_count,
         }
     }
 
@@ -3519,7 +3463,6 @@ impl CodeReviewView {
         });
 
         let newly_imported = attach_pending_imported_comments(pending_imported, repo_path);
-        let newly_imported_ids: HashSet<CommentId> = newly_imported.iter().map(|c| c.id).collect();
         comments.extend(newly_imported);
 
         if comments.is_empty() {
@@ -3528,35 +3471,7 @@ impl CodeReviewView {
 
         let RelocateCommentsResult {
             comments: relocated_comments,
-            fallback_count,
         } = Self::relocate_comments(comments, state, repo_path, ctx);
-
-        if fallback_count > 0 {
-            send_telemetry_from_ctx!(
-                CodeReviewTelemetryEvent::CommentRelocationFailed { fallback_count },
-                ctx
-            );
-        }
-
-        if !newly_imported_ids.is_empty() {
-            let (active_count, outdated_count) = relocated_comments
-                .iter()
-                .filter(|c| newly_imported_ids.contains(&c.id))
-                .fold((0usize, 0usize), |(active, outdated), c| {
-                    if c.outdated {
-                        (active, outdated + 1)
-                    } else {
-                        (active + 1, outdated)
-                    }
-                });
-            send_telemetry_from_ctx!(
-                CodeReviewTelemetryEvent::CommentsAttached {
-                    active_count,
-                    outdated_count,
-                },
-                ctx
-            );
-        }
 
         model.update(ctx, |batch, ctx| {
             batch.upsert_comments(relocated_comments, ctx);
@@ -4273,21 +4188,8 @@ impl CodeReviewView {
         ctx: &mut ViewContext<Self>,
     ) {
         match result {
-            ReviewSubmissionResult::Success {
-                comment_count,
-                file_count,
-                destination,
-            } => {
+            ReviewSubmissionResult::Success { .. } => {
                 log::info!("Successfully submitted review comments to terminal");
-
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::ReviewSubmitted {
-                        comment_count,
-                        file_count,
-                        destination,
-                    },
-                    ctx
-                );
 
                 self.clear_review_comments(ctx);
                 ToastStack::handle(ctx).update(ctx, |stack, ctx| {
@@ -5694,21 +5596,12 @@ impl CodeReviewView {
                 // Multi-line: send a line-range reference with format note.
                 build_selection_line_range_prompt(&file_path, start_line, end_line)
             };
-            if let Some(routing) = terminal_view.update(ctx, |tv, ctx| {
-                tv.try_send_text_to_cli_agent_or_rich_input(prompt, ctx)
-            }) {
-                let destination = match routing {
-                    CliAgentRouting::RichInput => CodeReviewContextDestination::RichInput,
-                    CliAgentRouting::Pty => CodeReviewContextDestination::Pty,
-                };
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::AddToContext {
-                        origin: AddToContextOrigin::SelectedText,
-                        destination,
-                        diff_set_scope: None,
-                    },
-                    ctx
-                );
+            if terminal_view
+                .update(ctx, |tv, ctx| {
+                    tv.try_send_text_to_cli_agent_or_rich_input(prompt, ctx)
+                })
+                .is_some()
+            {
                 return;
             }
 
@@ -5729,14 +5622,6 @@ impl CodeReviewView {
 
             // Otherwise insert the location snippet into the input buffer (original behavior).
             let location = format!("{file_path}:{start_line}-{end_line} ");
-            send_telemetry_from_ctx!(
-                CodeReviewTelemetryEvent::AddToContext {
-                    origin: AddToContextOrigin::SelectedText,
-                    destination: CodeReviewContextDestination::AgentInput,
-                    diff_set_scope: None,
-                },
-                ctx
-            );
             terminal_view.update(ctx, |terminal_view, ctx| {
                 terminal_view.input().update(ctx, |input, ctx| {
                     input.append_to_buffer(&location, ctx);
@@ -5783,10 +5668,6 @@ impl CodeReviewView {
         {
             let active_cli_agent = terminal_view.read(ctx, |tv, ctx| tv.active_cli_agent(ctx));
 
-            let diff_set_scope = match &scope {
-                DiffSetScope::All => DiffSetContextScope::All,
-                DiffSetScope::File(_) => DiffSetContextScope::File,
-            };
             // CLI agent path: write per-file hunk ranges to the PTY (or rich input if open).
             if active_cli_agent.is_some() {
                 if let CodeReviewViewState::Loaded(state) = self.state() {
@@ -5805,21 +5686,9 @@ impl CodeReviewView {
                     };
                     let file_diffs =
                         convert_file_diffs_to_diffset_hunks(files_to_process.into_iter());
-                    let routing = terminal_view.update(ctx, |tv, ctx| {
+                    terminal_view.update(ctx, |tv, ctx| {
                         tv.send_diff_context_to_cli_agent_or_rich_input(&file_diffs, ctx)
                     });
-                    let destination = match routing {
-                        Some(CliAgentRouting::RichInput) => CodeReviewContextDestination::RichInput,
-                        _ => CodeReviewContextDestination::Pty,
-                    };
-                    send_telemetry_from_ctx!(
-                        CodeReviewTelemetryEvent::AddToContext {
-                            origin: AddToContextOrigin::CodeReviewHeader,
-                            destination,
-                            diff_set_scope: Some(diff_set_scope),
-                        },
-                        ctx
-                    );
                 }
                 return;
             }
@@ -5892,15 +5761,6 @@ impl CodeReviewView {
                         input.ensure_agent_mode_for_ai_features(true, ctx);
                     });
                 });
-
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::AddToContext {
-                        origin: AddToContextOrigin::CodeReviewHeader,
-                        destination: CodeReviewContextDestination::AgentAttachment,
-                        diff_set_scope: Some(diff_set_scope),
-                    },
-                    ctx
-                );
 
                 // Register the DiffSet attachment in the terminal view's AI context model.
                 let current = self.get_current_head(ctx);
@@ -6013,7 +5873,7 @@ impl CodeReviewView {
                     // rather than absolute machine-specific paths.
                     let start_line = line_range.start.as_usize() + 1;
                     let end_line = line_range.end.as_usize();
-                    let routing = terminal_view.update(ctx, |tv, ctx| {
+                    terminal_view.update(ctx, |tv, ctx| {
                         tv.send_diff_hunk_to_cli_agent_or_rich_input(
                             &relative_path,
                             start_line,
@@ -6023,18 +5883,6 @@ impl CodeReviewView {
                             ctx,
                         )
                     });
-                    let destination = match routing {
-                        Some(CliAgentRouting::RichInput) => CodeReviewContextDestination::RichInput,
-                        _ => CodeReviewContextDestination::Pty,
-                    };
-                    send_telemetry_from_ctx!(
-                        CodeReviewTelemetryEvent::AddToContext {
-                            origin: AddToContextOrigin::Gutter,
-                            destination,
-                            diff_set_scope: None,
-                        },
-                        ctx
-                    );
                 }
                 return;
             }
@@ -6050,14 +5898,6 @@ impl CodeReviewView {
                 terminal_view.update(ctx, |terminal_view, ctx| {
                     terminal_view.handle_file_tree_drop_on_active_command(&path_with_range, ctx);
                 });
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::AddToContext {
-                        origin: AddToContextOrigin::Gutter,
-                        destination: CodeReviewContextDestination::ActiveCommandBuffer,
-                        diff_set_scope: None,
-                    },
-                    ctx
-                );
                 return;
             }
             if let Some((hunk, lines_added, lines_removed)) =
@@ -6107,14 +5947,6 @@ impl CodeReviewView {
                     DiffMode::OtherBranch(branch_name) => DiffBase::BranchName(branch_name),
                 };
 
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::AddToContext {
-                        origin: AddToContextOrigin::Gutter,
-                        destination: CodeReviewContextDestination::AgentAttachment,
-                        diff_set_scope: None,
-                    },
-                    ctx
-                );
                 // Create the DiffHunk attachment
                 let attachment = AIAgentAttachment::DiffHunk {
                     file_path: filename.clone(),
@@ -6803,14 +6635,6 @@ impl CodeReviewView {
             None,
         );
 
-        send_telemetry_from_ctx!(
-            TelemetryEvent::CodePanelsFileOpened {
-                entrypoint: CodePanelsFileOpenEntrypoint::CodeReview,
-                target: target.clone(),
-            },
-            ctx
-        );
-
         ctx.emit(CodeReviewViewEvent::OpenFileWithTarget {
             path: full_path,
             target,
@@ -7113,23 +6937,6 @@ impl TypedActionView for CodeReviewView {
                 ctx.notify();
             }
             CodeReviewAction::ToggleMaximize => {
-                // Determine if we're minimizing or maximizing
-                let is_currently_maximized = self
-                    .focus_handle
-                    .as_ref()
-                    .is_some_and(|h| h.is_maximized(ctx));
-
-                let state_change = if is_currently_maximized {
-                    PaneStateChange::Minimized
-                } else {
-                    PaneStateChange::Maximized
-                };
-
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::PaneStateChanged { state_change },
-                    ctx
-                );
-
                 ctx.emit(CodeReviewViewEvent::Pane(PaneEvent::ToggleMaximized));
             }
             CodeReviewAction::SaveAllFiles { paths } => {
@@ -7323,48 +7130,18 @@ impl TypedActionView for CodeReviewView {
                 }
             }
             CodeReviewAction::OpenCommitDialog => {
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::GitButtonTriggered {
-                        button: GitButtonKind::Commit,
-                    },
-                    ctx
-                );
                 self.open_git_dialog(GitDialogKind::Commit, ctx);
             }
             CodeReviewAction::PublishBranch => {
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::GitButtonTriggered {
-                        button: GitButtonKind::Publish,
-                    },
-                    ctx
-                );
                 self.open_git_dialog(GitDialogKind::Push { publish: true }, ctx);
             }
             CodeReviewAction::OpenPushDialog => {
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::GitButtonTriggered {
-                        button: GitButtonKind::Push,
-                    },
-                    ctx
-                );
                 self.open_git_dialog(GitDialogKind::Push { publish: false }, ctx);
             }
             CodeReviewAction::OpenCreatePrDialog => {
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::GitButtonTriggered {
-                        button: GitButtonKind::CreatePr,
-                    },
-                    ctx
-                );
                 self.open_git_dialog(GitDialogKind::CreatePr, ctx);
             }
             CodeReviewAction::ViewPr(url) => {
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::GitButtonTriggered {
-                        button: GitButtonKind::ViewPr,
-                    },
-                    ctx
-                );
                 ctx.open_url(url);
             }
             CodeReviewAction::ToggleGitOperationsMenu => {

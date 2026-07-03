@@ -1,24 +1,13 @@
-use crate::{
-    auth::auth_state::AuthState,
-    send_telemetry_on_executor,
-    server::telemetry::{DownloadSource, TelemetryEvent},
-};
+use crate::{auth::auth_state::AuthState, server::telemetry::DownloadSource};
 use std::sync::Arc;
 use warpui::r#async::executor::Background;
 
 /// Determine the Warp download method (if possible) and send a telemetry event reporting that
 /// method
-pub fn determine_and_report(auth_state: Arc<AuthState>, executor: Arc<Background>) {
-    let telemetry_executor = executor.clone();
+pub fn determine_and_report(_auth_state: Arc<AuthState>, executor: Arc<Background>) {
     executor
         .spawn(async move {
-            let download_source = check_download_source().await;
-
-            send_telemetry_on_executor!(
-                auth_state,
-                TelemetryEvent::DownloadSource(download_source),
-                telemetry_executor
-            );
+            check_download_source().await;
         })
         .detach();
 }

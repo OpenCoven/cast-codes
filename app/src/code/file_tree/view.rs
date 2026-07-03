@@ -17,7 +17,6 @@ use warp_util::path::LineAndColumnArg;
 use warp_util::standardized_path::StandardizedPath;
 
 use repo_metadata::repositories::DetectedRepositories;
-use warp_core::send_telemetry_from_ctx;
 use warpui::elements::{
     AcceptedByDropTarget, Align, Clipped, ConstrainedBox, Container, Dismiss, Draggable,
     DraggableState, Empty, FormattedTextElement, MainAxisAlignment, Percentage, Rect, SavePosition,
@@ -44,8 +43,6 @@ use warpui::{BlurContext, ModelHandle};
 use crate::code::active_file::{ActiveFileEvent, ActiveFileModel};
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
 use crate::editor::{EditorOptions, EditorView, TextOptions};
-#[cfg(feature = "local_fs")]
-use crate::server::telemetry::CodePanelsFileOpenEntrypoint;
 use crate::terminal::input::InputDropTargetData;
 use crate::terminal::view::{TerminalDropTargetData, TerminalView};
 use crate::ui_components::item_highlight::{ImageOrIcon, ItemHighlightState};
@@ -59,7 +56,6 @@ use crate::util::openable_file_type::{
 use crate::{
     appearance::Appearance,
     menu::{Menu, MenuItem, MenuItemFields},
-    server::telemetry::TelemetryEvent,
     ui_components::icons::Icon,
     view_components::DismissibleToast,
     workspace::ToastStack,
@@ -2246,14 +2242,6 @@ impl FileTreeView {
             )
         };
 
-        send_telemetry_from_ctx!(
-            TelemetryEvent::CodePanelsFileOpened {
-                entrypoint: CodePanelsFileOpenEntrypoint::ProjectExplorer,
-                target: target.clone(),
-            },
-            ctx
-        );
-
         ctx.emit(FileTreeEvent::OpenFile {
             path: path.to_path_buf(),
             target,
@@ -2474,19 +2462,13 @@ impl FileTreeView {
         let Some(root_dir) = self.root_directories.get(&id.root) else {
             return;
         };
-        let Some(item) = root_dir.items.get(id.index) else {
+        if root_dir.items.get(id.index).is_none() {
             return;
-        };
+        }
 
         let Some(relative_path) = self.relative_path_for_item(id) else {
             return;
         };
-
-        let is_directory = matches!(item, FileTreeItem::DirectoryHeader { .. });
-        send_telemetry_from_ctx!(
-            TelemetryEvent::FileTreeItemAttachedAsContext { is_directory },
-            ctx
-        );
 
         ctx.emit(FileTreeEvent::AttachAsContext {
             path: relative_path,

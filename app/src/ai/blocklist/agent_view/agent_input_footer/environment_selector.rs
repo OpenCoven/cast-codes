@@ -1,7 +1,6 @@
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
 use settings::Setting;
-use warp_core::send_telemetry_from_ctx;
 use warp_core::ui::color::blend::Blend;
 use warp_core::ui::theme::Fill;
 use warpui::{
@@ -16,7 +15,6 @@ use warpui::{
 use std::sync::Arc;
 
 use crate::{
-    ai::ambient_agents::telemetry::CloudAgentTelemetryEvent,
     ai::{
         cloud_agent_settings::CloudAgentSettings, cloud_environments::CloudAmbientAgentEnvironment,
     },
@@ -240,10 +238,6 @@ impl EnvironmentSelector {
                     .downcast_ref::<NewEnvironmentMenuItem>()
                     .is_some()
                 {
-                    send_telemetry_from_ctx!(
-                        CloudAgentTelemetryEvent::OpenedEnvironmentManagementPane,
-                        ctx
-                    );
                     me.set_menu_visibility(false, ctx);
                     ctx.emit(EnvironmentSelectorEvent::OpenEnvironmentManagementPane);
                     return;
@@ -255,12 +249,6 @@ impl EnvironmentSelector {
                     .as_any()
                     .downcast_ref::<EnvironmentMenuItem>()
                 {
-                    send_telemetry_from_ctx!(
-                        CloudAgentTelemetryEvent::EnvironmentSelected {
-                            environment_id: env_item.id.into_server(),
-                        },
-                        ctx
-                    );
                     if me.is_configuring(ctx) {
                         me.target.set_environment_id(Some(env_item.id), true, ctx);
                         // Persist the selection to settings for next time.
@@ -360,7 +348,6 @@ impl EnvironmentSelector {
 
         self.is_menu_open = is_open;
         if is_open {
-            send_telemetry_from_ctx!(CloudAgentTelemetryEvent::EnvironmentSelectorOpened, ctx);
             ctx.focus(&self.dropdown);
             self.highlight_selected_environment(ctx);
         }

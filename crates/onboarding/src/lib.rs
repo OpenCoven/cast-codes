@@ -4,7 +4,6 @@ mod agent_onboarding_view;
 pub mod callout;
 mod model;
 pub mod slides;
-pub mod telemetry;
 
 /// The user's intention selected during onboarding slides.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,13 +41,6 @@ pub const AI_FEATURES: &[&str] = &[
 /// surfaces that need it.
 pub const WARP_DRIVE_FEATURES: &[&str] = &["Cast Drive", "Session Sharing"];
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "bin")] {
-        mod telemetry_provider;
-        pub use telemetry_provider::MockTelemetryContextProvider;
-    }
-}
-
 pub mod components;
 mod visuals;
 
@@ -73,7 +65,6 @@ impl std::fmt::Display for SessionDefault {
 pub use agent_onboarding_view::{AgentOnboardingAction, AgentOnboardingEvent, AgentOnboardingView};
 pub use model::{OnboardingAuthState, SelectedSettings, UICustomizationSettings};
 pub use slides::ProjectOnboardingSettings;
-pub use telemetry::OnboardingEvent;
 
 pub fn init(app: &mut warpui::AppContext) {
     agent_onboarding_view::init(app);

@@ -1,5 +1,4 @@
 use super::Slide;
-use crate::server::telemetry::TelemetryEvent;
 use std::rc::Rc;
 use warpui::ViewContext;
 
@@ -10,8 +9,6 @@ type CustomCallback<S> = Rc<dyn Fn(&mut ViewContext<super::LaunchModal<S>>)>;
 pub struct CTAButton<S: Slide> {
     pub label: String,
     pub action: CTAButtonAction<S>,
-    #[allow(dead_code)]
-    pub telemetry_event: Option<TelemetryEvent>,
 }
 
 impl<S: Slide> CTAButton<S> {
@@ -20,7 +17,6 @@ impl<S: Slide> CTAButton<S> {
         Self {
             label: label.into(),
             action: CTAButtonAction::NextSlide(next),
-            telemetry_event: None,
         }
     }
 
@@ -28,7 +24,6 @@ impl<S: Slide> CTAButton<S> {
         Self {
             label: label.into(),
             action: CTAButtonAction::Close,
-            telemetry_event: None,
         }
     }
 
@@ -37,7 +32,6 @@ impl<S: Slide> CTAButton<S> {
         Self {
             label: label.into(),
             action: CTAButtonAction::OpenUrl(url.into()),
-            telemetry_event: None,
         }
     }
 
@@ -48,14 +42,7 @@ impl<S: Slide> CTAButton<S> {
         Self {
             label: label.into(),
             action: CTAButtonAction::Custom(Rc::new(callback)),
-            telemetry_event: None,
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn with_telemetry(mut self, event: TelemetryEvent) -> Self {
-        self.telemetry_event = Some(event);
-        self
     }
 }
 

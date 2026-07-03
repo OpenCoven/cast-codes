@@ -11,29 +11,21 @@ use futures::FutureExt;
 use warpui::r#async::FutureExt as AsyncFutureExt;
 use warpui::{AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
 
-use crate::ai::agent::redaction::redact_secrets;
-use crate::ai::agent::{
-    conversation::AIConversationId, AIAgentAction, AIAgentActionType, GrepResult, ServerOutputId,
-};
-use crate::ai::blocklist::{
-    telemetry_banner::should_collect_ai_ugc_telemetry, BlocklistAIPermissions,
-};
+use crate::ai::agent::{AIAgentAction, AIAgentActionType, GrepResult};
+use crate::ai::blocklist::BlocklistAIPermissions;
 use crate::ai::paths::{host_native_absolute_path, shell_native_absolute_path};
 use crate::terminal::model::session::ExecuteCommandOptions;
-use crate::PrivacySettings;
 use crate::{
     ai::agent::{AIAgentActionResultType, GrepFileMatch, GrepLineMatch},
-    send_telemetry_from_app_ctx,
     terminal::{
         model::session::active_session::ActiveSession, model::session::Session, shell::ShellType,
         ShellLaunchData,
     },
-    TelemetryEvent,
 };
 
 use super::{
-    get_server_output_id, is_file_path, is_git_repository, ActionExecution, AnyActionExecution,
-    ExecuteActionInput, PreprocessActionInput,
+    is_file_path, is_git_repository, ActionExecution, AnyActionExecution, ExecuteActionInput,
+    PreprocessActionInput,
 };
 
 const GREP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -47,10 +39,8 @@ fn powershell_escape_double_quotes(s: &str) -> String {
     s.replace('"', "`\"")
 }
 
-/// Information about the Grep call that resulted in an error, used to send
-/// telemetry about the error.
+/// Information about the Grep call that resulted in an error.
 struct GrepError {
-    command: Option<String>,
     output: Option<String>,
     /// The error message from the Grep call. This should NOT contain UGC.
     error: GrepErrorType,
@@ -66,7 +56,6 @@ impl GrepError {
     /// contain UGC.
     pub fn new(error_message: String) -> Self {
         Self {
-            command: None,
             output: None,
             error: GrepErrorType::Other(error_message),
         }
@@ -74,15 +63,9 @@ impl GrepError {
 
     pub fn new_for_non_zero_exit_code() -> Self {
         Self {
-            command: None,
             output: None,
             error: GrepErrorType::NonZeroExitCode,
         }
-    }
-
-    pub fn with_command(mut self, command: String) -> Self {
-        self.command = Some(command);
-        self
     }
 
     pub fn with_output(mut self, output: String) -> Self {
@@ -118,77 +101,6 @@ impl GrepError {
             } => error.clone(),
         }
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn create_redacted_grep_error_event(
-    should_collect_ugc: bool,
-    server_output_id: Option<ServerOutputId>,
-    mut queries: Vec<String>,
-    mut path: String,
-    shell_type: Option<ShellType>,
-    mut working_directory: Option<String>,
-    mut absolute_path: String,
-    mut error: GrepError,
-) -> TelemetryEvent {
-    for query in queries.iter_mut() {
-        redact_secrets(query);
-    }
-    redact_secrets(&mut path);
-    if let Some(working_directory) = working_directory.as_mut() {
-        redact_secrets(working_directory);
-    }
-    redact_secrets(&mut absolute_path);
-    if let Some(command) = error.command.as_mut() {
-        redact_secrets(command);
-    }
-    if let Some(output) = error.output.as_mut() {
-        redact_secrets(output);
-    }
-
-    TelemetryEvent::GrepToolFailed {
-        queries: should_collect_ugc.then_some(queries),
-        path: should_collect_ugc.then_some(path),
-        shell_type,
-        working_directory: should_collect_ugc.then_some(working_directory).flatten(),
-        absolute_path: should_collect_ugc.then_some(absolute_path),
-        error: error.error_message().to_string(),
-        command: should_collect_ugc.then_some(error.command).flatten(),
-        output: should_collect_ugc.then_some(error.output).flatten(),
-        server_output_id,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn log_grep_error(
-    conversation_id: AIConversationId,
-    queries: Vec<String>,
-    path: String,
-    shell_type: Option<ShellType>,
-    working_directory: Option<String>,
-    absolute_path: String,
-    error: GrepError,
-    ctx: &mut AppContext,
-) {
-    let should_collect_ugc = should_collect_ai_ugc_telemetry(
-        ctx,
-        PrivacySettings::handle(ctx)
-            .as_ref(ctx)
-            .is_telemetry_enabled,
-    );
-    let server_output_id = get_server_output_id(conversation_id, ctx);
-
-    let event = create_redacted_grep_error_event(
-        should_collect_ugc,
-        server_output_id,
-        queries,
-        path,
-        shell_type,
-        working_directory,
-        absolute_path,
-        error,
-    );
-    send_telemetry_from_app_ctx!(event, ctx);
 }
 
 pub struct GrepExecutor {
@@ -254,7 +166,6 @@ impl GrepExecutor {
         };
 
         let shell_launch_data = self.active_session.as_ref(ctx).shell_launch_data(ctx);
-        let shell_type = self.active_session.as_ref(ctx).shell_type(ctx);
         let current_working_directory = self
             .active_session
             .as_ref(ctx)
@@ -268,12 +179,7 @@ impl GrepExecutor {
 
         let session = self.active_session.as_ref(ctx).session(ctx);
 
-        let path_clone = path.clone();
         let queries_clone = queries.clone();
-        let other_queries_clone = queries.clone();
-        let absolute_path_clone = absolute_path.clone();
-        let working_directory_clone = current_working_directory.clone();
-        let conversation_id_clone = input.conversation_id;
         ActionExecution::new_async(
             async move {
                 match run_grep(queries_clone, absolute_path, session, shell_launch_data)
@@ -284,42 +190,16 @@ impl GrepExecutor {
                     Err(_) => Err(GrepError::new("Grep operation timed out".to_string())),
                 }
             },
-            move |result, ctx| match result {
+            move |result, _ctx| match result {
                 Ok(grep_result) => {
-                    match grep_result {
-                        GrepResult::Error(ref e) => {
-                            log::warn!("Executing grep resulted in error: {e:?}");
-                            log_grep_error(
-                                conversation_id_clone,
-                                other_queries_clone,
-                                path_clone,
-                                shell_type,
-                                working_directory_clone,
-                                absolute_path_clone,
-                                GrepError::new(e.to_string()),
-                                ctx,
-                            );
-                        }
-                        GrepResult::Success { .. } => {
-                            send_telemetry_from_app_ctx!(TelemetryEvent::GrepToolSucceeded, ctx);
-                        }
-                        _ => {}
+                    if let GrepResult::Error(ref e) = grep_result {
+                        log::warn!("Executing grep resulted in error: {e:?}");
                     }
                     AIAgentActionResultType::Grep(grep_result)
                 }
                 Err(e) => {
                     log::warn!("Failed to execute grep: {:?}", e.error_message());
                     let error_for_conversation = e.error_for_conversation();
-                    log_grep_error(
-                        conversation_id_clone,
-                        other_queries_clone,
-                        path_clone,
-                        shell_type,
-                        working_directory_clone,
-                        absolute_path_clone,
-                        e,
-                        ctx,
-                    );
                     AIAgentActionResultType::Grep(GrepResult::Error(error_for_conversation))
                 }
             },
@@ -495,7 +375,7 @@ async fn run_git_grep_command(
             ExecuteCommandOptions::default(),
         )
         .await
-        .map_err(|e| GrepError::new(e.to_string()).with_command(grep_command.clone()))?;
+        .map_err(|e| GrepError::new(e.to_string()))?;
     let output = String::from_utf8_lossy(command_output.output());
 
     if command_output.success() {
@@ -505,11 +385,7 @@ async fn run_git_grep_command(
             Some(execute_directory.to_string()),
         )
         .map(|matched_files| GrepResult::Success { matched_files })
-        .map_err(|e| {
-            GrepError::new(e.to_string())
-                .with_command(grep_command)
-                .with_output(output.into())
-        })
+        .map_err(|e| GrepError::new(e.to_string()).with_output(output.into()))
     } else if command_output
         .exit_code()
         .is_some_and(|exit_code| exit_code.value() == 1)
@@ -520,9 +396,7 @@ async fn run_git_grep_command(
             matched_files: vec![],
         })
     } else {
-        Err(GrepError::new_for_non_zero_exit_code()
-            .with_command(grep_command)
-            .with_output(output.into()))
+        Err(GrepError::new_for_non_zero_exit_code().with_output(output.into()))
     }
 }
 
@@ -554,7 +428,7 @@ async fn run_grep_command(
             ExecuteCommandOptions::default(),
         )
         .await
-        .map_err(|e| GrepError::new(e.to_string()).with_command(grep_command.clone()))?;
+        .map_err(|e| GrepError::new(e.to_string()))?;
     let output = String::from_utf8_lossy(command_output.output());
 
     if command_output.success() {
@@ -564,11 +438,7 @@ async fn run_grep_command(
             Some(execute_directory.to_string()),
         )
         .map(|matched_files| GrepResult::Success { matched_files })
-        .map_err(|e| {
-            GrepError::new(e.to_string())
-                .with_command(grep_command)
-                .with_output(output.into())
-        })
+        .map_err(|e| GrepError::new(e.to_string()).with_output(output.into()))
     } else if command_output
         .exit_code()
         .is_some_and(|exit_code| exit_code.value() == 1)
@@ -579,9 +449,7 @@ async fn run_grep_command(
             matched_files: vec![],
         })
     } else {
-        Err(GrepError::new_for_non_zero_exit_code()
-            .with_command(grep_command)
-            .with_output(output.into()))
+        Err(GrepError::new_for_non_zero_exit_code().with_output(output.into()))
     }
 }
 
@@ -613,7 +481,7 @@ async fn run_select_string_command(
             ExecuteCommandOptions::default(),
         )
         .await
-        .map_err(|e| GrepError::new(e.to_string()).with_command(select_string_command.clone()))?;
+        .map_err(|e| GrepError::new(e.to_string()))?;
     let output = String::from_utf8_lossy(command_output.output());
 
     if command_output.success() {
@@ -623,15 +491,9 @@ async fn run_select_string_command(
             Some(execute_directory.to_string()),
         )
         .map(|matched_files| GrepResult::Success { matched_files })
-        .map_err(|e| {
-            GrepError::new(e.to_string())
-                .with_command(select_string_command)
-                .with_output(output.into())
-        })
+        .map_err(|e| GrepError::new(e.to_string()).with_output(output.into()))
     } else {
-        Err(GrepError::new_for_non_zero_exit_code()
-            .with_command(select_string_command)
-            .with_output(output.into()))
+        Err(GrepError::new_for_non_zero_exit_code().with_output(output.into()))
     }
 }
 
@@ -689,7 +551,3 @@ fn parse_grep_output(
 impl Entity for GrepExecutor {
     type Event = ();
 }
-
-#[cfg(test)]
-#[path = "grep_tests.rs"]
-mod tests;

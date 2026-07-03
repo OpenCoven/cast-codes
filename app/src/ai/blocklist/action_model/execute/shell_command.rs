@@ -15,6 +15,7 @@ use warp_util::path::ShellFamily;
 use warpui::r#async::{Spawnable, Timer};
 use warpui::{Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
 
+use super::{ActionExecution, AnyActionExecution, ExecuteActionInput, PreprocessActionInput};
 use crate::ai::agent::{
     AIAgentActionId, AIAgentActionType, AIAgentPtyWriteMode, ReadShellCommandOutputResult,
     RequestCommandOutputResult, ShellCommandDelay, ShellCommandError,
@@ -36,9 +37,6 @@ use crate::{
         TerminalModel,
     },
 };
-use crate::{send_telemetry_from_ctx, TelemetryEvent};
-
-use super::{ActionExecution, AnyActionExecution, ExecuteActionInput, PreprocessActionInput};
 
 pub struct ShellCommandExecutor {
     active_session: ModelHandle<ActiveSession>,
@@ -133,13 +131,7 @@ impl ShellCommandExecutor {
                     Some(self.terminal_view_id),
                     ctx,
                 );
-                if let CommandExecutionPermission::Allowed(reason) = autoexecution_permission {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::AutoexecutedAgentModeRequestedCommand { reason },
-                        ctx
-                    );
-                } else if let CommandExecutionPermission::Denied(reason) = autoexecution_permission
-                {
+                if let CommandExecutionPermission::Denied(reason) = autoexecution_permission {
                     if AppExecutionMode::as_ref(ctx).is_autonomous() {
                         log::warn!(
                             "Command denied during autonomous execution, reason: {reason:?}"
@@ -169,17 +161,6 @@ impl ShellCommandExecutor {
                             .has_agent_written_to_block(),
                         _ => false,
                     };
-
-                    if should_autoexecute {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::CLISubagentActionExecuted {
-                                conversation_id: input.conversation_id,
-                                block_id: block_id.clone(),
-                                is_autoexecuted: true,
-                            },
-                            ctx
-                        );
-                    }
 
                     should_autoexecute
                 }

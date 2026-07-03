@@ -3,7 +3,6 @@ use crate::auth::auth_manager::AuthManager;
 use crate::auth::AuthStateProvider;
 use crate::search::item::SearchItem;
 use crate::server::server_api::ServerApiProvider;
-use crate::server::telemetry::context_provider::AppTelemetryContextProvider;
 use ordered_float::OrderedFloat;
 use std::collections::HashSet;
 use std::time::Duration;
@@ -152,7 +151,6 @@ impl AsyncDataSource for QueryDrivenDelayedAsyncSource {
 fn initialize_app(app: &mut App) {
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);
 }
 

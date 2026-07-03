@@ -9,7 +9,6 @@ use anyhow::Result;
 use chrono::Local;
 use log::LevelFilter;
 use std::sync::OnceLock;
-use warp_core::features::FeatureFlag;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use crate::{LogConfig, LogDestination};
@@ -129,7 +128,7 @@ pub fn on_parent_process_crash() {
     );
 }
 
-/// Rotates the log and telemetry files, such that:
+/// Rotates the log files, such that:
 /// - Each file stores the logs of a single execution.
 /// - The .old files store the previous executions, with larger suffixes indicating older executions.
 pub async fn rotate_log_files() {
@@ -142,12 +141,6 @@ pub async fn rotate_log_files() {
 
     if let Err(err) = rotate_files(&ChannelState::logfile_name(), max_rotation).await {
         log::error!("Failed to rotate log files: {err:?}");
-    }
-
-    if FeatureFlag::SendTelemetryToFile.is_enabled()
-        && let Err(err) = rotate_files(&ChannelState::telemetry_file_name(), max_rotation).await
-    {
-        log::error!("Failed to rotate telemetry files: {err:?}");
     }
 }
 

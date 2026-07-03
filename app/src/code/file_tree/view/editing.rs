@@ -12,13 +12,9 @@ use warp_util::standardized_path::StandardizedPath;
 use warpui::{elements::MouseStateHandle, SingletonEntity as _, ViewContext};
 
 use super::{FileTreeIdentifier, FileTreeItem, FileTreeView};
-use crate::{
-    code::file_tree::{
-        view::{PendingEdit, PendingEditKind},
-        FileTreeEvent,
-    },
-    send_telemetry_from_ctx,
-    server::telemetry::TelemetryEvent,
+use crate::code::file_tree::{
+    view::{PendingEdit, PendingEditKind},
+    FileTreeEvent,
 };
 
 /// Custom ordering function for items in the file tree.
@@ -248,8 +244,6 @@ impl FileTreeView {
                         } else {
                             metadata.path = Arc::new(new_std);
 
-                            send_telemetry_from_ctx!(TelemetryEvent::FileTreeItemCreated, ctx);
-
                             Some(FileTreeEntryState::File(metadata.clone()))
                         }
                     } else {
@@ -295,8 +289,6 @@ impl FileTreeView {
                             directory.path = Arc::new(new_std.clone());
                             directory.loaded = true;
                             created_path = Some(new_std);
-
-                            send_telemetry_from_ctx!(TelemetryEvent::FileTreeItemCreated, ctx);
 
                             Some(FileTreeEntryState::Directory(directory.clone()))
                         }

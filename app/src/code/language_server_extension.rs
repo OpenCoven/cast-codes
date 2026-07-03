@@ -26,8 +26,6 @@ use crate::code::local_code_editor::{
 use crate::editor::InteractionState;
 
 use super::editor::view::{CodeEditorRenderOptions, CodeEditorView};
-use super::lsp_telemetry::LspTelemetryEvent;
-use warp_core::send_telemetry_from_ctx;
 
 /// A processed diagnostic with its converted offset range.
 /// Stored on LocalCodeEditorView and used for both decoration and hover display.
@@ -431,19 +429,6 @@ impl LocalCodeEditorView {
                 if segments.is_empty() && diagnostics.is_empty() {
                     me.lsp_hover_state.clear();
                 } else {
-                    let had_content = !segments.is_empty();
-                    let had_diagnostics = !diagnostics.is_empty();
-                    if let Some(server) = me.lsp_server.as_ref() {
-                        send_telemetry_from_ctx!(
-                            LspTelemetryEvent::HoverShown {
-                                server_type: server.as_ref(ctx).server_name(),
-                                had_content,
-                                had_diagnostics,
-                            },
-                            ctx
-                        );
-                    }
-
                     let editor = me.editor().as_ref(ctx);
 
                     // Determine the offset range for positioning the tooltip.

@@ -6,16 +6,13 @@ use crate::ai::conversation_status_ui::render_status_element;
 use crate::code::editor::{add_color, remove_color};
 use crate::code::icon_from_file_path;
 use crate::safe_triangle::SafeTriangle;
-use crate::send_telemetry_from_app_ctx;
 use crate::terminal::cli_agent_sessions::listener::agent_supports_rich_status;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::view::TerminalViewState;
 use crate::terminal::CLIAgent;
 use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
 use crate::ui_components::icon_with_status::{render_icon_with_status, IconWithStatusVariant};
-use crate::workspace::view::vertical_tabs::telemetry::{
-    VerticalTabsChipEntrypoint, VerticalTabsTelemetryEvent,
-};
+use crate::workspace::view::vertical_tabs::telemetry::VerticalTabsChipEntrypoint;
 use crate::FeatureFlag;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -58,7 +55,6 @@ use pathfinder_geometry::vector::{vec2f, Vector2F};
 use settings::Setting as _;
 use std::path::{Path, PathBuf};
 use warp_core::context_flag::ContextFlag;
-use warp_core::telemetry::TelemetryEvent as _;
 use warp_core::ui::color::blend::Blend;
 use warp_core::ui::color::coloru_with_opacity;
 use warp_core::ui::theme::color::internal_colors;
@@ -4271,7 +4267,7 @@ fn render_terminal_diff_stats_badge(
     git_line_changes: &GitLineChanges,
     pane_group_id: EntityId,
     pane_id: PaneId,
-    entrypoint: VerticalTabsChipEntrypoint,
+    _entrypoint: VerticalTabsChipEntrypoint,
     mouse_state: MouseStateHandle,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
@@ -4288,11 +4284,7 @@ fn render_terminal_diff_stats_badge(
             bg,
         )
     })
-    .on_click(move |ctx, app, _| {
-        send_telemetry_from_app_ctx!(
-            VerticalTabsTelemetryEvent::DiffStatsChipClicked { entrypoint },
-            app
-        );
+    .on_click(move |ctx, _app, _| {
         let locator = PaneViewLocator {
             pane_group_id,
             pane_id,
@@ -4307,7 +4299,7 @@ fn render_terminal_diff_stats_badge(
 fn render_terminal_pull_request_badge(
     label: String,
     url: String,
-    entrypoint: VerticalTabsChipEntrypoint,
+    _entrypoint: VerticalTabsChipEntrypoint,
     mouse_state: MouseStateHandle,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
@@ -4321,11 +4313,7 @@ fn render_terminal_pull_request_badge(
         };
         render_badge_container(render_pull_request_badge_content(&label, appearance), bg)
     })
-    .on_click(move |ctx, app, _| {
-        send_telemetry_from_app_ctx!(
-            VerticalTabsTelemetryEvent::PrChipClicked { entrypoint },
-            app
-        );
+    .on_click(move |ctx, _app, _| {
         ctx.dispatch_typed_action(WorkspaceAction::OpenLink(url.clone()));
     })
     .with_cursor(Cursor::PointingHand)

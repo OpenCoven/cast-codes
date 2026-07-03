@@ -28,5 +28,4 @@ pub mod index;
 pub mod paths;
 pub mod project_context;
 pub mod skills;
-mod telemetry;
 pub mod workspace;

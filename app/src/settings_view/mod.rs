@@ -1,8 +1,5 @@
-use self::telemetry::SettingsTelemetryEvent;
 use crate::pane_group::focus_state::PaneFocusHandle;
-use crate::server::telemetry::MCPServerCollectionPaneEntrypoint;
 use crate::settings_view::mcp_servers_page::MCPServersSettingsPage;
-use crate::TelemetryEvent;
 use crate::{
     ai::execution_profiles::profiles::ClientProfileId,
     appearance::Appearance,
@@ -48,7 +45,6 @@ use show_blocks_view::{ShowBlocksEvent, ShowBlocksView};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use warp_core::send_telemetry_from_ctx;
 use warp_core::{
     channel::ChannelState, context_flag::ContextFlag, features::FeatureFlag,
     settings::ToggleableSetting as _, ui::theme::color::internal_colors,
@@ -97,7 +93,6 @@ mod referrals_page;
 mod settings_file_footer;
 pub(crate) mod settings_page;
 mod show_blocks_view;
-mod telemetry;
 pub mod update_environment_form;
 mod warp_drive_page;
 mod warpify_page;
@@ -1816,8 +1811,6 @@ impl SettingsView {
         if self.settings_page(page_section).is_none() {
             return;
         }
-        let previous_section = self.current_settings_page;
-
         ctx.enable_key_bindings_dispatching();
 
         if let Some(current_page) = self.current_settings_page() {
@@ -1835,9 +1828,6 @@ impl SettingsView {
             self.clear_search_query(ctx);
         }
         self.current_settings_page = section;
-        if previous_section != section && section == SettingsSection::CloudEnvironments {
-            send_telemetry_from_ctx!(SettingsTelemetryEvent::EnvironmentsPageOpened, ctx);
-        }
 
         // When navigating to a subpage, update the backing page's active subpage mode
         // and auto-expand the umbrella containing it.
@@ -2438,15 +2428,6 @@ impl TypedActionView for SettingsView {
         match action {
             SettingsAction::SelectAndRefresh(section) => {
                 self.set_and_refresh_current_page_internal(*section, false, true, ctx);
-
-                if *section == SettingsSection::MCPServers {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::MCPServerCollectionPaneOpened {
-                            entrypoint: MCPServerCollectionPaneEntrypoint::MCPSettingsTab,
-                        },
-                        ctx
-                    );
-                }
             }
             SettingsAction::ToggleUmbrella(nav_index) => {
                 if let Some(SettingsNavItem::Umbrella(umbrella)) =

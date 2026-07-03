@@ -39,11 +39,7 @@ use read_skill::ReadSkillExecutor;
 use request_computer_use::RequestComputerUseExecutor;
 pub(crate) use request_file_edits::apply_edits;
 pub(crate) use request_file_edits::FileReadResult;
-pub(crate) use request_file_edits::MalformedFinalLineProxyEvent;
-pub use request_file_edits::{
-    EditAcceptAndContinueClickedEvent, EditAcceptClickedEvent, EditResolvedEvent, EditStats,
-    RequestFileEditsExecutor, RequestFileEditsFormatKind, RequestFileEditsTelemetryEvent,
-};
+pub use request_file_edits::RequestFileEditsExecutor;
 #[cfg(test)]
 pub use run_agents::{compose_run_agents_child_prompt, run_agents_to_start_agent_mode};
 pub use run_agents::{RunAgentsExecutor, RunAgentsExecutorEvent, RunAgentsSpawningSnapshot};
@@ -91,7 +87,7 @@ use crate::{
         agent::{
             conversation::AIConversationId, task::TaskId, AIAgentAction, AIAgentActionId,
             AIAgentActionResult, AIAgentActionResultType, AIAgentActionType, CancellationReason,
-            FileContext, FileLocations, ServerOutputId,
+            FileContext, FileLocations,
         },
         ambient_agents::AmbientAgentTaskId,
         get_relevant_files::controller::GetRelevantFilesController,
@@ -102,7 +98,6 @@ use crate::{
         shell::ShellType,
         ShellLaunchData, TerminalModel,
     },
-    BlocklistAIHistoryModel,
 };
 
 /// Types of actions that can be executed in parallel.
@@ -1311,17 +1306,6 @@ async fn is_git_repository(absolute_path: &str, session: &Session) -> anyhow::Re
         )
         .await?;
     Ok(command_output.success())
-}
-
-fn get_server_output_id(
-    conversation_id: AIConversationId,
-    ctx: &mut AppContext,
-) -> Option<ServerOutputId> {
-    BlocklistAIHistoryModel::as_ref(ctx)
-        .conversation(&conversation_id)?
-        .latest_exchange()?
-        .output_status
-        .server_output_id()
 }
 
 #[cfg(feature = "local_fs")]

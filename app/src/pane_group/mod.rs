@@ -106,6 +106,7 @@ use crate::app_state::{
 use crate::appearance::Appearance;
 use crate::banner::{Banner, BannerEvent, BannerState, BannerTextContent, DismissalType};
 use crate::channel::{Channel, ChannelState};
+use crate::cmd_or_ctrl_shift;
 use crate::code::view::CodeView;
 use crate::drive::items::WarpDriveItemId;
 use crate::drive::{CloudObjectTypeAndId, OpenWarpDriveObjectArgs};
@@ -117,9 +118,7 @@ use crate::resource_center::{
     mark_feature_used_and_write_to_user_defaults, Tip, TipAction, TipsCompleted,
 };
 use crate::server::ids::{ObjectUid, SyncId};
-use crate::server::telemetry::{
-    AnonymousUserSignupEntrypoint, PaletteSource, SharingDialogSource, TelemetryEvent,
-};
+use crate::server::telemetry::{AnonymousUserSignupEntrypoint, PaletteSource, SharingDialogSource};
 use crate::session_management::SessionNavigationData;
 use crate::settings_view::mcp_servers_page::MCPServersSettingsPage;
 use crate::terminal::general_settings::{GeneralSettings, GeneralSettingsChangedEvent};
@@ -136,7 +135,6 @@ use crate::terminal::view::{
 use crate::terminal::{
     MockTerminalManager, ShareBlockModal, ShareBlockModalEvent, ShellLaunchData, ShellLaunchState,
 };
-use crate::{cmd_or_ctrl_shift, send_telemetry_from_ctx};
 use settings::Setting as _;
 
 use crate::code::active_file::ActiveFileModel;
@@ -5748,11 +5746,6 @@ impl PaneGroup {
         focus_new_pane: bool,
         ctx: &mut ViewContext<Self>,
     ) -> Option<PaneId> {
-        if self.pane_count() == 1 {
-            // Only sending telemetry event the first time a user enters split pane in a session.
-            send_telemetry_from_ctx!(TelemetryEvent::SplitPane, ctx);
-        }
-
         self.tips_completed.update(ctx, |tips_completed, ctx| {
             mark_feature_used_and_write_to_user_defaults(
                 Tip::Action(TipAction::SplitPane),

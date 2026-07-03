@@ -11,16 +11,9 @@ use crate::ai::blocklist::inline_action::inline_action_header::HeaderConfig;
 use crate::ai::blocklist::inline_action::requested_action::RenderableAction;
 use crate::ai::persisted_workspace::PersistedWorkspace;
 use crate::appearance::Appearance;
-use crate::code::lsp_telemetry::{LspEnablementSource, LspTelemetryEvent};
-use crate::send_telemetry_from_ctx;
-use crate::server::telemetry::{
-    AgentModeSetupCodebaseContextActionType, AgentModeSetupCreateEnvironmentActionType,
-    AgentModeSetupProjectScopedRulesActionType,
-};
 use crate::ui_components::icons::Icon;
 use crate::view_components::DismissibleToast;
 use crate::workspace::ToastStack;
-use crate::TelemetryEvent;
 use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 use lsp::supported_servers::LSPServerType;
 use lsp_server_selector::{create_lsp_server_selector, LSPServerInfo};
@@ -974,14 +967,6 @@ impl InitStepBlock {
             },
             move |_me, result, ctx| match result {
                 Ok(()) => {
-                    send_telemetry_from_ctx!(
-                        LspTelemetryEvent::ServerInstallCompleted {
-                            server_type: server_type.binary_name().to_string(),
-                            success: true,
-                        },
-                        ctx
-                    );
-
                     PersistedWorkspace::handle(ctx).update(ctx, |workspace, _| {
                         workspace.enable_lsp_server_for_path(&repo_root, server_type);
                     });
@@ -1002,14 +987,6 @@ impl InitStepBlock {
                     });
                 }
                 Err(e) => {
-                    send_telemetry_from_ctx!(
-                        LspTelemetryEvent::ServerInstallCompleted {
-                            server_type: server_type.binary_name().to_string(),
-                            success: false,
-                        },
-                        ctx
-                    );
-
                     ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                         toast_stack.add_ephemeral_toast(
                             DismissibleToast::error(format!(
@@ -1052,12 +1029,6 @@ impl TypedActionView for InitStepBlock {
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
             InitProjectBlockAction::IndexCodebase(directory) => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupCodebaseContextAction {
-                        action: AgentModeSetupCodebaseContextActionType::IndexCodebase,
-                    },
-                    ctx
-                );
                 CodebaseIndexManager::handle(ctx).update(ctx, |manager, ctx| {
                     manager.index_directory(directory.clone(), ctx);
                 });
@@ -1070,12 +1041,6 @@ impl TypedActionView for InitStepBlock {
                 });
             }
             InitProjectBlockAction::SkipIndex => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupCodebaseContextAction {
-                        action: AgentModeSetupCodebaseContextActionType::SkipIndexing,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |model, ctx| {
                     model.mark_step_completed(
                         InitStepKind::CodebaseContext,
@@ -1102,18 +1067,6 @@ impl TypedActionView for InitStepBlock {
                     } else {
                         servers_to_install.push(info.server_type);
                     }
-                }
-
-                // Send telemetry for each enabled server
-                for server_type in enabled_servers.iter().chain(servers_to_install.iter()) {
-                    send_telemetry_from_ctx!(
-                        LspTelemetryEvent::ServerEnabled {
-                            server_type: server_type.binary_name().to_string(),
-                            source: LspEnablementSource::InitFlow,
-                            needed_install: !enabled_servers.contains(server_type),
-                        },
-                        ctx
-                    );
                 }
 
                 // Spawn installation tasks for uninstalled servers
@@ -1164,7 +1117,6 @@ impl TypedActionView for InitStepBlock {
                 });
             }
             InitProjectBlockAction::SkipLanguageServers => {
-                send_telemetry_from_ctx!(LspTelemetryEvent::ServerEnablementSkipped, ctx);
                 self.model.update(ctx, |model, ctx| {
                     model.mark_step_completed(
                         InitStepKind::LanguageServers,
@@ -1174,19 +1126,11 @@ impl TypedActionView for InitStepBlock {
                 });
             }
             InitProjectBlockAction::LinkFromExisting(path) => {
-                let file_name = path
+                let _file_name = path
                     .file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or("")
                     .to_string();
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupProjectScopedRulesAction {
-                        action: AgentModeSetupProjectScopedRulesActionType::LinkFromExisting(
-                            file_name,
-                        ),
-                    },
-                    ctx
-                );
 
                 // Create symlink in background
                 #[cfg(feature = "local_fs")]
@@ -1216,36 +1160,18 @@ impl TypedActionView for InitStepBlock {
                 });
             }
             InitProjectBlockAction::GenerateRules => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupProjectScopedRulesAction {
-                        action: AgentModeSetupProjectScopedRulesActionType::GenerateWarpMd,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |model, ctx| {
                     model.mark_step_running(InitStepKind::ProjectScopedRules, ctx);
                     ctx.emit(InitProjectModelEvent::GenerateProjectRules);
                 });
             }
             InitProjectBlockAction::RegenerateRules => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupProjectScopedRulesAction {
-                        action: AgentModeSetupProjectScopedRulesActionType::RegenerateWarpMd,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |model, ctx| {
                     model.disable_regenerate_button();
                     ctx.emit(InitProjectModelEvent::RegenerateProjectRules);
                 });
             }
             InitProjectBlockAction::SkipRules => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupProjectScopedRulesAction {
-                        action: AgentModeSetupProjectScopedRulesActionType::SkipRules,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |model, ctx| {
                     model.mark_step_completed(
                         InitStepKind::ProjectScopedRules,
@@ -1255,35 +1181,17 @@ impl TypedActionView for InitStepBlock {
                 });
             }
             InitProjectBlockAction::ViewCodebaseContextStatus => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupCodebaseContextAction {
-                        action: AgentModeSetupCodebaseContextActionType::ViewIndexStatus,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |_, ctx| {
                     ctx.emit(InitProjectModelEvent::ViewCodebaseContextStatus);
                 });
             }
             InitProjectBlockAction::StartCreateEnvironment => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupCreateEnvironmentAction {
-                        action: AgentModeSetupCreateEnvironmentActionType::CreateEnvironment,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |model, ctx| {
                     model.mark_step_running(InitStepKind::CreateEnvironment, ctx);
                     ctx.emit(InitProjectModelEvent::CreateEnvironment);
                 });
             }
             InitProjectBlockAction::SkipCreateEnvironment => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModeSetupCreateEnvironmentAction {
-                        action: AgentModeSetupCreateEnvironmentActionType::SkipEnvironment,
-                    },
-                    ctx
-                );
                 self.model.update(ctx, |model, ctx| {
                     model.mark_step_completed(
                         InitStepKind::CreateEnvironment,

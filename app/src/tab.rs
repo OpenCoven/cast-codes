@@ -102,15 +102,6 @@ impl SelectedTabColor {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[allow(clippy::enum_variant_names)]
-pub enum TabTelemetryAction {
-    CloseTab,
-    CloseOtherTabs,
-    CloseTabsToRight,
-    SetColor,
-    ResetColor,
-}
 #[derive(Debug, Clone)]
 pub enum NewSessionMenuItem {
     OpenLaunchConfig(LaunchConfig),

@@ -22,7 +22,6 @@ pub use settings::{
 };
 pub mod session_id;
 pub mod sync_queue;
-pub mod telemetry;
 pub mod ui;
 pub mod user_preferences;
 

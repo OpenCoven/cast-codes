@@ -12,11 +12,7 @@ use crate::{
     ai::{RequestLimitInfo, RequestUsageInfo},
     ai_assistant::utils::{AssistantTranscriptPart, TranscriptPartSubType},
     auth::AuthStateProvider,
-    send_telemetry_from_ctx,
-    server::{
-        server_api::{ai::AIClient, ServerApi},
-        telemetry::{TelemetryEvent, WarpAIRequestResult},
-    },
+    server::server_api::{ai::AIClient, ServerApi},
     workspaces::user_workspaces::UserWorkspaces,
 };
 
@@ -194,9 +190,8 @@ impl Requests {
                     .generate_dialogue_answer(transcript, request_for_api, ai_execution_context)
                     .await)
             },
-            move |model, (start_time, response), ctx| {
+            move |model, (_start_time, response), ctx| {
                 let succeeded = response.is_ok();
-                let end_time = Utc::now();
                 let mut current_request_status = RequestStatus::NotInFlight;
                 std::mem::swap(&mut model.request_status, &mut current_request_status);
                 if let RequestStatus::InFlight { request, .. } = current_request_status {
@@ -235,13 +230,6 @@ impl Requests {
                             // If the transcript was already marked as summarized before,
                             // it will remain so until it's reset.
                             model.current_transcript_summarized |= transcript_summarized;
-
-
-                            let req_latency = end_time.signed_duration_since(start_time).num_milliseconds();
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::WarpAIRequestIssued { result: WarpAIRequestResult::Succeeded { latency_ms: req_latency, truncated }},
-                                ctx
-                            );
                         }
                         Ok(GenerateDialogueResult::Failure { request_limit_info }) if request_limit_info.limit <= request_limit_info.num_requests_used_since_refresh => {
                             cache_request_limit_info(request_limit_info, ctx);
@@ -287,11 +275,6 @@ impl Requests {
                                     },
                                 },
                             });
-
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::WarpAIRequestIssued { result: WarpAIRequestResult::OutOfRequests},
-                                ctx
-                            );
                         }
                         _ => {
                             let response = "We're experiencing technical difficulties right now. Please try again later.".to_owned();
@@ -311,11 +294,6 @@ impl Requests {
                                     },
                                 },
                             });
-
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::WarpAIRequestIssued { result: WarpAIRequestResult::Failed},
-                                ctx
-                            );
                         }
                     }
                 }

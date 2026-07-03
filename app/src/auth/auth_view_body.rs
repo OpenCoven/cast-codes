@@ -5,8 +5,8 @@ use crate::{
     experiments::{AuthFlowInstructions, Experiment},
     modal::MODAL_CORNER_RADIUS,
     network::NetworkStatus,
-    report_error, send_telemetry_from_ctx, send_telemetry_sync_from_ctx,
-    server::telemetry::{AnonymousUserSignupEntrypoint, LoginEventSource, TelemetryEvent},
+    report_error,
+    server::telemetry::AnonymousUserSignupEntrypoint,
     settings::{AISettings, PrivacySettings},
     themes::theme::Fill as ThemeFill,
     util::color::{darken, lighten},
@@ -845,12 +845,6 @@ impl TypedActionView for AuthViewBody {
     fn handle_action(&mut self, action: &AuthViewBodyAction, ctx: &mut ViewContext<Self>) {
         match action {
             AuthViewBodyAction::Login => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::LoginButtonClicked {
-                        source: LoginEventSource::AuthModal,
-                    },
-                    ctx
-                );
                 self.auth_step = AuthStep::BrowserOpen;
 
                 AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
@@ -859,23 +853,9 @@ impl TypedActionView for AuthViewBody {
                 });
             }
             AuthViewBodyAction::InitiateLoginLater => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::LoginLaterButtonClicked {
-                        source: LoginEventSource::AuthModal,
-                    },
-                    ctx
-                );
                 self.loginless_step = LoginlessStep::Initiated;
             }
             AuthViewBodyAction::LoginLater => {
-                // Send synchronously since this is an important event in the sign up funnel and we
-                // don't want to lose events if the user quits before the event queue is flushed.
-                send_telemetry_sync_from_ctx!(
-                    TelemetryEvent::LoginLaterConfirmationButtonClicked {
-                        source: LoginEventSource::AuthModal,
-                    },
-                    ctx
-                );
                 ctx.emit(AuthViewBodyEvent::LoginLaterClicked);
             }
             AuthViewBodyAction::EnterToken => {
@@ -907,9 +887,6 @@ impl TypedActionView for AuthViewBody {
                 }
             }
             AuthViewBodyAction::Signup => {
-                // Send synchronously since this is an important event in the sign up funnel and we
-                // don't want to lose events if the user quits before the event queue is flushed.
-                send_telemetry_sync_from_ctx!(TelemetryEvent::SignUpButtonClicked, ctx);
                 self.auth_step = AuthStep::BrowserOpen;
 
                 AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
@@ -941,14 +918,6 @@ impl TypedActionView for AuthViewBody {
                 ctx.emit(AuthViewBodyEvent::SignUpButtonClicked);
             }
             AuthViewBodyAction::ShowOverlay(overlay) => {
-                if let AuthViewOverlay::PrivacySettings = overlay {
-                    send_telemetry_sync_from_ctx!(
-                        TelemetryEvent::OpenAuthPrivacySettings {
-                            source: LoginEventSource::AuthModal,
-                        },
-                        ctx
-                    );
-                }
                 self.active_overlay = Some(*overlay);
                 ctx.notify();
             }

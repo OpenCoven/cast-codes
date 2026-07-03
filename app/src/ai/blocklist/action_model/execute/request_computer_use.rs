@@ -6,9 +6,6 @@ use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
 
 use crate::ai::agent::{AIAgentActionId, AIAgentActionType};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
-use crate::ai::blocklist::BlocklistAIHistoryModel;
-use crate::send_telemetry_from_ctx;
-use crate::server::telemetry::TelemetryEvent;
 
 use super::{ActionExecution, AnyActionExecution, ExecuteActionInput, PreprocessActionInput};
 
@@ -59,31 +56,18 @@ impl RequestComputerUseExecutor {
     pub(super) fn execute(
         &mut self,
         input: ExecuteActionInput,
-        ctx: &mut ModelContext<Self>,
+        _ctx: &mut ModelContext<Self>,
     ) -> impl Into<AnyActionExecution> {
         let ExecuteActionInput {
             action,
-            conversation_id,
+            conversation_id: _,
         } = input;
         let AIAgentActionType::RequestComputerUse(request) = &action.action else {
             return ActionExecution::InvalidAction;
         };
 
         // If we're executing, that implies that computer use has been approved.
-        let is_autoexecuted = self.autoexecuted_actions.remove(&action.id);
-        let server_conversation_id = BlocklistAIHistoryModel::as_ref(ctx)
-            .conversation(&conversation_id)
-            .and_then(|c| c.server_conversation_token())
-            .map(|t| t.as_str().to_string());
-        send_telemetry_from_ctx!(
-            TelemetryEvent::ComputerUseApproved {
-                client_conversation_id: conversation_id,
-                server_conversation_id,
-                is_autoexecuted,
-                ambient_agent_task_id: self.ambient_agent_task_id,
-            },
-            ctx
-        );
+        self.autoexecuted_actions.remove(&action.id);
 
         let screenshot_params = request.screenshot_params;
         let mut actor = computer_use::create_actor();

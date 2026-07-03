@@ -24,13 +24,11 @@ use crate::{
     pane_group::{
         focus_state::PaneFocusHandle, pane::view, BackingView, PaneConfiguration, PaneEvent,
     },
-    send_telemetry_from_ctx,
     terminal::TerminalView,
     util::bindings::{keybinding_name_to_display_string, BindingGroup, CustomAction},
     view_components::DismissibleToast,
     workspace::ToastStack,
     workspace::{Workspace, WorkspaceAction},
-    TelemetryEvent,
 };
 
 pub fn init(app: &mut AppContext) {
@@ -97,10 +95,6 @@ impl GetStartedView {
         match event {
             ProjectButtonsEvent::OpenRepository(path_result) => match path_result {
                 Ok(path) => {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::OpenRepoFolderSubmitted { is_ftux: true },
-                        ctx
-                    );
                     ctx.dispatch_typed_action(&WorkspaceAction::OpenRepository {
                         path: Some(path.clone()),
                     });
@@ -317,7 +311,6 @@ impl TypedActionView for GetStartedView {
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
             GetStartedAction::TerminalSession => {
-                send_telemetry_from_ctx!(TelemetryEvent::GetStartedSkipToTerminal, ctx);
                 ctx.dispatch_typed_action(&WorkspaceAction::AddTerminalTab {
                     hide_homepage: true,
                 });

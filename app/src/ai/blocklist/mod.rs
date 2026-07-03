@@ -29,7 +29,6 @@ pub mod suggested_agent_mode_workflow_modal;
 pub mod suggested_rule_modal;
 mod suggestion_chip_view;
 pub mod summarization_cancel_dialog;
-pub(crate) mod telemetry;
 pub mod usage;
 
 pub(crate) mod codebase_index_speedbump_banner;
@@ -39,14 +38,13 @@ pub(super) mod view_util;
 #[cfg_attr(target_family = "wasm", allow(unused_imports))]
 pub(crate) use action_model::{
     apply_edits, read_local_file_context, BlocklistAIActionEvent, BlocklistAIActionModel,
-    FileReadResult, ReadFileContextResult, RequestFileEditsFormatKind, ShellCommandExecutor,
-    ShellCommandExecutorEvent, StartAgentExecutor, StartAgentExecutorEvent, StartAgentRequest,
-    StartAgentRequestId,
+    FileReadResult, ReadFileContextResult, ShellCommandExecutor, ShellCommandExecutorEvent,
+    StartAgentExecutor, StartAgentExecutorEvent, StartAgentRequest, StartAgentRequestId,
 };
 
 #[cfg(any(test, feature = "integration_tests"))]
 pub(crate) use block::model::testing::FakeAIBlockModel;
-pub(crate) use block::{init, model, AIBlock, AIBlockEvent, RequestedEditResolution};
+pub(crate) use block::{init, model, AIBlock, AIBlockEvent};
 
 pub(crate) use context_model::{
     block_context_from_terminal_model, AttachmentType, BlocklistAIContextEvent,
@@ -85,6 +83,6 @@ pub use block::toggleable_items;
 pub use controller::input_context::{
     BLOCK_CONTEXT_ATTACHMENT_REGEX, DIFF_HUNK_ATTACHMENT_REGEX, DRIVE_OBJECT_ATTACHMENT_REGEX,
 };
-pub use permissions::{BlocklistAIPermissions, CommandExecutionPermissionAllowedReason};
+pub use permissions::BlocklistAIPermissions;
 pub use suggestion_chip_view::*;
 pub use view_util::error_color;

@@ -4,7 +4,6 @@ pub(crate) mod code_diff_view;
 pub(crate) mod create_or_edit_document;
 pub(crate) mod inline_action_header;
 pub(crate) mod inline_action_icons;
-mod malformed_line_heuristics;
 pub(crate) mod orchestration_controls;
 pub(crate) mod requested_action;
 pub(crate) mod requested_command;

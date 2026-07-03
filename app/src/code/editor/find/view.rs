@@ -6,8 +6,6 @@ use crate::editor::{
     EditorView, Event as EditorEvent, InteractionState, PropagateAndNoOpNavigationKeys,
     SingleLineEditorOptions, TextOptions,
 };
-use crate::send_telemetry_from_ctx;
-use crate::server::telemetry::{FindOption, TelemetryEvent};
 use crate::themes::theme::Fill;
 use crate::ui_components::{blended_colors, icons::Icon};
 use crate::view_components::action_button::{ActionButton, DisabledSecondaryTheme, SecondaryTheme};
@@ -416,13 +414,6 @@ impl CodeEditorFind {
         self.searcher.update(ctx, |searcher, ctx| {
             searcher.set_case_sensitive(new_case_sensitive, ctx);
         });
-        send_telemetry_from_ctx!(
-            TelemetryEvent::ToggleFindOption {
-                option: FindOption::CaseSensitive,
-                enabled: new_case_sensitive
-            },
-            ctx
-        );
     }
 
     fn toggle_regex_search(&mut self, ctx: &mut ViewContext<Self>) {
@@ -430,13 +421,6 @@ impl CodeEditorFind {
         self.searcher.update(ctx, |searcher, ctx| {
             searcher.set_regex(new_regex_enabled, ctx);
         });
-        send_telemetry_from_ctx!(
-            TelemetryEvent::ToggleFindOption {
-                option: FindOption::Regex,
-                enabled: new_regex_enabled
-            },
-            ctx
-        );
     }
 
     fn render_match_index(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {

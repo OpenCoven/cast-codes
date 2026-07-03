@@ -1,4 +1,3 @@
-use crate::server::telemetry::TelemetryEvent;
 use anyhow::anyhow;
 use anyhow::{bail, Result};
 use channel_versions::VersionInfo;
@@ -80,6 +79,7 @@ fn autoupdate_log_file() -> Result<PathBuf> {
 /// Parses the taskkill exit code from an Inno Setup log containing a
 /// "force-kill failed for" line. Returns `None` if no such line is found or
 /// the exit code cannot be parsed.
+#[cfg(test)]
 fn parse_forcekill_exit_code(contents_lowercase: &[u8]) -> Option<i32> {
     const FAILED_MARKER: &[u8] = b"force-kill failed for";
     const EXIT_CODE_MARKER: &[u8] = b"exit code: ";
@@ -101,7 +101,7 @@ fn parse_forcekill_exit_code(contents_lowercase: &[u8]) -> Option<i32> {
 /// Checks the autoupdate log file from a previous update attempt.
 /// Sends telemetry for specific known issues, and sends a Sentry event if errors are found.
 /// The log file is renamed after processing to avoid duplicate reports on subsequent launches.
-pub(super) fn check_and_report_update_errors(ctx: &mut AppContext) {
+pub(super) fn check_and_report_update_errors(_ctx: &mut AppContext) {
     let log_path = match autoupdate_log_file() {
         Ok(path) => path,
         Err(e) => {
@@ -112,7 +112,7 @@ pub(super) fn check_and_report_update_errors(ctx: &mut AppContext) {
 
     // Inno Setup logs use the system's active codepage (often Windows-1252), not UTF-8.
     // We read as raw bytes to avoid silently skipping non-UTF-8 log files.
-    let contents = match fs::read(&log_path) {
+    let _contents = match fs::read(&log_path) {
         Ok(contents) => contents,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             log::info!("No autoupdate logs found");
@@ -124,51 +124,11 @@ pub(super) fn check_and_report_update_errors(ctx: &mut AppContext) {
         }
     };
 
-    let contents_lowercase = contents.to_ascii_lowercase();
-
-    let has_unable_to_close = memchr::memmem::find(
-        &contents_lowercase,
-        b"setup was unable to automatically close all applications",
-    )
-    .is_some();
-    if has_unable_to_close {
-        crate::send_telemetry_sync_from_app_ctx!(
-            TelemetryEvent::AutoupdateUnableToCloseApplications,
-            ctx
-        );
-    }
-
-    let has_file_in_use = memchr::memmem::find(
-        &contents_lowercase,
-        b"the process cannot access the file because it is being used by another process",
-    )
-    .is_some();
-    if has_file_in_use {
-        crate::send_telemetry_sync_from_app_ctx!(TelemetryEvent::AutoupdateFileInUse, ctx);
-    }
-
-    // Fired when the mutex polling loop timed out and a force-kill was attempted.
-    let has_mutex_timeout =
-        memchr::memmem::find(&contents_lowercase, b"warp mutex still held after timeout").is_some();
-    if has_mutex_timeout {
-        crate::send_telemetry_sync_from_app_ctx!(TelemetryEvent::AutoupdateMutexTimeout, ctx);
-    }
-
-    // Fired when taskkill returned non-zero after the mutex timeout.
-    // Exit code 128 means "no matching process found" — the process was already
-    // gone when taskkill ran — so suppress that harmless race condition.
-    if let Some(exit_code) = parse_forcekill_exit_code(&contents_lowercase) {
-        if exit_code != 128 {
-            crate::send_telemetry_sync_from_app_ctx!(
-                TelemetryEvent::AutoupdateForcekillFailed { exit_code },
-                ctx
-            );
-        }
-    }
-
     #[cfg(feature = "crash_reporting")]
     {
         use sentry::protocol::{Attachment, AttachmentType};
+
+        let contents_lowercase = _contents.to_ascii_lowercase();
 
         // Patterns for known benign errors that should not trigger Sentry reporting.
         const IGNOREABLE_ERRORS: &[&[u8]] = &[
@@ -195,7 +155,7 @@ pub(super) fn check_and_report_update_errors(ctx: &mut AppContext) {
             log::warn!("Autoupdate log file contains errors; reporting to Sentry");
 
             let attachment = Attachment {
-                buffer: contents,
+                buffer: _contents,
                 filename: UPDATE_LOG_FILENAME.to_string(),
                 ty: Some(AttachmentType::Attachment),
                 ..Default::default()

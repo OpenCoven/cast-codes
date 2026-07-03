@@ -14,7 +14,7 @@ use crate::{
         AIIdentifiers, CancellationReason,
     },
     network::NetworkStatus,
-    report_error, send_telemetry_from_ctx,
+    report_error,
     server::server_api::ServerApiProvider,
 };
 
@@ -125,23 +125,6 @@ impl ResponseStream {
         self.should_resume_conversation_after_stream_finished
     }
 
-    /// Helper function to emit AgentModeError telemetry for error that is retryable (not user visible).
-    fn emit_retryable_agent_mode_error_telemetry(
-        &self,
-        error: String,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        send_telemetry_from_ctx!(
-            crate::TelemetryEvent::AgentModeError {
-                identifiers: self.ai_identifiers.clone(),
-                error,
-                is_user_visible: false,
-                will_attempt_to_resume: false,
-            },
-            ctx
-        );
-    }
-
     fn retry(&mut self, ctx: &mut ModelContext<Self>) {
         self.retry_count += 1;
         self.has_received_client_actions = false; // Reset for the new attempt
@@ -235,27 +218,7 @@ impl ResponseStream {
                             // Mark that we've received client actions
                             self.has_received_client_actions = true;
                         }
-                        warp_multi_agent_api::response_event::Type::Finished(finished_event) => {
-                            // Emit retry success telemetry on successful completion
-                            if matches!(
-                                finished_event.reason,
-                                Some(warp_multi_agent_api::response_event::stream_finished::Reason::Done(_)) | None
-                            ) {
-                                // Emit retry success telemetry if this was a successful completion after retries
-                                if self.retry_count > 0 {
-                                    if let Some(original_error) = &self.original_error {
-                                        send_telemetry_from_ctx!(
-                                            crate::TelemetryEvent::AgentModeRequestRetrySucceeded {
-                                                identifiers: self.ai_identifiers.clone(),
-                                                retry_count: self.retry_count,
-                                                original_error: original_error.clone(),
-                                            },
-                                            ctx
-                                        );
-                                    }
-                                }
-                            }
-                        }
+                        warp_multi_agent_api::response_event::Type::Finished(_finished_event) => {}
                     }
                 }
                 ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(event)));
@@ -287,9 +250,6 @@ impl ResponseStream {
                         self.retry_count + 1,
                         MAX_RETRIES
                     );
-                    // Only emit error telemetry here if we're retrying.
-                    // Final errors that aren't being retried are emitted elsewhere.
-                    self.emit_retryable_agent_mode_error_telemetry(format!("{e:?}"), ctx);
                     self.retry(ctx);
                     // Don't emit the error event, we're retrying
                     // TODO: emit a separate event if controller needs to know about failures that are being retried

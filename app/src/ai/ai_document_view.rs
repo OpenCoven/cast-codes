@@ -16,7 +16,6 @@ use crate::pane_group::pane::view::header::components::{
 };
 use crate::pane_group::pane::view::header::toolbelt_button_position_id;
 use crate::pane_group::pane::view::header::PaneHeaderAction;
-use crate::send_telemetry_from_ctx;
 use crate::settings::FontSettings;
 use crate::terminal::input::MenuPositioning;
 use crate::terminal::view::TerminalView;
@@ -43,7 +42,6 @@ use crate::{
         link::{NotebookLinks, SessionSource},
     },
     pane_group::{pane::view, BackingView, PaneConfiguration, PaneEvent},
-    server::telemetry::TelemetryEvent,
     ui_components::buttons::icon_button,
     ui_components::icons::Icon,
     view_components::action_button::{ActionButton, PrimaryTheme},
@@ -1124,10 +1122,6 @@ impl TypedActionView for AIDocumentView {
             AIDocumentAction::Export => self.export(ctx),
             AIDocumentAction::CreateWarpDriveNotebook => self.create_warp_drive_notebook(ctx),
             AIDocumentAction::CopyLink(link) => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::ObjectLinkCopied { link: link.clone() },
-                    ctx
-                );
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(link.to_owned()));
 

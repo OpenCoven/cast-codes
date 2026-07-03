@@ -20,7 +20,6 @@ use crate::{
         ids::{ClientId, ServerIdAndType, SyncId},
         server_api::ServerApiProvider,
         sync_queue::{QueueItem, SyncQueue},
-        telemetry::context_provider::AppTelemetryContextProvider,
     },
     settings_view::keybindings::KeybindingChangedNotifier,
     test_util::settings::initialize_settings_for_tests,
@@ -43,7 +42,6 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(SyncQueue::mock);
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
     app.add_singleton_model(AuthManager::new_for_test);
     app.add_singleton_model(TeamTesterStatus::mock);
     app.add_singleton_model(UpdateManager::mock);

@@ -39,7 +39,6 @@ pub mod notebook_command;
 mod omnibar;
 pub mod view;
 
-pub use block_insertion_menu::BlockInsertionSource;
 use warpui::elements::ListIndentLevel;
 
 const NOTEBOOK_LINE_HEIGHT_RATIO: f32 = 1.6;
