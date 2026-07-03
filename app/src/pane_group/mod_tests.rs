@@ -282,28 +282,6 @@ fn request_ambient_agent_task_id_for_hidden_child(
     })
 }
 
-fn ambient_child_session_state(
-    panes: &PaneGroup,
-    child_pane_id: PaneId,
-    ctx: &mut ViewContext<PaneGroup>,
-) -> (Option<AmbientAgentTaskId>, bool, Option<AIConversationId>) {
-    let terminal_view = panes
-        .terminal_view_from_pane_id(child_pane_id, ctx)
-        .expect("child pane should have a terminal view");
-    let terminal_view_ref = terminal_view.as_ref(ctx);
-    let active_conversation_id = terminal_view_ref.active_conversation_id(ctx);
-    let ambient_model = terminal_view_ref
-        .ambient_agent_view_model()
-        .expect("child pane should have an ambient agent model")
-        .as_ref(ctx);
-
-    (
-        ambient_model.task_id(),
-        ambient_model.is_agent_running(),
-        active_conversation_id,
-    )
-}
-
 struct PreAttachReturnsFalsePane {
     pane_id: PaneId,
     pane_configuration: ModelHandle<PaneConfiguration>,
@@ -550,7 +528,7 @@ fn test_restored_hidden_child_pane_reapplies_ambient_task_id_to_controller() {
 }
 
 #[test]
-fn test_restored_remote_hidden_child_pane_enters_existing_ambient_session() {
+fn test_restored_remote_hidden_child_pane_declined_without_cloud_viewer() {
     let _orchestration_v2 = FeatureFlag::OrchestrationV2.override_enabled(true);
 
     App::test((), |mut app| async move {
@@ -570,21 +548,14 @@ fn test_restored_remote_hidden_child_pane_enters_existing_ambient_session() {
 
             panes.create_hidden_child_agent_pane(child_conversation, parent_pane_id, ctx);
 
-            let child_pane_id = panes
-                .child_agent_panes
-                .get(&child_conversation_id)
-                .copied()
-                .expect("restored remote hidden child pane should be tracked");
-
-            let (ambient_task_id, is_agent_running, active_conversation_id) =
-                ambient_child_session_state(panes, child_pane_id, ctx);
-
-            assert_eq!(ambient_task_id, Some(task_id));
+            // Viewing an existing *remote* ambient session is a hosted (cloud-viewing)
+            // capability. In the OSS/local build the shared-session viewer does not exist,
+            // so the ambient agent view model is never populated and remote-child restore
+            // is a graceful no-op: the pane is discarded rather than tracked.
             assert!(
-                is_agent_running,
-                "remote child restore should view the existing ambient session"
+                !panes.child_agent_panes.contains_key(&child_conversation_id),
+                "remote child restore should be declined without a cloud session viewer"
             );
-            assert_eq!(active_conversation_id, Some(child_conversation_id));
         });
     });
 }
