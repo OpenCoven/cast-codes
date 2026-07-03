@@ -21,9 +21,6 @@ pub enum FeatureFlag {
 
     RuntimeFeatureFlags,
 
-    /// Enables cloud object related features for an explicit allowlist of team testers.
-    CloudObjects,
-
     /// If `true`, fetch updated Warp channel versions from the Warp server endpoint instead of
     /// from GCP directly.
     FetchChannelVersionsFromWarpServer,
