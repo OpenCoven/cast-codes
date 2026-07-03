@@ -696,7 +696,6 @@ plugin_host = ["dep:rquickjs", "dep:warp_js", "warp_cli/plugin_host"]
 # NOTE: This may slow down program execution.
 pprof_cpu_profiling = ["dep:pprof"]
 predict_am_queries = []
-record_app_active_events = []
 recording_mode = []
 # This feature should only be enabled when building a release bundle with
 # the bundle script, and can be used to conditionally enable functionality

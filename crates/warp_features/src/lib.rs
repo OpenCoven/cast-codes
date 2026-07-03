@@ -13,8 +13,6 @@ pub enum FeatureFlag {
     DebugMode,
     Autoupdate,
     LogExpensiveFramesInSentry,
-    WithSandboxTelemetry,
-    RecordAppActiveEvents,
 
     WelcomeTips,
     ThinStrokes,

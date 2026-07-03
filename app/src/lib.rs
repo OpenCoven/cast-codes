@@ -1975,13 +1975,7 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             NetworkStatus::handle(ctx)
                 .update(ctx, move |me, ctx| me.reachability_changed(reachable, ctx));
         })),
-        on_become_active: Some(Box::new(move |ctx| {
-            let auth_state = AuthStateProvider::as_ref(ctx).get();
-            ctx.record_app_focus(
-                auth_state.user_id().map(|uid| uid.as_string()),
-                auth_state.anonymous_id(),
-            );
-        })),
+        on_become_active: None,
         on_screen_changed: Some(Box::new(move |ctx| {
             ctx.dispatch_global_action(
                 "root_view:move_quake_mode_window_from_screen_change",
@@ -2029,12 +2023,6 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
                 }
             }
             ctx.dispatch_global_action("root_view:update_quake_mode_state", &update_quake_mode_arg);
-
-            let auth_state = AuthStateProvider::as_ref(ctx).get();
-            ctx.record_app_blur(
-                auth_state.user_id().map(|uid| uid.as_string()),
-                auth_state.anonymous_id(),
-            );
         })),
         on_will_terminate: Some(Box::new(move |ctx| {
             NotebookManager::handle(ctx).update(ctx, |manager, ctx| {
@@ -2046,12 +2034,6 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             PersistenceWriter::handle(ctx).update(ctx, |writer, _ctx| {
                 writer.terminate();
             });
-
-            let auth_state = AuthStateProvider::as_ref(ctx).get();
-            ctx.try_record_daily_app_focus_duration(
-                auth_state.user_id().map(|uid| uid.as_string()),
-                auth_state.anonymous_id(),
-            );
 
             // Shutdown all LSP servers gracefully before app termination
             lsp::LspManagerModel::handle(ctx).update(ctx, |manager, ctx| {
@@ -2505,8 +2487,6 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::CrashReporting,
         #[cfg(feature = "log_expensive_frames_in_sentry")]
         FeatureFlag::LogExpensiveFramesInSentry,
-        #[cfg(feature = "record_app_active_events")]
-        FeatureFlag::RecordAppActiveEvents,
         #[cfg(feature = "runtime_feature_flags")]
         FeatureFlag::RuntimeFeatureFlags,
         #[cfg(feature = "sequential_storage")]
@@ -2956,7 +2936,6 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
                     | FeatureFlag::CrashReporting
                     | FeatureFlag::CocoaSentry
                     | FeatureFlag::LogExpensiveFramesInSentry
-                    | FeatureFlag::RecordAppActiveEvents
                     | FeatureFlag::GlobalAIAnalyticsBanner
                     | FeatureFlag::GlobalAIAnalyticsCollection
                     | FeatureFlag::SessionSharingAcls
