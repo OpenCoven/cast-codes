@@ -322,7 +322,7 @@ impl BackingView for AIFactView {
 
     fn render_header_content(
         &self,
-        _ctx: &view::HeaderRenderContext<'_>,
+        _ctx: &view::HeaderRenderContext,
         _app: &AppContext,
     ) -> view::HeaderContent {
         view::HeaderContent::simple(HEADER_TEXT)

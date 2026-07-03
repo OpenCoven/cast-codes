@@ -1,3 +1,4 @@
+use warp_server_client::drive::sharing::SharingAccessLevel;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::{
@@ -6,11 +7,10 @@ use crate::{
         breadcrumbs::ContainingObject,
         model::{
             persistence::{CloudModel, CloudModelEvent},
-            view::{CloudViewModel, Editor, EditorState},
+            view::{CloudViewModel, ContentEditability, Editor, EditorState},
         },
         CloudObject, Owner, Space,
     },
-    drive::sharing::{ContentEditability, SharingAccessLevel},
     notebooks::CloudNotebook,
     server::{
         cloud_objects::update_manager::{

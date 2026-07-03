@@ -1,10 +1,12 @@
 use lazy_static::lazy_static;
 use session_sharing_protocol::common::{InputReplicaId, ProfileData};
+use warp_server_client::drive::sharing::{
+    LinkSharingSubjectType, SharingAccessLevel, Subject, TeamKind, UserKind,
+};
 
 use crate::{
     auth::UserUid,
     cloud_object::{CloudObjectGuest, ServerObjectContainer},
-    drive::sharing::{LinkSharingSubjectType, SharingAccessLevel, Subject, TeamKind, UserKind},
     server::ids::ServerId,
 };
 

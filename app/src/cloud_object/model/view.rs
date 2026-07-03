@@ -4,13 +4,12 @@ use chrono::{Duration, Utc};
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
+use warp_server_client::drive::sharing::SharingAccessLevel;
+
 use crate::{
     auth::{AuthStateProvider, UserUid},
     cloud_object::{CloudObject, CloudObjectLocation, Space},
-    drive::{
-        folders::CloudFolder,
-        sharing::{ContentEditability, SharingAccessLevel},
-    },
+    drive::folders::CloudFolder,
     safe_info,
     server::{
         cloud_objects::update_manager::{
@@ -24,6 +23,23 @@ use crate::{
 use super::persistence::{CloudModel, CloudModelEvent};
 
 pub const EDITOR_TIMEOUT_DURATION_MINUTES: i64 = 15;
+
+/// Whether not a shared object's contents are editable by the current user.
+///
+/// This is not purely a function of their access level since anonymous users are not allowed to
+/// edit (due to the lack of attribution).
+#[derive(Debug, Clone, Copy)]
+pub enum ContentEditability {
+    ReadOnly,
+    RequiresLogin,
+    Editable,
+}
+
+impl ContentEditability {
+    pub fn can_edit(self) -> bool {
+        matches!(self, ContentEditability::Editable)
+    }
+}
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub enum EditorState {

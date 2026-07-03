@@ -96,12 +96,6 @@ impl CloudObjectToastMessage {
             (_, ObjectOperation::TakeEditAccess, OperationSuccessType::Failure) => {
                 Some(format!("Failed to start editing {object_name_lowercase}"))
             }
-            (_, ObjectOperation::UpdatePermissions, OperationSuccessType::Success) => {
-                Some(format!("Successfully updated permissions for {object_name_lowercase}"))
-            }
-            (_, ObjectOperation::UpdatePermissions, OperationSuccessType::Failure) => {
-                Some(format!("Failed to update permissions for {object_name_lowercase}"))
-            }
             _ => None,
         }
     }

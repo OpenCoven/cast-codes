@@ -99,7 +99,7 @@ impl BackingView for TestView {
 
     fn render_header_content(
         &self,
-        _ctx: &super::HeaderRenderContext<'_>,
+        _ctx: &super::HeaderRenderContext,
         _app: &AppContext,
     ) -> super::HeaderContent {
         super::HeaderContent::simple("Test")

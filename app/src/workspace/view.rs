@@ -271,7 +271,6 @@ use crate::server::ids::{ObjectUid, ServerId, SyncId};
 use crate::server::server_api::{ServerApi, ServerApiEvent, ServerApiProvider, ServerTime};
 use crate::server::telemetry::{
     AddTabWithShellSource, AnonymousUserSignupEntrypoint, LaunchConfigUiLocation,
-    SharingDialogSource,
 };
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
 use crate::settings::{
@@ -6564,42 +6563,6 @@ impl Workspace {
             })
     }
 
-    /// Triggers the drive sharing onboarding block.
-    fn check_and_trigger_drive_sharing_onboarding_block(
-        &mut self,
-        object_id: CloudObjectTypeAndId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if self.auth_state.is_anonymous_or_logged_out() {
-            return;
-        }
-
-        if *WarpDriveSettings::as_ref(ctx)
-            .sharing_onboarding_block_shown
-            .value()
-        {
-            return;
-        }
-
-        if let Some(terminal_view_handle) = self.active_session_view(ctx) {
-            let terminal_view_id = terminal_view_handle.id();
-
-            // Don't show onboarding block while agent is actively streaming
-            let is_agent_in_progress = BlocklistAIHistoryModel::handle(ctx)
-                .as_ref(ctx)
-                .active_conversation(terminal_view_id)
-                .is_some_and(|conversation| conversation.status().is_in_progress());
-
-            if is_agent_in_progress {
-                return;
-            }
-
-            terminal_view_handle.update(ctx, |terminal_view, ctx| {
-                terminal_view.insert_drive_sharing_onboarding_block(object_id, ctx);
-            });
-        }
-    }
-
     fn check_and_trigger_telemetry_banner_for_existing_users(
         &mut self,
         ctx: &mut ViewContext<Self>,
@@ -6829,17 +6792,6 @@ impl Workspace {
                     "root_view:handle_pane_navigation_event",
                     &locator,
                 );
-            }
-            // If the was an invitee email, open the share dialog as well after focusing the pane.
-            if let Some(invitee_email) = settings.invitee_email.clone() {
-                if let NotebookSource::Existing(sync_id) = source {
-                    self.open_object_sharing_settings(
-                        CloudObjectTypeAndId::from_id_and_type(*sync_id, ObjectType::Notebook),
-                        Some(invitee_email),
-                        SharingDialogSource::InviteeRequest,
-                        ctx,
-                    );
-                }
             }
         } else if default_to_new_pane {
             let window_id = ctx.window_id();
@@ -12454,23 +12406,6 @@ impl Workspace {
         });
     }
 
-    /// View an object in Warp Drive and open its sharing settings.
-    fn open_object_sharing_settings(
-        &mut self,
-        object_id: CloudObjectTypeAndId,
-        invitee_email: Option<String>,
-        source: SharingDialogSource,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.view_in_warp_drive(WarpDriveItemId::Object(object_id), ctx);
-        self.update_warp_drive_view(ctx, |warp_drive, ctx| {
-            warp_drive.reset_and_open_to_main_index(ctx);
-            warp_drive.open_object_sharing_settings(object_id, invitee_email, source, ctx);
-        });
-
-        ctx.notify();
-    }
-
     fn move_to_drive_space(
         &mut self,
         cloud_object_type_and_id: CloudObjectTypeAndId,
@@ -14021,18 +13956,6 @@ impl Workspace {
             pane_group::Event::AnonymousUserSignup => {
                 self.initiate_user_signup(AnonymousUserSignupEntrypoint::RenotificationBlock, ctx);
             }
-            pane_group::Event::OpenDriveObjectShareDialog {
-                cloud_object_type_and_id,
-                invitee_email,
-                source,
-            } => {
-                self.open_object_sharing_settings(
-                    *cloud_object_type_and_id,
-                    invitee_email.clone(),
-                    *source,
-                    ctx,
-                );
-            }
             pane_group::Event::OpenPalette {
                 mode,
                 source,
@@ -15512,26 +15435,6 @@ impl Workspace {
                 updated_object.map(|o| o.cloud_object_type_and_id())
             {
                 self.maybe_refresh_workflow_info_box_and_input(&workflow_id, ctx)
-            }
-        }
-
-        // If this was a successful personal object creation, then potentially show the sharing
-        // onboarding block.
-        if result.success_type == OperationSuccessType::Success
-            && matches!(result.operation, ObjectOperation::Create { .. })
-        {
-            if let Some(created_object) = result
-                .server_id
-                .and_then(|id| CloudModel::as_ref(ctx).get_by_uid(&id.uid()))
-            {
-                if created_object.space(ctx) == Space::Personal
-                    && created_object.renders_in_warp_drive()
-                {
-                    self.check_and_trigger_drive_sharing_onboarding_block(
-                        created_object.cloud_object_type_and_id(),
-                        ctx,
-                    );
-                }
             }
         }
     }
@@ -21367,9 +21270,6 @@ impl TypedActionView for Workspace {
             ViewObjectInWarpDrive(item_id) => {
                 // Focus newly created object in WD
                 self.view_in_and_focus_warp_drive(*item_id, ctx);
-            }
-            OpenObjectSharingSettings { object_id, source } => {
-                self.open_object_sharing_settings(*object_id, None, *source, ctx);
             }
             UndoTrash(cloud_object_type_and_id) => {
                 self.update_warp_drive_view(ctx, |warp_drive, ctx| {

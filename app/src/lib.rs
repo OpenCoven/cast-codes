@@ -95,7 +95,6 @@ mod warp_managed_paths_watcher;
 #[cfg(target_family = "wasm")]
 mod wasm_nux_dialog;
 mod window_settings;
-mod word_block_editor;
 mod workspaces;
 
 // PLEASE DO NOT ADD MORE PUBLIC MODULES!
@@ -1630,7 +1629,6 @@ pub(crate) fn initialize_app(
     ai::blocklist::init(ctx);
     ai::blocklist::block::status_bar::init(ctx);
     drive::index::init(ctx);
-    drive::sharing::dialog::init(ctx);
     ai_assistant::panel::init(ctx);
     settings_view::import_theme_modal::init(ctx);
     settings_view::update_environment_form::init(ctx);

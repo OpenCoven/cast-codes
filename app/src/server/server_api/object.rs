@@ -24,7 +24,7 @@ use crate::{
         Owner, Revision, RevisionAndLastEditor, ServerCloudObject, ServerFolder, ServerMetadata,
         ServerNotebook, ServerObject, ServerPermissions, ServerWorkflow, UpdateCloudObjectResult,
     },
-    drive::{folders::FolderId, sharing::SharingAccessLevel},
+    drive::folders::FolderId,
     env_vars::EnvVarCollection,
     notebooks::{NotebookId, SerializedNotebook},
     server::{
@@ -41,6 +41,8 @@ use crate::{
     workflows::{workflow_enum::WorkflowEnum, WorkflowId},
     workspaces::user_profiles::UserProfileWithUID,
 };
+use warp_server_client::drive::sharing::SharingAccessLevel;
+
 use anyhow::{anyhow, Context, Result};
 use async_channel::Sender;
 use async_trait::async_trait;

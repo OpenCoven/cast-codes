@@ -24,6 +24,7 @@ use async_channel::Sender;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use warp_graphql::object_permissions::AccessLevel;
+use warp_server_client::drive::sharing::SharingAccessLevel;
 
 use crate::{
     cloud_object::{
@@ -39,7 +40,7 @@ use crate::{
         RevisionAndLastEditor, ServerFolder, ServerMetadata, ServerNotebook, ServerObject,
         ServerPermissions, ServerPreference, ServerWorkflow, UpdateCloudObjectResult,
     },
-    drive::{folders::FolderId, sharing::SharingAccessLevel},
+    drive::folders::FolderId,
     notebooks::NotebookId,
     server::{
         cloud_objects::{

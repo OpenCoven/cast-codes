@@ -2,9 +2,7 @@
 use crate::ai::mcp::templatable::{CloudTemplatableMCPServerModel, TemplatableMCPServer};
 use crate::{
     ai::{
-        agent::conversation::AIConversationId,
         ambient_agents::scheduled::{CloudScheduledAmbientAgentModel, ScheduledAmbientAgent},
-        blocklist::BlocklistAIHistoryModel,
         cloud_environments::{AmbientAgentEnvironment, CloudAmbientAgentEnvironmentModel},
         execution_profiles::{
             profiles::AIExecutionProfilesModel, AIExecutionProfile, CloudAIExecutionProfileModel,
@@ -21,20 +19,19 @@ use crate::{
             persistence::{CloudModel, CloudModelEvent, UpdateSource},
             view::{CloudViewModel, Editor, EditorState},
         },
-        CloudLinkSharing, CloudModelType, CloudObject, CloudObjectEventEntrypoint,
-        CloudObjectLocation, CloudObjectSyncStatus, CreateCloudObjectResult, CreateObjectRequest,
-        GenericCloudObject, GenericServerObject, GenericStringObjectFormat, JsonObjectType,
-        NumInFlightRequests, ObjectDeleteResult, ObjectIdType, ObjectMetadataUpdateResult,
-        ObjectPermissionsUpdateData, ObjectType, Owner, Revision, RevisionAndLastEditor,
-        ServerAIExecutionProfile, ServerAIFact, ServerAmbientAgentEnvironment,
-        ServerCloudAgentConfig, ServerCloudObject, ServerEnvVarCollection, ServerFolder,
-        ServerMCPServer, ServerMetadata, ServerNotebook, ServerObject, ServerPermissions,
-        ServerPreference, ServerScheduledAmbientAgent, ServerTemplatableMCPServer, ServerWorkflow,
-        ServerWorkflowEnum, Space, UpdateCloudObjectResult,
+        CloudModelType, CloudObject, CloudObjectEventEntrypoint, CloudObjectLocation,
+        CloudObjectSyncStatus, CreateCloudObjectResult, CreateObjectRequest, GenericCloudObject,
+        GenericServerObject, GenericStringObjectFormat, JsonObjectType, NumInFlightRequests,
+        ObjectDeleteResult, ObjectIdType, ObjectMetadataUpdateResult, ObjectType, Owner, Revision,
+        RevisionAndLastEditor, ServerAIExecutionProfile, ServerAIFact,
+        ServerAmbientAgentEnvironment, ServerCloudAgentConfig, ServerCloudObject,
+        ServerEnvVarCollection, ServerFolder, ServerMCPServer, ServerMetadata, ServerNotebook,
+        ServerObject, ServerPermissions, ServerPreference, ServerScheduledAmbientAgent,
+        ServerTemplatableMCPServer, ServerWorkflow, ServerWorkflowEnum, Space,
+        UpdateCloudObjectResult,
     },
     drive::{
         folders::{CloudFolderModel, FolderId},
-        sharing::SharingAccessLevel,
         CloudObjectTypeAndId,
     },
     env_vars::{CloudEnvVarCollectionModel, EnvVarCollection},
@@ -49,7 +46,7 @@ use crate::{
         retry_strategies::{
             OUT_OF_BAND_REQUEST_RETRY_STRATEGY, PERIODIC_POLL, PERIODIC_POLL_RETRY_STRATEGY,
         },
-        server_api::object::{GuestIdentifier, ObjectClient},
+        server_api::object::ObjectClient,
         sync_queue::{
             CreationFailureReason, GenericStringObjectToCreate, QueueItem, SyncQueue,
             SyncQueueEvent,
@@ -79,7 +76,6 @@ use std::sync::{mpsc::SyncSender, Arc};
 use std::time::Duration;
 use warp_core::features::FeatureFlag;
 use warp_graphql::mcp_gallery_template::MCPGalleryTemplate;
-use warp_graphql::object_permissions::AccessLevel;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warp_util::sync::Condition;
 use warpui::r#async::{FutureId, Timer};
@@ -119,7 +115,6 @@ pub enum ObjectOperation {
     Untrash,
     Delete { initiated_by: InitiatedBy },
     EmptyTrash,
-    UpdatePermissions,
     Leave,
 }
 
@@ -1384,47 +1379,6 @@ impl UpdateManager {
         }
     }
 
-    /// Save the results of a permissions update (from APIs that use [`ObjectPermissionsUpdateData`]) in-memory and
-    /// to SQLite.
-    ///
-    /// This will overwrite the pending permissions change flag, so should *only* be called with
-    /// API responses.
-    fn save_permissions_update(
-        &self,
-        uid: &ObjectUid,
-        update: ObjectPermissionsUpdateData,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        // Store the updated permissions in-memory.
-        let permissions_upsert = CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
-            cloud_model.update_object_permissions(
-                uid,
-                update.permissions,
-                UpdateSource::Local,
-                ctx,
-            );
-            cloud_model
-                .get_by_uid(uid)
-                .map(|object| object.upsert_event())
-        });
-
-        // Store any new user profiles in memory.
-        UserProfiles::handle(ctx).update(ctx, |user_profiles, _| {
-            user_profiles.insert_profiles(&update.profiles);
-        });
-
-        let profile_upsert = if update.profiles.is_empty() {
-            None
-        } else {
-            Some(ModelEvent::UpsertUserProfiles {
-                profiles: update.profiles,
-            })
-        };
-
-        let events = permissions_upsert.into_iter().chain(profile_upsert);
-        self.save_to_db(events);
-    }
-
     /// Fetches a single cloud object from the server and updates the local model.
     ///
     /// Returns A `Receiver<()>` that completes when the fetch operation is done.
@@ -2388,431 +2342,6 @@ impl UpdateManager {
                             num_objects: None,
                         },
                     })
-                }
-            },
-        );
-        self.spawned_futures.push(future.future_id());
-    }
-
-    /// Sets or removes link sharing permissions for a cloud object.
-    ///
-    /// This function updates the link sharing permissions of a cloud object identified by `server_id`.
-    /// It can either set a new access level or remove the existing permissions (if `access_level` is `None`).
-    pub fn set_object_link_permissions(
-        &mut self,
-        server_id: ServerId,
-        access_level: Option<SharingAccessLevel>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_permissions_pessimistic(
-            server_id,
-            ctx,
-            move |object_client| async move {
-                if let Some(access_level) = access_level {
-                    object_client
-                        .set_object_link_permissions(server_id, access_level)
-                        .await
-                } else {
-                    object_client
-                        .remove_object_link_permissions(server_id)
-                        .await
-                }
-            },
-            move |me, _, ctx| {
-                let uid = server_id.uid();
-                let cloud_model = CloudModel::handle(ctx);
-                // Mark the change as completed.
-                cloud_model.update(ctx, |cloud_model, ctx| {
-                    if let Some(obj) = cloud_model.get_mut_by_uid(&uid) {
-                        obj.metadata_mut()
-                            .pending_changes_statuses
-                            .has_pending_permissions_change = false;
-                        obj.permissions_mut().anyone_with_link =
-                            access_level.map(|access_level| CloudLinkSharing {
-                                access_level,
-                                source: None,
-                            });
-                    }
-                    ctx.notify();
-                });
-                // Persist changes in sqlite.
-                me.save_in_memory_object_to_sqlite(cloud_model.as_ref(ctx), &uid);
-            },
-        );
-    }
-
-    /// Add guests to an object.
-    pub fn add_object_guests(
-        &mut self,
-        server_id: ServerId,
-        guest_emails: Vec<String>,
-        access_level: AccessLevel,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_permissions_pessimistic(
-            server_id,
-            ctx,
-            move |object_client| {
-                let guest_emails = guest_emails.clone();
-                async move {
-                    object_client
-                        .add_object_guests(server_id, guest_emails, access_level)
-                        .await
-                }
-            },
-            move |me, data, ctx| {
-                let uid = server_id.uid();
-                me.save_permissions_update(&uid, data, ctx);
-            },
-        );
-    }
-
-    /// Update the access level for guest(s) on an object.
-    pub fn update_object_guests(
-        &mut self,
-        server_id: ServerId,
-        guest_emails: Vec<String>,
-        access_level: AccessLevel,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_permissions_pessimistic(
-            server_id,
-            ctx,
-            move |object_client| {
-                let guest_emails = guest_emails.clone();
-                async move {
-                    object_client
-                        .update_object_guests(server_id, guest_emails, access_level)
-                        .await
-                }
-            },
-            move |me, permissions, ctx| {
-                let uid = server_id.uid();
-                me.save_permissions_update(
-                    &uid,
-                    ObjectPermissionsUpdateData {
-                        permissions,
-                        profiles: vec![],
-                    },
-                    ctx,
-                );
-            },
-        );
-    }
-
-    /// Remove a guest from an object.
-    pub fn remove_object_guest(
-        &mut self,
-        server_id: ServerId,
-        guest: GuestIdentifier,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_permissions_pessimistic(
-            server_id,
-            ctx,
-            move |object_client| {
-                let guest = guest.clone();
-                async move { object_client.remove_object_guest(server_id, guest).await }
-            },
-            move |me, permissions, ctx| {
-                let uid = server_id.uid();
-                me.save_permissions_update(
-                    &uid,
-                    ObjectPermissionsUpdateData {
-                        permissions,
-                        // Fun fact: Vec guarantees that a zero-capacity Vec will not allocate.
-                        // https://doc.rust-lang.org/std/vec/struct.Vec.html#guarantees
-                        profiles: vec![],
-                    },
-                    ctx,
-                );
-            },
-        );
-    }
-
-    /// Add guests to an AI conversation.
-    pub fn add_ai_conversation_guests(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        guest_emails: Vec<String>,
-        access_level: AccessLevel,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "add guests",
-            move |object_client| {
-                let guest_emails = guest_emails.clone();
-                async move {
-                    object_client
-                        .add_object_guests(server_id, guest_emails, access_level)
-                        .await
-                }
-            },
-            |data, ctx| {
-                // Update UserProfiles with any new profiles returned
-                if !data.profiles.is_empty() {
-                    UserProfiles::handle(ctx).update(ctx, |user_profiles, _| {
-                        user_profiles.insert_profiles(&data.profiles);
-                    });
-                }
-                Some(data.permissions)
-            },
-            ctx,
-        );
-    }
-
-    /// Update guest access for an AI conversation.
-    pub fn update_ai_conversation_guests(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        guest_emails: Vec<String>,
-        access_level: AccessLevel,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "update guests",
-            move |object_client| {
-                let guest_emails = guest_emails.clone();
-                async move {
-                    object_client
-                        .update_object_guests(server_id, guest_emails, access_level)
-                        .await
-                }
-            },
-            |permissions, _ctx| Some(permissions),
-            ctx,
-        );
-    }
-
-    /// Remove a guest from an AI conversation.
-    pub fn remove_ai_conversation_guest(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        guest: GuestIdentifier,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "remove guest",
-            move |object_client| {
-                let guest = guest.clone();
-                async move { object_client.remove_object_guest(server_id, guest).await }
-            },
-            |permissions, _ctx| Some(permissions),
-            ctx,
-        );
-    }
-
-    /// Set or remove link sharing permissions for an AI conversation.
-    pub fn set_ai_conversation_link_permissions(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        access_level: Option<SharingAccessLevel>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "set link permissions",
-            move |object_client| async move {
-                if let Some(access_level) = access_level {
-                    object_client
-                        .set_object_link_permissions(server_id, access_level)
-                        .await
-                        .map(|_| ())
-                } else {
-                    object_client
-                        .remove_object_link_permissions(server_id)
-                        .await
-                        .map(|_| ())
-                }
-            },
-            move |_result, ctx| {
-                // For link permissions, we manually construct the permissions update
-                // since the API only returns success/failure.
-                // Use the unified helper that checks both in-memory and historical metadata.
-                let mut permissions = BlocklistAIHistoryModel::as_ref(ctx)
-                    .get_server_conversation_metadata(&conversation_id)
-                    .map(|metadata| metadata.permissions.clone())?;
-                permissions.anyone_link_sharing =
-                    access_level.map(|level| crate::cloud_object::ServerLinkSharing {
-                        access_level: level.into(),
-                        source: None,
-                    });
-                Some(permissions)
-            },
-            ctx,
-        );
-    }
-
-    /// Helper for updating AI conversation permissions.
-    ///
-    /// This centralizes the common pattern of:
-    /// 1. Making an API request
-    /// 2. Processing the result to extract permissions
-    /// 3. Updating BlocklistAIHistoryModel with new permissions
-    /// 4. Emitting ConversationMetadataUpdated event
-    fn update_ai_conversation_permissions<P, S, R, F>(
-        &mut self,
-        conversation_id: AIConversationId,
-        operation_name: &'static str,
-        mut update_fn: P,
-        mut get_updated_permissions: F,
-        ctx: &mut ModelContext<Self>,
-    ) where
-        P: 'static + FnMut(Arc<dyn ObjectClient>) -> S,
-        S: warpui::r#async::Spawnable + Future<Output = anyhow::Result<R>>,
-        <S as Future>::Output: warpui::r#async::SpawnableOutput,
-        F: 'static + FnMut(R, &mut AppContext) -> Option<ServerPermissions>,
-    {
-        let object_client = self.object_client.clone();
-
-        ctx.spawn_with_retry_on_error(
-            move || {
-                let object_client = object_client.clone();
-                update_fn(object_client)
-            },
-            *ONLINE_ONLY_OPERATION_RETRY_STRATEGY,
-            move |_me, res, ctx| match res {
-                RequestState::RequestSucceeded(data) => {
-                    if let Some(permissions) = get_updated_permissions(data, ctx) {
-                        // Update BlocklistAIHistoryModel (handles both in-memory and historical)
-                        BlocklistAIHistoryModel::handle(ctx).update(ctx, |model, ctx| {
-                            // Get current metadata from either in-memory conversation or historical
-                            let current_metadata = model
-                                .get_server_conversation_metadata(&conversation_id)
-                                .cloned();
-                            if let Some(mut metadata) = current_metadata {
-                                metadata.permissions = permissions;
-                                model.set_server_metadata_for_conversation(
-                                    conversation_id,
-                                    metadata,
-                                    ctx,
-                                );
-                            }
-                        });
-                    }
-                }
-                RequestState::RequestFailedRetryPending(error) => {
-                    log::warn!("Failed to {operation_name} for AI conversation: {error}. Retrying");
-                }
-                RequestState::RequestFailed(error) => {
-                    log::warn!(
-                        "Failed to {operation_name} for AI conversation: {error}. Not retrying"
-                    );
-                }
-            },
-        );
-    }
-
-    /// Helper for implementing *pessimistic* permission changes.
-    ///
-    /// The overall flow for a pessimistic permission change is:
-    /// 1. Short-circuit if there's a pending online-only operation, as any optimistic changes it
-    ///    made could be overwritten by this pessimistic update.
-    /// 2. Mark the object as having a pending permission change.
-    /// 3. Make an API request using `update_fn`
-    /// 4. On success, persist the results using `on_success`.
-    /// 5. In all cases, emit a completion event and mark the object as no longer having a pending
-    ///    permissions change.
-    fn update_permissions_pessimistic<M, P, S>(
-        &mut self,
-        server_id: ServerId,
-        ctx: &mut ModelContext<Self>,
-        mut update_fn: P,
-        mut on_success: impl FnMut(&mut Self, M, &mut ModelContext<Self>) + 'static,
-    ) where
-        P: 'static + FnMut(Arc<dyn ObjectClient>) -> S,
-        S: warpui::r#async::Spawnable + Future<Output = anyhow::Result<M>>,
-        <S as Future>::Output: warpui::r#async::SpawnableOutput,
-    {
-        let cloud_model = CloudModel::handle(ctx);
-        let uid = server_id.uid();
-
-        let has_pending_change = cloud_model.update(ctx, |cloud_model, ctx| {
-            match cloud_model.get_mut_by_uid(&uid) {
-                Some(object) if object.metadata().has_pending_online_only_change() => true,
-                Some(object) => {
-                    object
-                        .metadata_mut()
-                        .pending_changes_statuses
-                        .has_pending_permissions_change = true;
-                    ctx.notify();
-                    false
-                }
-                None => false,
-            }
-        });
-
-        if has_pending_change {
-            log::debug!(
-                "Not making permissions change to {server_id} due to pending online-only change"
-            );
-            return;
-        }
-
-        let object_client = self.object_client.clone();
-        let future = ctx.spawn_with_retry_on_error(
-            move || {
-                let object_client = object_client.clone();
-                update_fn(object_client)
-            },
-            *ONLINE_ONLY_OPERATION_RETRY_STRATEGY,
-            move |me, res, ctx| match res {
-                RequestState::RequestSucceeded(data) => {
-                    on_success(me, data, ctx);
-
-                    // Clear the pending-permission-change flag.
-                    cloud_model.update(ctx, |cloud_model, _| {
-                        if let Some(object) = cloud_model.get_mut_by_uid(&uid) {
-                            object
-                                .metadata_mut()
-                                .pending_changes_statuses
-                                .has_pending_permissions_change = false;
-                        }
-                    });
-
-                    ctx.emit(UpdateManagerEvent::ObjectOperationComplete {
-                        result: ObjectOperationResult {
-                            success_type: OperationSuccessType::Success,
-                            operation: ObjectOperation::UpdatePermissions,
-                            client_id: None,
-                            server_id: Some(server_id),
-                            num_objects: None,
-                        },
-                    });
-                    ctx.notify();
-                }
-                RequestState::RequestFailedRetryPending(error) => {
-                    log::warn!("Failed permissions change: {error}. Retrying");
-                }
-                RequestState::RequestFailed(error) => {
-                    CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
-                        if let Some(obj) = cloud_model.get_mut_by_uid(&uid) {
-                            // Un-mark the pending permissions change. This isn't persisted to SQLite.
-                            obj.metadata_mut()
-                                .pending_changes_statuses
-                                .has_pending_permissions_change = false;
-                            ctx.notify()
-                        }
-                    });
-
-                    ctx.emit(UpdateManagerEvent::ObjectOperationComplete {
-                        result: ObjectOperationResult {
-                            success_type: OperationSuccessType::Failure,
-                            operation: ObjectOperation::UpdatePermissions,
-                            client_id: None,
-                            server_id: Some(server_id),
-                            num_objects: None,
-                        },
-                    });
-                    log::warn!("Failed permissions change: {error}. Not retrying");
-                    ctx.notify();
                 }
             },
         );

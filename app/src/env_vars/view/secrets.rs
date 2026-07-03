@@ -21,7 +21,7 @@ use super::env_var_collection::{
 };
 
 use crate::{
-    drive::sharing::ContentEditability,
+    cloud_object::model::view::ContentEditability,
     env_vars::{active_env_var_collection_data::SavingStatus, EnvVarValue},
     external_secrets::{ExternalSecretManager, SecretManager},
     search::external_secrets::{

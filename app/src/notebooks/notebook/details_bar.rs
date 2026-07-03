@@ -15,9 +15,8 @@ use crate::{
     appearance::Appearance,
     cloud_object::{
         breadcrumbs::ContainingObject,
-        model::view::{Editor, EditorState},
+        model::view::{ContentEditability, Editor, EditorState},
     },
-    drive::sharing::ContentEditability,
     notebooks::{active_notebook_data::Mode, styles},
     ui_components::{
         breadcrumb::{render_breadcrumbs, BreadcrumbState},
