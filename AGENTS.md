@@ -69,3 +69,12 @@ cargo check -p warp-app --bin cast-codes --features gui
 ```
 
 If the full app check is too expensive for the current change, run a targeted check and say exactly what was and was not verified.
+
+## Pull Requests
+
+The `create-pr` skill (`.agents/skills/create-pr/SKILL.md`) is the source of truth for opening PRs. Key rules for this fork:
+
+- Base branch is `main` (never `master`); remote is `OpenCoven/cast-codes`. Branch names are `type/kebab-summary`; PR titles are Conventional Commits (`type(scope): summary`).
+- Issues are tracked on GitHub, not Linear. Link with `Closes #NNN`.
+- Before opening or updating any PR, run `./script/check_ai_attribution` and `./script/check_rebrand`; for code changes also run `./script/presubmit`.
+- The **No AI Attribution** hard rule applies to commit messages, PR bodies, and trailers — do not add `Co-Authored-By:` lines naming an AI model, vendor, assistant, or coding harness, even if a global default would. The template's "PR via CastCodes" box is product provenance, not an AI credit, and is fine to check.

@@ -1,179 +1,226 @@
 ---
 name: create-pr
-description: Create a pull request in the warp repository for the current branch. Use when the user mentions opening a PR, creating a pull request, submitting changes for review, or preparing code for merge.
+description: Create a pull request in the CastCodes repository (OpenCoven/cast-codes) for the current branch. Use when the user mentions opening a PR, creating a pull request, submitting changes for review, or preparing code for merge. Covers the CastCodes-specific gates (rebrand + AI-attribution), Conventional-Commit titling, template selection, GitHub-issue linking, and test coverage.
 ---
 
 # create-pr
 
 ## Overview
 
-This guide covers best practices for creating pull requests in the warp repository, including merging master, running presubmit checks, linking Linear tasks, ensuring appropriate test coverage, and structuring your PR for effective review.
+This guide covers how to open a pull request in **CastCodes** (`OpenCoven/cast-codes`) that is review-ready on the first push: syncing `main`, passing the mandatory presubmit + fork guards, linking a GitHub issue, filling the CastCodes PR template, and structuring the change for fast review.
 
-## Related Skills
+CastCodes is a **staged fork** of Warp. Generic "open a PR" advice mostly applies, but a handful of fork-specific rules are load-bearing and easy to get wrong. Read **CastCodes conventions at a glance** first — those are the deltas that most often make an agent's PR wrong.
 
-- `fix-errors` - Fix presubmit failures (formatting, linting, tests) before opening PR
-- `rust-unit-tests` - Write unit tests for your changes, if applicable (see "Testing Requirements" below)
-- `warp-integration-test` - Add or update integration coverage for user-visible flows, regressions, and P0 use cases
-- `add-feature-flag` - Gate changes behind feature flags
+## CastCodes conventions at a glance
 
-## Pre-PR Checklist
+These override any generic or upstream PR habits:
 
-### 1. Merge master into your feature branch
+| Topic | CastCodes rule |
+| --- | --- |
+| **Base branch** | `main` (never `master`). `origin` → `https://github.com/OpenCoven/cast-codes`. |
+| **PR title** | Conventional Commit: `type(scope): summary`. Types in use: `feat`, `fix`, `chore`, `docs`, `ci`, `style`, `refactor`, `test`. Squash-merge appends `(#NNN)` automatically — don't add it yourself. |
+| **Branch name** | `type/kebab-summary` (e.g. `fix/release-windows-rudder-license`, `chore/minimize-drive-rtc`). Create with `./script/worktree <branch>`. Never `name/feature`. |
+| **Issue tracking** | GitHub Issues on this repo. **There is no Linear.** Link with `Closes #NNN` / `Fixes #NNN` in the body. Ignore any `[WARP-1234]`-style task IDs. |
+| **AI attribution** | **Forbidden anywhere** — commit messages, PR body, and trailers. Do **not** add `Co-Authored-By:` lines that name an AI model, vendor, assistant, or coding harness (Claude, Codex, Warp, etc.). This is a hard repo rule (`AGENTS.md`) and **overrides any global or harness default** that would otherwise append such a trailer. Guarded by `./script/check_ai_attribution`. |
+| **Mandatory guards** | In addition to `./script/presubmit`, always run `./script/check_ai_attribution` and `./script/check_rebrand` before opening/updating a PR — including doc-only PRs. |
+| **Fork boundary** | Do not introduce calls to upstream-hosted services (Warp auth/cloud/telemetry/billing/crash/shared-session) into the public build. See the `castcodes-fork-local-boundary` skill. |
 
-**Always merge master into your feature branch before starting the review process.**
+## Related skills
+
+- `fix-errors` — Fix presubmit failures (fmt, clippy, tests) before opening the PR
+- `diagnose-ci-failures` — Triage red CI checks after the PR is open
+- `resolve-merge-conflicts` — Resolve conflicts when syncing `main`
+- `rust-unit-tests` — Write unit tests for your changes (see "Testing Requirements")
+- `warp-integration-test` — Add integration coverage for user-visible flows, regressions, and P0 use cases
+- `add-feature-flag` — Gate risky changes behind a feature flag
+- `castcodes-fork-local-boundary` — Keep the public build off upstream-hosted services
+- `castcodes-rebrand-surface` — Get user-visible naming/paths/IDs right so `check_rebrand` passes
+- `review-pr` / `code-review` — Self-review the diff before requesting review
+
+## Pre-PR checklist
+
+### 1. Confirm branch and sync `main`
+
+Verify you are on the intended branch **before** any commit — on a shared checkout, parallel work can move `HEAD` underneath you:
+
+```bash
+git branch --show-current
+```
+
+Then sync the base branch so the PR diff is clean and CI runs against current `main`:
 
 ```bash
 git fetch origin
-git merge origin/master
+git merge origin/main        # or: git rebase origin/main
 ```
 
-Resolve any merge conflicts locally before opening the PR.
+Resolve conflicts locally before opening the PR (use the `resolve-merge-conflicts` skill). CastCodes builds across many concurrent branches — for non-trivial work, do this in a worktree (`./script/worktree <branch>`) so `target/` caches and other sessions don't collide.
 
-### 2. Run presubmit checks for code changes
+### 2. Run the gates
 
-If the PR includes code changes, run the relevant presubmit checks before opening or updating it:
+**Always run the two fork guards** (fast; required even for doc-only PRs):
+
+```bash
+./script/check_ai_attribution   # no generated-by / model-credit artifacts
+./script/check_rebrand          # no accidental Warp reintroduction on public surfaces
+```
+
+**For code changes, also run presubmit:**
 
 ```bash
 ./script/presubmit
 ```
 
-`./script/presubmit` runs:
-- `cargo fmt` - Code formatting
-- `cargo clippy` - Linting with all warnings as errors
-- All tests (unit, doc, and integration)
-If the PR is documentation-only (for example, skills, markdown, or other non-code content), you do not need to run `cargo fmt` or `cargo clippy` just to open or update the PR.
+`./script/presubmit` runs, in order:
 
-If presubmit fails for a code-changing PR, use the `fix-errors` skill to resolve issues.
+- `cargo fmt -- --check` — formatting
+- `cargo clippy --workspace --all-targets --tests -- -D warnings` — lint, all warnings are errors
+- `clang-format` + `wgslfmt` — native/shader formatting
+- `PSScriptAnalyzer` — PowerShell lint (skipped locally if `pwsh` is absent; enforced in CI)
+- `cargo nextest run` (workspace) + `cargo test --doc` — unit, integration, and doc tests
 
-**You must run `cargo fmt` and `cargo clippy` before:**
-- Opening a new PR that includes code changes
-- Pushing new commits that include code changes to an existing PR branch
-- Any reviewed branch update that changes code
+If presubmit fails, use the `fix-errors` skill. If a full build/test is too expensive for a small change, run a targeted gate instead and **say exactly what was and was not verified**:
+
+```bash
+cargo check -p warp-app --bin cast-codes --features gui
+cargo clippy -p <touched-crate> --all-targets --tests -- -D warnings
+```
+
+**Documentation-only PRs** (skills, markdown, non-code content) may skip `cargo fmt`/`cargo clippy`, but must still pass the two fork guards above.
 
 ### 3. Review your changes
 
-Before creating a PR, review what changes you're about to submit:
+Review exactly what you're about to submit, against `main`:
 
 ```bash
-# View commits in your branch (comparing against base branch)
-git --no-pager log <base-branch>..HEAD --oneline
-
-# View file statistics for changes
-git --no-pager diff <base-branch>...HEAD --stat
-
-# View full diff
-git --no-pager diff <base-branch>...HEAD
+git --no-pager log main..HEAD --oneline        # commits in your branch
+git --no-pager diff main...HEAD --stat         # files + churn
+git --no-pager diff main...HEAD                 # full diff
 ```
 
-This helps you:
-- Verify all intended changes are included
-- Catch unintended changes before review
+Use this to:
+
+- Verify all intended changes are present and no stray edits leaked in
+- Catch leftover Warp naming, AI-attribution artifacts, or debug code before review
 - Write an accurate PR description
-- Ensure you're comparing against the correct base branch
-- **Tests:** Include tests when required—bug fixes (regression test), algorithmic code (unit tests), UI components (layout test), P0 use cases (integration test). See Testing Requirements below.
+- Confirm test coverage matches the change (see Testing Requirements)
 
-### 4. Link to Linear task
+### 4. Commit hygiene
 
-When possible, PRs should be associated with a Linear task. Use the Linear MCP tool (if available) to find corresponding issues.
+- **Conventional-Commit messages**, matching the PR title style (`type(scope): summary`).
+- **Sign every commit** — pass `-S` to `git commit` so the commit lands **Verified**. Verify with `git log -1 --show-signature` before pushing.
+- **No AI attribution** in any commit message or trailer (see conventions table). If a tool or template inserted one, strip it before committing.
+- **Keep PRs narrow and squashable** — one logical change per PR; separate required fixes from optional cleanup (`CONTRIBUTING.md`). Call out any intentionally-retained upstream names so reviewers can tell compatibility from missed rebrand work.
 
-**Branch naming convention:**
-Remote branches should be prefixed with your name (e.g., `zheng/feature`, `alice/fix-bug`).
+### 5. Link a GitHub issue
 
-**How to link PRs to Linear:**
-Include the issue ID in the PR title (e.g., `[WARP-1234] Add new feature`). Do this **before** creating the PR for automatic linking.
-
-### 5. Open the PR
-
-Use the PR template at `.github/pull_request_template.md` when opening PRs.
-
-Add changelog entries when appropriate using the format at the bottom of the PR template. Some examples:
-- Feature: "Global search in files across your current directories. Use CMD-F/CTRL-SHIFT-F to open."
-- Improvement: "Added horizontal autoscrolling when jumping to line/column."
-- Bug fix: "Fixed session viewer input being cleared when agent runs commands.
-
-**CLI workflow:**
-
-- **Check if PR exists** for current branch:
-  ```bash
-  gh pr view --json number,url
-  ```
-  Exit code 0 if PR exists, 1 if not.
-
-- **Create a new PR:**
-  ```bash
-  # With title and body
-  gh pr create --title "Title" --body "Description" --draft
-
-  # Auto-fill from commits
-  gh pr create --fill --draft
-
-  # Use PR template file
-  gh pr create --body-file .github/pull_request_template.md --title "Title" --draft
-  ```
-  Key flags: `--draft` / `-d`, `--fill` / `-f`, `--body-file` / `-F`, `--web` / `-w`
-
-- **Update an existing PR:**
-  ```bash
-  gh pr edit --title "New title" --body "New body"
-  gh pr edit --add-reviewer username --add-label bug
-  ```
-
-- **Mark PR ready for review:**
-  ```bash
-  gh pr ready
-  ```
-
-### 6. Include co-author attribution
-
-When committing changes or creating a PR, include attribution at the end of every commit message or PR description:
+PRs should reference the GitHub issue they address. In the body, use a closing keyword so the issue auto-closes on merge:
 
 ```
-Co-Authored-By: Warp <agent@warp.dev>
+Closes #123
+```
+
+Confirm the linked issue is labeled `ready-to-spec` or `ready-to-implement` (the template asks for this).
+
+### 6. Fill the PR template
+
+Open the PR with a real body built from the template — do not leave `<!-- comments -->` unfilled.
+
+**Which template:**
+
+- **Default:** `.github/pull_request_template.md` (used automatically by `gh pr create`).
+- **Feature behind a flag:** append `?template=feature_flag.md` to the compare URL (PRD/coding/content checklists).
+- **Release cherry-pick:** `?template=cherrypick.md` (justification + validation).
+
+**Fill these sections of the default template:**
+
+- **Description** — *What* changed, *Why* (link the issue), and *How* (approach). For UI changes, add your design buddy as a reviewer.
+- **Linked Issue** — `Closes #NNN`; check the `ready-to-spec` / `ready-to-implement` box; attach screenshots/video for user-visible or UI changes.
+- **Testing** — how you tested; automated tests added (or justification for none). Check the `manually tested … with ./script/run` box, and attach screenshots/a screen recording for anything user-visible.
+- **Agent Mode** — check the **"PR via CastCodes"** box when an agent authored the PR. This is product provenance (a link to `cast.codes`), **not** an AI credit line, so it does not violate the No-AI-Attribution rule.
+- **Changelog** — for user-facing changes, uncomment and fill the relevant `CHANGELOG-*` line at the bottom. One entry per line, no `{{ }}` brackets:
+  - `CHANGELOG-NEW-FEATURE:` sizable new features (use sparingly)
+  - `CHANGELOG-IMPROVEMENT:` new functionality on existing features
+  - `CHANGELOG-BUG-FIX:` fixes for known bugs/regressions
+
+  Examples — Feature: "Global search across your current directories (CMD-F)." Improvement: "Added horizontal autoscrolling when jumping to line/column." Bug fix: "Fixed session viewer input being cleared when the agent runs commands."
+
+### 7. Open the PR
+
+**Check whether a PR already exists** for the current branch:
+
+```bash
+gh pr view --json number,url    # exit 0 if a PR exists, 1 if not
+```
+
+**Create a new PR** (base defaults to `main`; open as draft until the readiness gate passes):
+
+```bash
+# Conventional-commit title + template body
+gh pr create --draft --base main \
+  --title "fix(scope): summary" \
+  --body-file /tmp/pr-body.md
+
+# Or auto-fill title/body from commits, then edit in the template sections
+gh pr create --draft --base main --fill
+```
+
+Useful flags: `--draft`/`-d`, `--fill`/`-f`, `--body-file`/`-F`, `--web`/`-w`, `--add-reviewer`, `--add-label`.
+
+**Update an existing PR:**
+
+```bash
+gh pr edit --title "New title" --body-file /tmp/pr-body.md
+gh pr edit --add-reviewer <user> --add-label <label>
+```
+
+## PR readiness gate
+
+Before flipping a draft to ready (`gh pr ready`), confirm every item — this is the checklist that keeps quality consistent when opening PRs at scale:
+
+- [ ] On the intended branch, rebased/merged on top of current `origin/main`
+- [ ] `./script/check_ai_attribution` passes — no model/agent credit anywhere (commits, body, trailers)
+- [ ] `./script/check_rebrand` passes — no accidental Warp on public surfaces
+- [ ] `./script/presubmit` passes (code changes), or a documented targeted gate for expensive builds
+- [ ] Title is a Conventional Commit; commits are signed (`-S`, Verified)
+- [ ] Tests added where required (see below); coverage matches the change
+- [ ] Template filled: Description (What/Why/How), Linked Issue (`Closes #NNN` + label), Testing (+ `./script/run` box, UI screenshots/video), Agent Mode box, Changelog line if user-facing
+- [ ] No upstream-hosted-service calls added to the public build
+- [ ] Self-reviewed the full diff; no stray/debug edits
+
+```bash
+gh pr ready
 ```
 
 ## Testing Requirements
 
 ### Bug fixes require regression tests
 
-**All bug fixes should be accompanied by a regression test.** This helps prevent re-breaking something that was already broken once.
-
-The test should:
-- Reproduce the original bug (would fail before the fix)
-- Pass after the fix is applied
-- Be clearly named to indicate what bug it's preventing
+**All bug fixes should be accompanied by a regression test** — it should fail before the fix, pass after, and be named for the bug it prevents.
 
 ### Algorithmic code requires unit tests
 
-Code with non-trivial logic should have unit tests to validate functionality:
+Code with non-trivial logic should have unit tests:
 
-**Examples of what needs unit tests:**
-- Custom data structures (e.g., `SumTree`)
-- Search-related APIs that should return expected results for a given query
-- Core layout code in the UI framework
-- Any algorithmic or computational logic
+- **Needs tests:** custom data structures (e.g. `SumTree`), search APIs, core UI-framework layout code, any algorithmic/computational logic.
+- **Not required:** trivial functions, getters/setters.
 
-**Not required for:**
-- Sufficiently-simple functions
-- Trivial getters/setters
-
-See the `rust-unit-tests` skill for guidance on writing unit tests.
+See the `rust-unit-tests` skill.
 
 ### UI components need layout validation tests
 
-**All UI components (implementations of `View`) should have a simple unit test** to validate that they can be laid out without a panic.
-
-This provides high-level coverage over rendering "safety" (though not "correctness"):
+**Every UI component (implementation of `View`) should have a simple test** proving it lays out without panicking — high-level "rendering safety" coverage:
 
 ```rust
 #[test]
 fn test_component_can_layout() {
     use warpui::App;
     use warp::test_util::{terminal::initialize_app_for_terminal_view, add_window_with_terminal};
-    
+
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         let term = add_window_with_terminal(&mut app, None);
-        
+
         // Render the component - should not panic
         term.update(&mut app, |view, ctx| {
             // Create and layout your component
@@ -182,50 +229,33 @@ fn test_component_can_layout() {
 }
 ```
 
+(The `warpui` / `warp::test_util` crate names are intentionally-retained internal upstream names — do not rebrand them.)
+
 ### Ask before skipping integration coverage
 
-If the PR changes a user-visible flow, fixes an end-to-end regression, or otherwise looks like it would benefit from integration coverage, use the `ask_user_question` tool before creating or updating the PR to ask whether the user wants an integration test added as part of the work.
-
-Prefer a direct choice such as:
+If the PR changes a user-visible flow, fixes an end-to-end regression, or otherwise looks like it would benefit from integration coverage, use the `ask_user_question` tool before creating/updating the PR to ask whether to add an integration test. Offer a direct choice:
 
 - `Yes, add an integration test before creating the PR`
 - `No, continue without an integration test`
 
-If the user chooses to add one, use the `warp-integration-test` skill.
+If yes, use the `warp-integration-test` skill.
 
 ### P0 use cases require integration tests
 
-**All "P0 use cases" require an integration test** that covers the behavior/flow in question.
-
-**A "P0 use case" is defined as:** Any behavior of the application that, if broken, warrants an out-of-band release.
-
-Integration tests should:
-- Exercise the full user-facing flow
-- Validate end-to-end functionality
-- Be placed in the `integration/` directory
-
-Use the `warp-integration-test` skill for implementation details, test registration steps, and validation workflow.
-
-## PR Description Guidelines
-
-Your PR summary under the "Description" section should include:
-
-1. **What** - What changes are being made
-2. **Why** - Why these changes are necessary (link to Linear task if applicable)
-3. **How** - Brief explanation of the approach taken
+**All "P0 use cases" require an integration test.** A **P0 use case** is any behavior that, if broken, warrants an out-of-band release. Integration tests should exercise the full user-facing flow end to end and live in the `integration/` directory. Use the `warp-integration-test` skill for registration and validation steps.
 
 ## After Opening the PR
 
-1. **Monitor CI checks** - Ensure all automated checks pass
-2. **Respond to review comments** - Address feedback promptly
-3. **Keep the PR up to date** - Merge master if conflicts arise
-4. **Re-run relevant validation** - After making changes based on review feedback. For code changes, re-run `cargo fmt`/`cargo clippy` (and other relevant checks); for documentation-only changes, this is not required.
+1. **Monitor CI** — ensure all checks pass; use the `diagnose-ci-failures` skill to triage red checks.
+2. **Respond to review comments** promptly.
+3. **Keep the PR current** — re-sync `origin/main` if conflicts arise.
+4. **Re-run the gates after any change** — for code changes, re-run presubmit (or the relevant targeted checks) plus the two fork guards; for doc-only changes, the fork guards suffice.
 
 ## Best Practices
 
-- **Keep PRs focused** - One logical change per PR when possible
-- **Write clear commit messages** - Explain what and why, not just what
-- **Self-review first** - Review your own diff before requesting review
-- **Update tests** - Ensure test coverage reflects your changes
-- **Document breaking changes** - Call out any API changes or breaking modifications
-- **Use feature flags** - Gate risky changes behind feature flags when appropriate (see the `add-feature-flag` skill)
+- **One logical change per PR** — keep it focused and squashable.
+- **Clear commit messages** — explain what *and why*, not just what.
+- **Self-review first** — read your own diff before requesting review.
+- **Document breaking changes** — call out API or behavior changes explicitly.
+- **Use feature flags** — gate risky changes (see `add-feature-flag`).
+- **Preserve the fork boundary** — no upstream-hosted-service calls, no rebrand regressions, no AI attribution.

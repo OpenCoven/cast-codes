@@ -1,5 +1,5 @@
-> **⚠️ PRs are not being accepted until July 2026.**
-> Please close this PR and open an Issue instead. Unreviewed PRs will be closed.
+> **🎆 Pull Requests are open — Independence Day PR event (since July 4, 2026).**
+> Keep PRs small, focused, and squashable, and link the issue they address. See [CONTRIBUTING.md](../CONTRIBUTING.md) for scope and rebrand boundaries.
 
 ## Description
 <!-- Please remember to add your design buddy onto the PR for review, if it contains any UI changes! -->
