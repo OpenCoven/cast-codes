@@ -39,8 +39,7 @@ use crate::{
     resource_center::TipsCompleted,
     search::files::model::FileSearchModel,
     server::{
-        cloud_objects::{listener::Listener, update_manager::UpdateManager},
-        server_api::ServerApiProvider,
+        cloud_objects::update_manager::UpdateManager, server_api::ServerApiProvider,
         sync_queue::SyncQueue,
     },
     settings::PrivacySettings,
@@ -105,7 +104,6 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(UserWorkspaces::default_mock);
     app.add_singleton_model(TeamTesterStatus::mock);
     app.add_singleton_model(TeamUpdateManager::mock);
-    app.add_singleton_model(Listener::mock);
     app.add_singleton_model(UpdateManager::mock);
 
     // Initialize file-based MCP dependencies.

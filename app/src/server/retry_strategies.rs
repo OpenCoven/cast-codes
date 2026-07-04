@@ -37,13 +37,6 @@ pub const OUT_OF_BAND_REQUEST_RETRY_STRATEGY: RetryOption = RetryOption::exponen
 )
 .with_jitter(0.5 /* max_jitter_percentage */);
 
-// For listeners, retry up to 5 times, waiting between 10-40 seconds between retries.
-pub const LISTENER_RETRY_STRATEGY: RetryOption = RetryOption::linear(
-    Duration::from_secs(25), /* interval */
-    5,                       /* max retry count */
-)
-.with_jitter(0.6 /* max_jitter_multiplier */);
-
 /// Classify an HTTP-backed error as transient (worth retrying) or permanent (fail fast).
 ///
 /// Transient: 5xx responses, 408, 429, or any error whose chain does not carry an
