@@ -14,8 +14,10 @@ use warpui::{
     Element, ViewContext,
 };
 
+use warp_server_client::drive::sharing::SharingAccessLevel;
+
 use crate::{
-    drive::sharing::{ContentEditability, SharingAccessLevel},
+    cloud_object::model::view::ContentEditability,
     env_vars::{
         active_env_var_collection_data::TrashStatus,
         view::env_var_collection::{EnvVarCollectionAction, EnvVarCollectionView},

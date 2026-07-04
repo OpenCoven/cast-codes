@@ -287,7 +287,7 @@ impl BackingView for WelcomeView {
 
     fn render_header_content(
         &self,
-        _ctx: &view::HeaderRenderContext<'_>,
+        _ctx: &view::HeaderRenderContext,
         _app: &AppContext,
     ) -> view::HeaderContent {
         view::HeaderContent::simple("New tab")

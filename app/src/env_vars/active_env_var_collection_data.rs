@@ -1,10 +1,14 @@
+use warp_server_client::drive::sharing::SharingAccessLevel;
+
 use crate::{
     cloud_object::{
         breadcrumbs::ContainingObject,
-        model::{persistence::CloudModelEvent, view::CloudViewModel},
+        model::{
+            persistence::CloudModelEvent,
+            view::{CloudViewModel, ContentEditability},
+        },
         CloudObject, Owner, Revision, Space,
     },
-    drive::sharing::{ContentEditability, SharingAccessLevel},
     env_vars::CloudEnvVarCollection,
     server::{
         cloud_objects::update_manager::{

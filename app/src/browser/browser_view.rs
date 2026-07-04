@@ -1575,7 +1575,7 @@ impl BackingView for BrowserView {
 
     fn render_header_content(
         &self,
-        _ctx: &view::HeaderRenderContext<'_>,
+        _ctx: &view::HeaderRenderContext,
         app: &AppContext,
     ) -> HeaderContent {
         let theme = Appearance::as_ref(app).theme();

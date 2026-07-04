@@ -50,8 +50,8 @@ use crate::{
     cmd_or_ctrl_shift,
     drive::{
         drive_helpers::has_feature_gated_anonymous_user_reached_notebook_limit,
-        export::ExportManager, items::WarpDriveItemId, sharing::ShareableObject,
-        CloudObjectTypeAndId, OpenWarpDriveObjectSettings,
+        export::ExportManager, items::WarpDriveItemId, CloudObjectTypeAndId,
+        OpenWarpDriveObjectSettings,
     },
     editor::{
         EditOrigin, EditorView, Event as EditorEvent, InteractionState,
@@ -73,7 +73,6 @@ use crate::{
     server::{
         cloud_objects::update_manager::{FetchSingleObjectOption, UpdateManager},
         ids::{ClientId, ServerId, SyncId},
-        telemetry::SharingDialogSource,
     },
     settings::{
         app_installation_detection::{UserAppInstallDetectionSettings, UserAppInstallStatus},
@@ -253,11 +252,6 @@ pub enum NotebookEvent {
     MoveToSpace {
         cloud_object_type_and_id: CloudObjectTypeAndId,
         new_space: Space,
-    },
-    OpenDriveObjectShareDialog {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
-        invitee_email: Option<String>,
-        source: SharingDialogSource,
     },
     AttachPlanAsContext(AIDocumentId),
 }
@@ -578,17 +572,6 @@ impl NotebookView {
             }
             ActiveNotebookDataEvent::CreatedOnServer => {
                 ctx.emit(NotebookEvent::Pane(PaneEvent::AppStateChanged));
-                if let Some(id) = self
-                    .active_notebook_data
-                    .as_ref(ctx)
-                    .id()
-                    .and_then(SyncId::into_server)
-                {
-                    self.pane_configuration.update(ctx, |pane_config, ctx| {
-                        pane_config
-                            .set_shareable_object(Some(ShareableObject::WarpDriveObject(id)), ctx);
-                    })
-                }
             }
             ActiveNotebookDataEvent::TrashStatusChanged | ActiveNotebookDataEvent::MovedToSpace => {
                 self.pane_configuration.update(ctx, |pane_config, ctx| {
@@ -1465,16 +1448,6 @@ impl NotebookView {
         self.set_title(&notebook.model().title, ctx);
         self.set_content(&notebook, ctx);
 
-        if let Some(server_id) = notebook.id.into_server() {
-            self.pane_configuration
-                .update(ctx, |pane_configuration, ctx| {
-                    pane_configuration.set_shareable_object(
-                        Some(ShareableObject::WarpDriveObject(server_id)),
-                        ctx,
-                    );
-                });
-        }
-
         self.active_notebook_data.update(ctx, |data, ctx| {
             data.open_existing(notebook.id, ctx);
         });
@@ -1532,17 +1505,7 @@ impl NotebookView {
             }
         });
         self.update_breadcrumbs(ctx);
-        if let Some(invitee_email) = settings.invitee_email.clone() {
-            let object_id_to_share = settings
-                .focused_folder_id
-                .map(|id| CloudObjectTypeAndId::Folder(SyncId::ServerId(id)))
-                .unwrap_or(CloudObjectTypeAndId::Notebook(notebook.id));
-            ctx.emit(NotebookEvent::OpenDriveObjectShareDialog {
-                cloud_object_type_and_id: object_id_to_share,
-                invitee_email: Some(invitee_email),
-                source: SharingDialogSource::InviteeRequest,
-            });
-        } else if let Some(focused_folder_id) = settings.focused_folder_id.map(SyncId::ServerId) {
+        if let Some(focused_folder_id) = settings.focused_folder_id.map(SyncId::ServerId) {
             self.view_in_warp_drive(
                 WarpDriveItemId::Object(CloudObjectTypeAndId::Folder(focused_folder_id)),
                 ctx,
@@ -2228,7 +2191,7 @@ impl BackingView for NotebookView {
 
     fn render_header_content(
         &self,
-        _ctx: &view::HeaderRenderContext<'_>,
+        _ctx: &view::HeaderRenderContext,
         app: &AppContext,
     ) -> view::HeaderContent {
         view::HeaderContent::simple(self.pane_configuration.as_ref(app).title())

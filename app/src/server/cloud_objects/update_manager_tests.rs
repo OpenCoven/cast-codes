@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use futures_lite::future;
 use settings::{RespectUserSyncSetting, SyncToCloud};
 use warp_core::features::FeatureFlag;
-use warp_graphql::{object_permissions::AccessLevel, scalars::time::ServerTimestamp};
+use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{App, ModelHandle, SingletonEntity};
 
 #[cfg(test)]
@@ -24,17 +24,15 @@ use crate::{
             json_model::JsonSerializer,
             persistence::{CloudModel, CloudModelEvent, UpdateSource},
         },
-        BulkCreateCloudObjectResult, CloudModelType, CloudObjectEventEntrypoint, CloudObjectGuest,
+        BulkCreateCloudObjectResult, CloudModelType, CloudObjectEventEntrypoint,
         CloudObjectLocation, ConflictStatus, CreateCloudObjectResult, CreatedCloudObject,
         GenericCloudObject, GenericStringObjectFormat, JsonObjectType, ObjectDeleteResult,
-        ObjectIdType, ObjectMetadataUpdateResult, ObjectPermissionsUpdateData, ObjectType, Owner,
-        Revision, RevisionAndLastEditor, ServerCloudObject, ServerFolder, ServerGuestSubject,
-        ServerObject, ServerObjectGuest, ServerPreference, ServerWorkflow, ServerWorkflowEnum,
-        Space, UpdateCloudObjectResult,
+        ObjectIdType, ObjectMetadataUpdateResult, ObjectType, Owner, Revision,
+        RevisionAndLastEditor, ServerCloudObject, ServerFolder, ServerObject, ServerPreference,
+        ServerWorkflow, ServerWorkflowEnum, Space, UpdateCloudObjectResult,
     },
     drive::{
         folders::{CloudFolder, CloudFolderModel, FolderId},
-        sharing::{SharingAccessLevel, Subject, UserKind},
         CloudObjectTypeAndId,
     },
     notebooks::{CloudNotebook, CloudNotebookModel, NotebookId},
@@ -7316,196 +7314,5 @@ fn test_permissions_update_existing_object() {
         assert!(matches!(&events[0], ModelEvent::UpsertNotebook { .. }));
 
         // We don't currently emit CloudModel events for permission changes - should we?
-    });
-}
-
-#[test]
-fn test_add_guest_success() {
-    let _guard = FeatureFlag::SharedWithMe.override_enabled(true);
-    App::test(Assets, |mut app| async move {
-        initialize_app(&mut app);
-        let mut server_api = mock_server_api();
-
-        let server_id: ServerId = 123.into();
-        let uid = server_id.uid();
-        let notebook_id: NotebookId = server_id.into();
-        let sync_id = SyncId::ServerId(notebook_id.into());
-
-        let notebook_metadata = ServerMetadata {
-            uid: server_id,
-            revision: Revision::now(),
-            metadata_last_updated_ts: Utc::now().into(),
-            trashed_ts: None,
-            folder_id: None,
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            current_editor_uid: None,
-        };
-        let notebook: ServerNotebook = mock_server_notebook(
-            notebook_id,
-            Owner::mock_current_user(),
-            notebook_metadata.clone(),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(sync_id, CloudNotebook::new_from_server(notebook));
-        });
-
-        let updated_permissions_ts = Utc::now() + chrono::Duration::seconds(5);
-        let updated_permissions = ServerPermissions {
-            space: Owner::mock_current_user(),
-            guests: vec![ServerObjectGuest {
-                subject: ServerGuestSubject::User {
-                    firebase_uid: "guest".to_string(),
-                },
-                access_level: AccessLevel::Editor,
-                source: None,
-            }],
-            anyone_link_sharing: None,
-            permissions_last_updated_ts: updated_permissions_ts.into(),
-        };
-
-        server_api
-            .expect_add_object_guests()
-            .times(1)
-            .return_once(move |_, _, _| {
-                Ok(ObjectPermissionsUpdateData {
-                    permissions: updated_permissions,
-                    profiles: vec![UserProfileWithUID {
-                        firebase_uid: UserUid::new("guest"),
-                        display_name: Some("Guest User".to_string()),
-                        email: "guest@warp.dev".to_string(),
-                        photo_url: "http://example.com".to_string(),
-                    }],
-                })
-            });
-
-        let update_manager_struct = create_update_manager_struct(&mut app, Arc::new(server_api));
-
-        // Add the user as a guest.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                update_manager.add_object_guests(
-                    server_id,
-                    vec!["guest@warp.dev".to_string()],
-                    AccessLevel::Editor,
-                    ctx,
-                );
-            });
-
-        assert_pending_online_only_change_for_object(&mut app, &uid, true);
-
-        // There should be no optimistic update.
-        assert_eq!(cloud_events(&update_manager_struct), vec![]);
-        assert!(db_events(&update_manager_struct).is_empty());
-
-        // Wait for the permissions change to complete.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                ctx.await_spawned_future(update_manager.spawned_futures[0])
-            })
-            .await;
-
-        assert_pending_online_only_change_for_object(&mut app, &uid, false);
-        CloudModel::handle(&app).read(&app, |cloud_model, _| {
-            let object = cloud_model.get_by_uid(&uid).expect("Object should exist");
-            assert_eq!(
-                object.permissions().guests,
-                vec![CloudObjectGuest {
-                    subject: Subject::User(UserKind::Account(UserUid::new("guest"))),
-                    access_level: SharingAccessLevel::Edit,
-                    source: None,
-                }]
-            )
-        });
-
-        // After the update succeeds on the server, we update the DB.
-        let events = db_events(&update_manager_struct);
-        assert_eq!(events.len(), 2);
-        assert!(
-            matches!(&events[0], ModelEvent::UpsertNotebook { notebook } if notebook.id == sync_id),
-            "Expected upsert of notebook, got {:?}",
-            &events[0]
-        );
-        assert!(matches!(&events[1], ModelEvent::UpsertUserProfiles { .. }));
-    });
-}
-
-#[test]
-fn test_add_guest_failure() {
-    let _guard = FeatureFlag::SharedWithMe.override_enabled(true);
-    App::test(Assets, |mut app| async move {
-        initialize_app(&mut app);
-        let mut server_api = mock_server_api();
-
-        let server_id: ServerId = 123.into();
-        let uid = server_id.uid();
-        let notebook_id: NotebookId = server_id.into();
-        let sync_id = SyncId::ServerId(notebook_id.into());
-
-        let notebook_metadata = ServerMetadata {
-            uid: server_id,
-            revision: Revision::now(),
-            metadata_last_updated_ts: Utc::now().into(),
-            trashed_ts: None,
-            folder_id: None,
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            current_editor_uid: None,
-        };
-        let notebook: ServerNotebook = mock_server_notebook(
-            notebook_id,
-            Owner::mock_current_user(),
-            notebook_metadata.clone(),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(sync_id, CloudNotebook::new_from_server(notebook));
-        });
-
-        server_api
-            .expect_add_object_guests()
-            .returning(move |_, _, _| Err(anyhow::anyhow!("adding guest failed")));
-
-        let update_manager_struct = create_update_manager_struct(&mut app, Arc::new(server_api));
-
-        // Add the user as a guest.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                update_manager.add_object_guests(
-                    server_id,
-                    vec!["guest@warp.dev".to_string()],
-                    AccessLevel::Editor,
-                    ctx,
-                );
-            });
-
-        assert_pending_online_only_change_for_object(&mut app, &uid, true);
-
-        // There should be no optimistic update.
-        assert_eq!(cloud_events(&update_manager_struct), vec![]);
-        assert!(db_events(&update_manager_struct).is_empty());
-
-        // Wait for the permissions change and all retries to fail.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                ctx.await_spawned_future(update_manager.spawned_futures[0])
-            })
-            .await;
-        warpui::r#async::Timer::after(Duration::from_secs(10)).await;
-
-        assert_pending_online_only_change_for_object(&mut app, &uid, false);
-
-        // There should no changes to roll back.
-        CloudModel::handle(&app).read(&app, |cloud_model, _| {
-            let object = cloud_model.get_by_uid(&uid).expect("Object should exist");
-            assert_eq!(object.permissions().guests, vec![])
-        });
-        assert_eq!(cloud_events(&update_manager_struct), vec![]);
-        assert!(db_events(&update_manager_struct).is_empty());
     });
 }

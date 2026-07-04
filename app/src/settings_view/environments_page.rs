@@ -2074,7 +2074,7 @@ impl BackingView for EnvironmentsPageView {
 
     fn render_header_content(
         &self,
-        _ctx: &HeaderRenderContext<'_>,
+        _ctx: &HeaderRenderContext,
         _app: &AppContext,
     ) -> HeaderContent {
         HeaderContent::simple("Environments")

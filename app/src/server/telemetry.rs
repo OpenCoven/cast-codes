@@ -212,27 +212,6 @@ pub enum SaveAsWorkflowModalSource {
     WarpAIPanel,
 }
 
-/// How the user opened the Warp Drive sharing dialog.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-pub enum SharingDialogSource {
-    /// The sharing button in the pane header.
-    PaneHeader,
-    /// The per-pane command palette entry (includes keybindings).
-    CommandPalette,
-    /// The Warp Drive index context menu.
-    DriveIndex,
-    /// The user intented into Warp with an email address to invite.
-    InviteeRequest,
-    /// The user jumped from an inherited ACL to its definition on a parent object.
-    InheritedPermission,
-    /// The onboarding block shown after users create new personal objects.
-    OnboardingBlock,
-    /// The conversation list overflow menu.
-    ConversationList,
-    /// The AI block context menu.
-    AIBlockContextMenu,
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ToggleBlockFilterSource {
     /// This includes the keybinding and the command palette items.
