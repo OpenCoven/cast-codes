@@ -66,7 +66,7 @@ pub(super) enum AgentModalityCalloutState {
     MeetTerminalInput,
     /// Step 2: "Natural language support" with checkbox
     NaturalLanguageSupport,
-    /// Step 3: "Introducing CastCodes's new agent experience" (Agent intention only)
+    /// Step 3: "Introducing the CastCodes agent experience" (Agent intention only)
     IntroducingAgentExperience,
     /// Step 4: "Updated agent input" (Agent intention only)
     UpdatedAgentInput,

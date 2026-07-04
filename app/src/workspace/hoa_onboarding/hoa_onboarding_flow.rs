@@ -472,7 +472,7 @@ impl HoaOnboardingFlow {
             styles: FormattedTextStyles {
                 underline: true,
                 hyperlink: Some(Hyperlink::Url(
-                    "https://docs.warp.dev/agent-platform/warp-agents/agent-notifications".into(),
+                    "https://github.com/OpenCoven/cast-codes/blob/main/docs/COVEN-POWERED-CASTCODES.md".into(),
                 )),
                 ..Default::default()
             },
@@ -480,7 +480,7 @@ impl HoaOnboardingFlow {
 
         let formatted = FormattedText::new([FormattedTextLine::Line(vec![
             FormattedTextFragment::plain_text(
-                "CastCodes pipes through notifications from any CLI coding agent into a unified notification center that works across all coding agents and harnesses. ",
+                "CastCodes collects notifications from CLI coding agents in one inbox. ",
             ),
             learn_more_fragment,
         ])]);

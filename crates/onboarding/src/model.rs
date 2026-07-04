@@ -169,7 +169,7 @@ impl OnboardingStateModel {
             agent_settings: AgentDevelopmentSettings::new(default_model_id),
             project_settings: ProjectOnboardingSettings::default(),
             ui_customization: UICustomizationSettings::agent_defaults(),
-            models,
+            models: normalize_models_for_channel(models),
             workspace_enforces_autonomy,
             agent_modality_enabled,
             free_user_no_ai_experiment,
@@ -482,7 +482,7 @@ impl OnboardingStateModel {
 
         self.agent_settings.selected_model_id = default_model_id.clone();
 
-        self.models = models;
+        self.models = normalize_models_for_channel(models);
         ctx.emit(OnboardingStateEvent::ModelsUpdated);
         ctx.notify();
     }
@@ -609,4 +609,50 @@ impl OnboardingStateModel {
 
 impl Entity for OnboardingStateModel {
     type Event = OnboardingStateEvent;
+}
+
+fn normalize_models_for_channel(mut models: Vec<OnboardingModelInfo>) -> Vec<OnboardingModelInfo> {
+    if !warp_core::channel::ChannelState::cloud_services_available() {
+        for model in &mut models {
+            model.requires_upgrade = false;
+        }
+    }
+
+    models
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OnboardingAuthState, OnboardingStateModel};
+    use crate::slides::OnboardingModelInfo;
+    use ai::LLMId;
+    use warp_core::{channel::ChannelState, ui::icons::Icon};
+
+    fn locked_model(id: &str) -> OnboardingModelInfo {
+        OnboardingModelInfo {
+            id: LLMId::from(id),
+            title: id.to_string(),
+            icon: Icon::OpenAILogo,
+            requires_upgrade: true,
+            is_default: false,
+        }
+    }
+
+    #[test]
+    fn oss_onboarding_models_do_not_preserve_billing_upgrade_locks() {
+        let premium_model_id = LLMId::from("premium-model");
+        let state = OnboardingStateModel::new(
+            vec![locked_model("premium-model")],
+            premium_model_id.clone(),
+            false,
+            true,
+            false,
+            None,
+            OnboardingAuthState::FreeUser,
+        );
+
+        assert!(!ChannelState::cloud_services_available());
+        assert!(!state.models().iter().any(|model| model.requires_upgrade));
+        assert!(!state.is_model_disabled(&premium_model_id));
+    }
 }

@@ -151,7 +151,7 @@ impl IntroSlide {
         let base_color: ColorU = internal_colors::fg_overlay_4(theme).into();
         let shimmer_color: ColorU = theme.foreground().into();
         let title = ShimmeringTextElement::new(
-            "Cast Codes with OpenCoven",
+            "CastCodes",
             appearance.ui_font_family(),
             32.,
             base_color,
@@ -163,7 +163,7 @@ impl IntroSlide {
 
         let subtitle_color = internal_colors::text_sub(theme, theme.background().into_solid());
         let subtitle = FormattedTextElement::from_str(
-            "A sovereign terminal for conjuring agents, shaping code, and shipping with command.",
+            "A local-first terminal and code workspace for projects, commands, and coding agents.",
             appearance.ui_font_family(),
             16.,
         )

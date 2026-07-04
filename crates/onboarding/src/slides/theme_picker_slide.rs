@@ -5,6 +5,7 @@ use crate::visuals::theme_picker_visual;
 use crate::OnboardingIntention;
 use pathfinder_color::ColorU;
 use ui_components::{button, Component as _, Options as _};
+use warp_core::channel::ChannelState;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::{appearance::Appearance, theme::color::internal_colors, theme::WarpTheme};
 use warpui::{
@@ -167,10 +168,18 @@ impl ThemePickerSlide {
         // the login slide (which surfaces the same links) unless Warp Drive is
         // enabled — in that case the login slide will still run after the theme
         // step and show the disclaimer, so duplicating it here is unnecessary.
+        //
+        // The disclaimer points at hosted Terms of Service and an analytics
+        // opt-out. The public CastCodes/OSS build has neither a hosted ToS nor a
+        // telemetry subsystem, so the block is suppressed there to avoid a dead
+        // link and a consent prompt for data collection that never happens.
         let state = self.onboarding_state.as_ref(app);
         let is_terminal = matches!(state.intention(), OnboardingIntention::Terminal);
         let warp_drive_enabled = state.ui_customization().show_warp_drive;
-        if is_terminal && !warp_drive_enabled && FeatureFlag::OpenWarpNewSettingsModes.is_enabled()
+        if is_terminal
+            && !warp_drive_enabled
+            && FeatureFlag::OpenWarpNewSettingsModes.is_enabled()
+            && ChannelState::cloud_services_available()
         {
             content.push(self.render_disclaimer_section(appearance));
         }
@@ -266,7 +275,7 @@ impl ThemePickerSlide {
 
         let theme_picker_last = FeatureFlag::OpenWarpNewSettingsModes.is_enabled();
         let next_label = if theme_picker_last {
-            "Get Casting"
+            "Finish setup"
         } else {
             "Next"
         };
@@ -595,7 +604,7 @@ impl ThemePickerSlide {
         let tos_line = Flex::row()
             .with_child(
                 ui_builder
-                    .span("By continuing, you agree to CastCodes's ")
+                    .span("By continuing, you agree to the CastCodes ")
                     .with_style(disclaimer_styles)
                     .build()
                     .finish(),

@@ -237,7 +237,7 @@ impl IntentionSlide {
         };
 
         let description = FormattedTextElement::from_str(
-            "An agent-first experience with best in class terminal support. Get terminal and agent driven development AI features like:",
+            "Use local coding agents with project context while keeping terminal workflows close.",
             appearance.ui_font_family(),
             14.,
         )
@@ -398,7 +398,7 @@ impl IntentionSlide {
 
         let new_settings_modes = FeatureFlag::OpenWarpNewSettingsModes.is_enabled();
         let next_text = if !new_settings_modes && selected_index == 1 {
-            "Get Casting"
+            "Finish setup"
         } else {
             "Next"
         };

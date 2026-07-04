@@ -31,6 +31,9 @@ use crate::{
     workspace::{Workspace, WorkspaceAction},
 };
 
+const GET_STARTED_TITLE: &str = "Welcome to CastCodes";
+const GET_STARTED_SUBTITLE: &str = "Local-first project workspace";
+
 pub fn init(app: &mut AppContext) {
     use warpui::keymap::macros::*;
 
@@ -223,7 +226,7 @@ impl GetStartedView {
                 .finish(),
                 appearance
                     .ui_builder()
-                    .paragraph("Welcome to Warp")
+                    .paragraph(GET_STARTED_TITLE)
                     .with_style(UiComponentStyles {
                         font_size: Some(20.),
                         ..Default::default()
@@ -233,7 +236,7 @@ impl GetStartedView {
                 Container::new(
                     appearance
                         .ui_builder()
-                        .paragraph("The Agentic Development Environment")
+                        .paragraph(GET_STARTED_SUBTITLE)
                         .with_style(UiComponentStyles {
                             font_size: Some(14.),
                             font_family_id: Some(appearance.monospace_font_family()),
@@ -384,5 +387,23 @@ where
                 });
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    const GET_STARTED_SOURCE: &str = include_str!("get_started_view.rs");
+
+    #[test]
+    fn get_started_copy_is_castcodes_local_first() {
+        let expected_title = ["Welcome to", "CastCodes"].join(" ");
+        let expected_subtitle = ["Local-first", "project workspace"].join(" ");
+        let inherited_title = ["Welcome to", "Warp"].join(" ");
+        let inherited_tagline = ["Agentic", "Development", "Environment"].join(" ");
+
+        assert!(GET_STARTED_SOURCE.contains(&expected_title));
+        assert!(GET_STARTED_SOURCE.contains(&expected_subtitle));
+        assert!(!GET_STARTED_SOURCE.contains(&inherited_title));
+        assert!(!GET_STARTED_SOURCE.contains(&inherited_tagline));
     }
 }

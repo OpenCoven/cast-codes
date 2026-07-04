@@ -778,16 +778,16 @@ impl NotificationsTrigger {
     pub fn discovery_banner_copy(&self) -> &'static str {
         match self {
             NotificationsTrigger::LongRunningCommand(..) => {
-                "Warp can notify you when long-running commands finish."
+                "CastCodes can notify you when long-running commands finish."
             }
             NotificationsTrigger::AgentTaskCompleted(..) => {
-                "Warp can notify you when an agent finishes responding."
+                "CastCodes can notify you when an agent finishes responding."
             }
             NotificationsTrigger::NeedsAttention => {
-                "Warp can notify you when a command or agent needs your attention."
+                "CastCodes can notify you when a command or agent needs your attention."
             }
             NotificationsTrigger::PasswordPrompt => {
-                "Warp can notify you when you're prompted to enter a password."
+                "CastCodes can notify you when you're prompted to enter a password."
             }
         }
     }
@@ -9416,6 +9416,14 @@ impl TerminalView {
 
     /// Inserts telemetry policy banner into the blocklist.
     pub fn insert_telemetry_banner(&mut self, is_onboarded: bool, ctx: &mut ViewContext<Self>) {
+        // The public CastCodes/OSS build ships no telemetry subsystem, so this
+        // banner would advertise data collection that can never happen. Hide it
+        // whenever telemetry is unavailable, mirroring the privacy-page and auth
+        // settings gating on `is_telemetry_available()`.
+        if !ChannelState::is_telemetry_available() {
+            return;
+        }
+
         // Don't ever show telemetry banner for enterprise users.
         if UserWorkspaces::as_ref(ctx)
             .current_workspace()

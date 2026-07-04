@@ -39,12 +39,12 @@ const FEATURE_ITEMS: &[FeatureItem] = &[
     FeatureItem {
         icon: Icon::Inbox,
         title: "Agent inbox",
-        description: "Notifications when any agent needs your attention, also accessible in a central inbox",
+        description: "Notifications when an agent needs attention, with everything available from a central inbox",
     },
     FeatureItem {
         icon: Icon::MessageCheckSquare,
         title: "Native code review",
-        description: "Send inline comments from CastCodes's code review directly to Claude Code, Codex, or OpenCode",
+        description: "Send inline comments from CastCodes code reviews directly to Claude Code, Codex, or OpenCode",
     },
 ];
 
@@ -98,7 +98,7 @@ pub fn render_welcome_banner(
 
     // Title
     let title = Text::new(
-        "Introducing universal agent support: level up any coding agent with CastCodes",
+        "Use any coding agent with CastCodes",
         appearance.ui_font_family(),
         20.,
     )

@@ -16,6 +16,7 @@ use crate::terminal::warpify::settings::{SshExtensionInstallMode, WarpifySetting
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::CustomerType;
 use settings::Setting;
+use warp_core::channel::ChannelState;
 use warpui::AppContext;
 #[cfg(not(test))]
 use warpui::SingletonEntity as _;
@@ -209,6 +210,10 @@ impl ServerExperiment {
 /// free tier. This is the single source of truth for gating any client-side behaviour
 /// that should be locked/disabled for users without AI credits.
 pub fn is_free_user_no_ai_experiment_active(ctx: &AppContext) -> bool {
+    if !ChannelState::cloud_services_available() {
+        return false;
+    }
+
     let in_experiment = FeatureFlag::FreeUserNoAi.is_enabled();
     let is_free_tier = UserWorkspaces::handle(ctx)
         .as_ref(ctx)
@@ -216,4 +221,26 @@ pub fn is_free_user_no_ai_experiment_active(ctx: &AppContext) -> bool {
         .map(|team| team.billing_metadata.customer_type == CustomerType::Free)
         .unwrap_or(true); // no team = solo free user
     in_experiment && is_free_tier
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_free_user_no_ai_experiment_active;
+    use crate::features::FeatureFlag;
+    use crate::workspaces::user_workspaces::UserWorkspaces;
+    use warp_core::channel::ChannelState;
+    use warpui::App;
+
+    #[test]
+    fn free_user_no_ai_experiment_is_disabled_without_cloud_services() {
+        App::test((), |mut app| async move {
+            let _free_user_no_ai = FeatureFlag::FreeUserNoAi.override_enabled(true);
+            app.add_singleton_model(UserWorkspaces::default_mock);
+
+            app.update(|ctx| {
+                assert!(!ChannelState::cloud_services_available());
+                assert!(!is_free_user_no_ai_experiment_active(ctx));
+            });
+        });
+    }
 }

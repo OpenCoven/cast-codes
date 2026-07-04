@@ -70,3 +70,56 @@ pub fn init(app: &mut warpui::AppContext) {
     agent_onboarding_view::init(app);
     callout::init(app);
 }
+
+#[cfg(test)]
+mod copy_tests {
+    const INTRO_SLIDE: &str = include_str!("slides/intro_slide.rs");
+    const INTENTION_SLIDE: &str = include_str!("slides/intention_slide.rs");
+    const PROJECT_SLIDE: &str = include_str!("slides/project_slide.rs");
+    const THEME_PICKER_SLIDE: &str = include_str!("slides/theme_picker_slide.rs");
+    const FREE_USER_NO_AI_SLIDE: &str = include_str!("slides/free_user_no_ai_slide.rs");
+    const AGENT_CALLOUT_VIEW: &str = include_str!("callout/view.rs");
+
+    #[test]
+    fn intro_copy_uses_plain_castcodes_positioning() {
+        assert!(INTRO_SLIDE.contains("\"CastCodes\""));
+        assert!(!INTRO_SLIDE.contains("Cast Codes with OpenCoven"));
+        assert!(!INTRO_SLIDE.contains("sovereign"));
+        assert!(!INTRO_SLIDE.contains("conjuring"));
+    }
+
+    #[test]
+    fn onboarding_completion_ctas_are_plain() {
+        for source in [
+            INTENTION_SLIDE,
+            PROJECT_SLIDE,
+            THEME_PICKER_SLIDE,
+            FREE_USER_NO_AI_SLIDE,
+        ] {
+            assert!(!source.contains("Get Casting"));
+        }
+    }
+
+    #[test]
+    fn intention_copy_is_concrete_and_local_first() {
+        assert!(INTENTION_SLIDE.contains("local coding agents"));
+        assert!(!INTENTION_SLIDE.contains("best in class"));
+        assert!(!INTENTION_SLIDE.contains("agent driven development AI features"));
+    }
+
+    #[test]
+    fn onboarding_copy_uses_plain_castcodes_possessive() {
+        let awkward_possessive = format!("{}'s", "CastCodes");
+        let expected_callout_title = ["CastCodes", "agent experience"].join(" ");
+
+        for source in [
+            THEME_PICKER_SLIDE,
+            FREE_USER_NO_AI_SLIDE,
+            AGENT_CALLOUT_VIEW,
+        ] {
+            assert!(!source.contains(&awkward_possessive));
+        }
+
+        assert!(AGENT_CALLOUT_VIEW.contains(&expected_callout_title));
+    }
+}

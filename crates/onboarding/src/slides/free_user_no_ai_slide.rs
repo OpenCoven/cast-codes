@@ -119,7 +119,7 @@ impl FreeUserNoAiSlide {
             appearance,
             0,
             Icon::Code2,
-            "Agent driven development with CastCodes's built-in agent",
+            "Agent development with the built-in CastCodes agent",
             "Iterate, plan, and build with Cast Agent inside CastCodes.",
             agent_price_badge.to_string(),
             true, // badge is green
@@ -314,7 +314,7 @@ impl FreeUserNoAiSlide {
             self.next_button.render(
                 appearance,
                 button::Params {
-                    content: button::Content::Label("Get Casting".into()),
+                    content: button::Content::Label("Finish setup".into()),
                     theme: &button::themes::Primary,
                     options: button::Options {
                         keystroke: Some(enter),

@@ -29,8 +29,8 @@ pub fn sections(ctx: &mut ViewContext<ResourceCenterMainView>) -> Vec<Section> {
                 ctx,
             ),
             FeatureItem::new(
-                "Take an action on block",
-                "Right click on a block to copy/paste, share, more.",
+                "Act on a block",
+                "Right click on a block to copy, rerun, or open more actions.",
                 Tip::Hint(TipHint::BlockAction),
                 ctx,
             ),
@@ -60,22 +60,22 @@ pub fn sections(ctx: &mut ViewContext<ResourceCenterMainView>) -> Vec<Section> {
         section_name: FeatureSection::AdvancedSetup,
         items: vec![
             ContentItem {
-                title: "Use your custom prompt",
-                description: "Set up CastCodes to honor your PS1 setting",
-                url: "https://docs.warp.dev/terminal/appearance/prompt",
-                button_label: "View documentation",
+                title: "Local-first CastCodes",
+                description: "Review what this OSS build includes and which hosted services stay unavailable.",
+                url: "https://github.com/OpenCoven/cast-codes#current-scope",
+                button_label: "Open README",
             },
             ContentItem {
-                title: "Integrate CastCodes with your IDE",
-                description: "Configure CastCodes to launch from your most used development tools",
-                url: "https://docs.warp.dev/terminal/integrations-and-plugins",
-                button_label: "View documentation",
+                title: "Coven-powered workspace",
+                description: "See how projects, agent lanes, verification, and handoff records fit together.",
+                url: "https://github.com/OpenCoven/cast-codes/blob/main/docs/COVEN-POWERED-CASTCODES.md",
+                button_label: "Open direction doc",
             },
             ContentItem {
-                title: "How CastCodes is built",
-                description: "Learn how the CastCodes team uses their favorite features",
-                url: "https://www.warp.dev/blog/how-warp-uses-warp",
-                button_label: "Read article",
+                title: "Build from source",
+                description: "Use the repo build commands and package checks for this fork.",
+                url: "https://github.com/OpenCoven/cast-codes#build",
+                button_label: "Open README",
             },
         ],
     };
@@ -120,4 +120,21 @@ fn maximize_warp_items(ctx: &mut ViewContext<ResourceCenterMainView>) -> Vec<Fea
     }
 
     maximize_warp_items
+}
+
+#[cfg(test)]
+mod tests {
+    const SECTIONS_SOURCE: &str = include_str!("sections.rs");
+
+    #[test]
+    fn resource_center_copy_stays_castcodes_owned_and_local_first() {
+        let upstream_docs_host = ["docs", "warp", "dev"].join(".");
+        let upstream_blog_host = ["www", "warp", "dev"].join(".");
+        let stale_share_hint = ["copy/paste", "share", "more"].join(", ");
+
+        assert!(!SECTIONS_SOURCE.contains(&stale_share_hint));
+        assert!(!SECTIONS_SOURCE.contains(&upstream_docs_host));
+        assert!(!SECTIONS_SOURCE.contains(&upstream_blog_host));
+        assert!(SECTIONS_SOURCE.contains("docs/COVEN-POWERED-CASTCODES.md"));
+    }
 }
