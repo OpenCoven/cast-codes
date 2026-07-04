@@ -31,7 +31,6 @@ mod sync_inputs;
 mod theme_ui_block;
 mod typeahead;
 mod video_recording;
-mod websockets;
 mod workflows;
 mod workspace;
 
@@ -65,7 +64,6 @@ pub use sync_inputs::*;
 pub use theme_ui_block::*;
 pub use typeahead::*;
 pub use video_recording::*;
-pub use websockets::*;
 pub use workflows::*;
 pub use workspace::*;
 
