@@ -102,7 +102,7 @@ const DATA_MANAGEMENT_DESCRIPTION: &str =
 const DATA_MANAGEMENT_LINK_TEXT: &str = "Visit the data management page";
 
 const PRIVACY_POLICY_TITLE: &str = "Privacy policy";
-const PRIVACY_POLICY_LINK_TEXT: &str = "Read CastCodes's privacy policy";
+const PRIVACY_POLICY_LINK_TEXT: &str = "Read the CastCodes privacy policy";
 
 pub fn data_management_url(custom_token: Option<&str>) -> String {
     match custom_token {

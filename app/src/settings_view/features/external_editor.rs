@@ -321,7 +321,7 @@ impl View for ExternalEditorView {
         }
 
         column.add_child(render_body_item::<ExternalEditorAction>(
-            "Open Markdown files in CastCodes's Markdown Viewer by default".to_string(),
+            "Open Markdown files in the CastCodes Markdown Viewer by default".to_string(),
             Some(AdditionalInfo {
                 mouse_state: self.markdown_viewer_mouse_state.clone(),
                 on_click_action: Some(ExternalEditorAction::OpenUrl(USER_DOCS_URL.to_string())),

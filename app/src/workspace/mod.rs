@@ -1245,6 +1245,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::CreateTeamEnvVarCollection,
         )
         .with_custom_action(CustomAction::NewTeamEnvVars)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace")
                 & id!(flags::ENABLE_WARP_DRIVE)
@@ -1263,6 +1264,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::EnvVarCollection.as_str())
         .with_custom_action(CustomAction::NewPersonalEnvVars)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE)),
         EditableBinding::new(
             "workspace:create_personal_ai_prompt",
@@ -1272,6 +1274,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::WarpAi.as_str())
         .with_custom_action(CustomAction::NewPersonalAIPrompt)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE) & id!(flags::IS_ANY_AI_ENABLED),
         ),
@@ -1283,6 +1286,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::WarpAi.as_str())
         .with_custom_action(CustomAction::NewTeamAIPrompt)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace")
                 & id!(flags::ENABLE_WARP_DRIVE)
@@ -1315,12 +1319,14 @@ pub fn init(app: &mut AppContext) {
             "Import To Personal Drive",
             WorkspaceAction::ImportToPersonalDrive,
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE)),
         EditableBinding::new(
             "workspace:import_to_team_drive",
             "Import To Team Drive",
             WorkspaceAction::ImportToTeamDrive,
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE) & id!("WarpDrive_BelongsToTeam"),
         ),

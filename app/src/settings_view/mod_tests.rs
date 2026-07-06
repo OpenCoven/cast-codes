@@ -459,6 +459,45 @@ fn editable_binding_block<'a>(source: &'a str, binding_id: &str) -> &'a str {
     &rest[..end]
 }
 
+fn editable_binding_blocks_containing<'a>(source: &'a str, pattern: &str) -> Vec<&'a str> {
+    let mut blocks = Vec::new();
+    let mut search_start = 0;
+
+    while let Some(offset) = source[search_start..].find("EditableBinding::new(") {
+        let start = search_start + offset;
+        let rest = &source[start..];
+        let end = rest[1..]
+            .find("EditableBinding::new(")
+            .map(|index| index + 1)
+            .unwrap_or(rest.len());
+        let block = &rest[..end];
+
+        if block.contains(pattern) {
+            blocks.push(block);
+        }
+
+        search_start = start + end;
+    }
+
+    blocks
+}
+
+#[test]
+fn all_cast_drive_bindings_are_gated_by_channel_services() {
+    let blocks = editable_binding_blocks_containing(WORKSPACE_MOD_SOURCE, "ENABLE_WARP_DRIVE");
+    assert!(
+        blocks.len() >= 15,
+        "expected the full Cast Drive command binding set to be audited"
+    );
+
+    for block in blocks {
+        assert!(
+            block.contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            "Cast Drive binding should be hidden when hosted cloud services are unavailable: {block}"
+        );
+    }
+}
+
 #[test]
 fn cloud_only_command_palette_bindings_are_gated_by_channel_services() {
     for binding_id in [
@@ -499,6 +538,24 @@ fn cast_drive_command_palette_bindings_are_gated_by_channel_services() {
 }
 
 #[test]
+fn cast_drive_auxiliary_bindings_are_gated_by_channel_services() {
+    for binding_id in [
+        "workspace:create_team_env_vars",
+        "workspace:create_personal_env_vars",
+        "workspace:create_personal_ai_prompt",
+        "workspace:create_team_ai_prompt",
+        "workspace:import_to_personal_drive",
+        "workspace:import_to_team_drive",
+    ] {
+        assert!(
+            editable_binding_block(WORKSPACE_MOD_SOURCE, binding_id)
+                .contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            "{binding_id} should be hidden when hosted cloud services are unavailable"
+        );
+    }
+}
+
+#[test]
 fn privacy_settings_copy_is_castcodes_branded() {
     assert!(PRIVACY_PAGE_SOURCE.contains("CastCodes scans terminal blocks"));
     assert!(PRIVACY_PAGE_SOURCE.contains("delete your CastCodes account permanently"));
@@ -525,6 +582,26 @@ fn visible_settings_copy_uses_castcodes_terms_for_shell_and_shared_surfaces() {
     assert!(!WARPIFY_PAGE_SOURCE.contains("Warp attempts"));
     assert!(!WARPIFY_PAGE_SOURCE.contains("Warpification\""));
     assert!(!SHOW_BLOCKS_VIEW_SOURCE.contains("Warp servers"));
+}
+
+#[test]
+fn visible_settings_copy_uses_clean_castcodes_possessive() {
+    let settings_sources = [
+        EXTERNAL_EDITOR_SOURCE,
+        PRIVACY_PAGE_SOURCE,
+        REFERRALS_PAGE_SOURCE,
+    ];
+
+    for source in settings_sources {
+        assert!(!source.contains("CastCodes's"));
+    }
+
+    assert!(EXTERNAL_EDITOR_SOURCE
+        .contains("Open Markdown files in the CastCodes Markdown Viewer by default"));
+    assert!(PRIVACY_PAGE_SOURCE.contains("Read the CastCodes privacy policy"));
+    assert!(
+        REFERRALS_PAGE_SOURCE.contains("Sign up to participate in the CastCodes referral program")
+    );
 }
 
 #[test]
