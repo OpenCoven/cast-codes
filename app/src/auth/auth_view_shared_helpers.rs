@@ -141,7 +141,7 @@ pub fn render_square_logo(appearance: &Appearance) -> Box<dyn Element> {
             .finish(),
         )
         .with_background(appearance.theme().surface_2())
-        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(10.)))
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
         .with_horizontal_padding(11.)
         .finish(),
     )

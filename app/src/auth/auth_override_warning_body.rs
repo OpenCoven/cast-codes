@@ -126,7 +126,7 @@ impl AuthOverrideWarningBody {
         ConstrainedBox::new(
             Container::new(Icon::new("bundled/svg/alert-triangle.svg", color).finish())
                 .with_background(appearance.theme().surface_1())
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(10.)))
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
                 .with_horizontal_padding(11.)
                 .finish(),
         )

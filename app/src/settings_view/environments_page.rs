@@ -1582,7 +1582,7 @@ impl EnvironmentsPageWidget {
                 )
                 .with_horizontal_padding(6.)
                 .with_vertical_padding(2.)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(10.)))
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
                 .with_background(theme.surface_3())
                 .finish();
                 title_row.add_child(badge);

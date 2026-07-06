@@ -456,7 +456,7 @@ impl<S: Slide> LaunchModal<S> {
                 Clipped::new(
                     ConstrainedBox::new(
                         Image::new(self.slide.image(), CacheOption::Original)
-                            .with_corner_radius(CornerRadius::with_top_right(Radius::Pixels(10.)))
+                            .with_corner_radius(CornerRadius::with_top_right(Radius::Pixels(8.)))
                             .cover()
                             .finish(),
                     )
@@ -476,7 +476,7 @@ impl<S: Slide> LaunchModal<S> {
                         .with_border(
                             Border::left(1.).with_border_color(blended_colors::neutral_4(theme)),
                         )
-                        .with_corner_radius(CornerRadius::with_bottom_right(Radius::Pixels(10.)))
+                        .with_corner_radius(CornerRadius::with_bottom_right(Radius::Pixels(8.)))
                         .finish(),
                 )
                 .finish(),
@@ -598,7 +598,7 @@ impl<S: Slide> View for LaunchModal<S> {
                 .finish(),
         )
         .with_background_color(blended_colors::neutral_1(theme))
-        .with_corner_radius(CornerRadius::with_left(Radius::Pixels(10.)))
+        .with_corner_radius(CornerRadius::with_left(Radius::Pixels(8.)))
         .with_uniform_padding(24.)
         .finish();
 
@@ -641,7 +641,7 @@ impl<S: Slide> View for LaunchModal<S> {
                 .with_min_height(MIN_MODAL_HEIGHT)
                 .finish(),
             )
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(10.)))
+            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
             .with_border(Border::all(1.).with_border_fill(theme.outline()))
             .with_drop_shadow(DropShadow::default())
             .finish(),
