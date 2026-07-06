@@ -1733,7 +1733,12 @@ impl View for RightPanelView {
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
-        let panel_content = self.render_panel_content(app);
+        let mut panel_content = self.render_panel_content(app);
+        // Match the left panel: themes with an explicit sidebar token get the
+        // brand surface; other themes keep the transparent panel.
+        if let Some(bg) = Appearance::as_ref(app).theme().ui_sidebar_override() {
+            panel_content = Container::new(panel_content).with_background(bg).finish();
+        }
 
         if self.is_maximized(app) {
             return Shrinkable::new(1.0, panel_content).finish();

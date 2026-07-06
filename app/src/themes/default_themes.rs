@@ -4,7 +4,7 @@ use warp_core::ui::{
     color::{blend::Blend, coloru_with_opacity, OPAQUE},
     theme::{
         color::CustomDetails, AnsiColor, AnsiColors, Details, Fill, HorizontalGradient, Image,
-        TerminalColors, VerticalGradient, WarpTheme,
+        TerminalColors, UiTokens, VerticalGradient, WarpTheme,
     },
 };
 
@@ -292,10 +292,15 @@ pub(super) fn adeberry_colors() -> TerminalColors {
 /// - terminal ANSI: CastCodes-specific dark palette derived from the Phase 1
 ///   semantic tokens instead of the generic dark theme.
 ///
-/// Brand slots that have no dedicated `WarpTheme` slot (surface `#161619`,
-/// elevated surface `#1e1e22`, border `rgba(255,255,255,0.08)`, text secondary
-/// `#8e8e9a`, text muted `#5a5a65`, accent gold `#d4a84b`, status bar `#0a0a0d`)
-/// are applied surface-by-surface in dependent crates; see `DESIGN-CHANGES.md`.
+/// The remaining brand slots (surface `#161619`, elevated surface `#1e1e22`,
+/// borders, text secondary `#8e8e9a`, text muted `#5a5a65`, gold `#d4a84b`,
+/// chrome `#0a0a0d`) are carried by the semantic `UiTokens` block below and
+/// surfaced through the fallback-aware accessors in
+/// `warp_core::ui::theme::color`; see `DESIGN-CHANGES.md`.
+///
+/// Border tokens are stored pre-blended to opaque over the `#0f0f12`
+/// background (theme hex serialization is RGB-only): 8% white → `#222225`,
+/// 12% → `#2c2c2e`, 4% → `#19191b`.
 pub fn castcodes_dark() -> WarpTheme {
     WarpTheme::new(
         Fill::Solid(ColorU::from_u32(0x0F0F12FF)),
@@ -307,6 +312,35 @@ pub fn castcodes_dark() -> WarpTheme {
         None,
         Some("CastCodes Dark".to_string()),
     )
+    .with_ui_tokens(castcodes_ui_tokens())
+}
+
+/// Semantic UI tokens for `castcodes_dark`, mirroring
+/// `resources/design-tokens.css`.
+pub(super) fn castcodes_ui_tokens() -> UiTokens {
+    UiTokens {
+        card: Some(ColorU::from_u32(0x161619FF)),
+        card_foreground: Some(ColorU::from_u32(0xE8E8EDFF)),
+        popover: Some(ColorU::from_u32(0x1E1E22FF)),
+        popover_foreground: Some(ColorU::from_u32(0xE8E8EDFF)),
+        primary: Some(ColorU::from_u32(0x7C3AEDFF)),
+        primary_foreground: Some(ColorU::from_u32(0xFFFFFFFF)),
+        secondary: Some(ColorU::from_u32(0x161619FF)),
+        secondary_foreground: Some(ColorU::from_u32(0x8E8E9AFF)),
+        muted: Some(ColorU::from_u32(0x161619FF)),
+        muted_foreground: Some(ColorU::from_u32(0x5A5A65FF)),
+        destructive: Some(ColorU::from_u32(0xEF4444FF)),
+        border: Some(ColorU::from_u32(0x222225FF)),
+        input: Some(ColorU::from_u32(0x222225FF)),
+        ring: Some(ColorU::from_u32(0x7C3AEDFF)),
+        sidebar: Some(ColorU::from_u32(0x161619FF)),
+        sidebar_foreground: Some(ColorU::from_u32(0xE8E8EDFF)),
+        chrome: Some(ColorU::from_u32(0x0A0A0DFF)),
+        border_strong: Some(ColorU::from_u32(0x2C2C2EFF)),
+        border_subtle: Some(ColorU::from_u32(0x19191BFF)),
+        primary_hover: Some(ColorU::from_u32(0x6D28D9FF)),
+        highlight: Some(ColorU::from_u32(0xD4A84BFF)),
+    }
 }
 
 /// Default bundled themes

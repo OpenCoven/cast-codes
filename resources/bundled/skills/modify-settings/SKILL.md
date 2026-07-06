@@ -1,11 +1,11 @@
 ---
 name: modify-settings
-description: View or modify Warp application settings using the bundled JSON schema for guidance
+description: View or modify CastCodes application settings using the bundled JSON schema for guidance
 ---
 
 # modify-settings
 
-Use this skill when the user wants to view, change, or troubleshoot Warp application settings.
+Use this skill when the user wants to view, change, or troubleshoot CastCodes application settings.
 
 ## Settings Schema
 
@@ -64,7 +64,7 @@ theme = "light"
 
 A common mistake is to stop one level too early — always count the full depth before writing the TOML section header.
 
-If the file does not exist yet, create it. Warp hot-reloads this file, so changes take effect immediately.
+If the file does not exist yet, create it. CastCodes hot-reloads this file, so changes take effect immediately.
 
 ## Workflow
 

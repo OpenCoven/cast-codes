@@ -121,7 +121,11 @@ impl WarpTheme {
     /// Doesn't allow gradients because these surfaces will often be too small
     /// for the gradients to look appealing.
     pub fn surface_3(&self) -> Fill {
-        Fill::Solid(neutral_3(self))
+        self.ui
+            .as_ref()
+            .and_then(|u| u.popover)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| Fill::Solid(neutral_3(self)))
     }
 
     /// Background color for UI elements that need to stand out from the main
@@ -141,7 +145,11 @@ impl WarpTheme {
     /// Doesn't allow gradients because these surfaces will often be too small
     /// for the gradients to look appealing.
     pub fn surface_1(&self) -> Fill {
-        Fill::Solid(neutral_1(self))
+        self.ui
+            .as_ref()
+            .and_then(|u| u.muted)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| Fill::Solid(neutral_1(self)))
     }
 
     pub fn cursor(&self) -> Fill {
@@ -203,6 +211,57 @@ impl WarpTheme {
             .unwrap_or_else(|| fg_overlay_2(self))
     }
 
+    /// Emphasized border, one step stronger than `outline()`.
+    pub fn border_strong(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.border_strong)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| fg_overlay_3(self))
+    }
+
+    /// Hairline border, one step weaker than `outline()`.
+    pub fn border_subtle(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.border_subtle)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| fg_overlay_1(self))
+    }
+
+    /// Returns `Some(Fill::Solid(c))` only when `ui.chrome` is explicitly set;
+    /// window chrome (title/status bar) render sites keep their existing
+    /// derived fallback so non-token themes are unchanged.
+    pub fn chrome_bg_override(&self) -> Option<Fill> {
+        self.ui.as_ref().and_then(|u| u.chrome).map(Fill::Solid)
+    }
+
+    /// Hover fill for `accent`-colored interactive elements. Falls back to
+    /// the existing foreground-overlay hover blend when no token is set.
+    pub fn accent_hover(&self) -> Fill {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.primary_hover)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| internal_colors::accent_hover(self))
+    }
+
+    /// Returns `Some(Fill::Solid(c))` only when `ui.primary_hover` is
+    /// explicitly set; callers keep their existing derived hover fallback so
+    /// non-token themes are unchanged.
+    pub fn accent_hover_override(&self) -> Option<Fill> {
+        self.ui
+            .as_ref()
+            .and_then(|u| u.primary_hover)
+            .map(Fill::Solid)
+    }
+
+    /// Sparse secondary-accent highlight (CastCodes gold). `None` unless the
+    /// theme explicitly opts in; callers should fall back to `accent()`.
+    pub fn highlight_override(&self) -> Option<ColorU> {
+        self.ui.as_ref().and_then(|u| u.highlight)
+    }
+
     // text colors
     pub fn font_color(&self, background: impl Into<ColorU>) -> Fill {
         Fill::Solid(pick_best_foreground_color(
@@ -218,10 +277,17 @@ impl WarpTheme {
     }
 
     pub fn sub_text_color(&self, background: Fill) -> Fill {
-        internal_colors::text_sub(self, background).into()
+        self.ui
+            .as_ref()
+            .and_then(|u| u.secondary_foreground)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| internal_colors::text_sub(self, background).into())
     }
 
     pub fn hint_text_color(&self, background: Fill) -> Fill {
+        if let Some(muted) = self.ui.as_ref().and_then(|u| u.muted_foreground) {
+            return Fill::Solid(muted);
+        }
         let details = self.details();
         self.font_color(background)
             .with_opacity(details.hint_text_opacity)

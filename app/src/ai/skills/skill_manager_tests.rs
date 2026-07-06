@@ -9,6 +9,19 @@ use warp_core::channel::ChannelState;
 use warpui::App;
 use watcher::HomeDirectoryWatcher;
 
+const ADD_MCP_SERVER_SKILL_SOURCE: &str =
+    include_str!("../../../../resources/bundled/skills/add-mcp-server/SKILL.md");
+const CHANGE_KEYBINDING_SKILL_SOURCE: &str =
+    include_str!("../../../../resources/bundled/skills/change-keybinding/SKILL.md");
+const CREATE_TAB_CONFIG_SKILL_SOURCE: &str =
+    include_str!("../../../../resources/bundled/skills/create-tab-config/SKILL.md");
+const MODIFY_SETTINGS_SKILL_SOURCE: &str =
+    include_str!("../../../../resources/bundled/skills/modify-settings/SKILL.md");
+const TAB_CONFIGS_SKILL_SOURCE: &str =
+    include_str!("../../../../resources/bundled/skills/tab-configs/SKILL.md");
+const UPDATE_TAB_CONFIG_SKILL_SOURCE: &str =
+    include_str!("../../../../resources/bundled/skills/update-tab-config/SKILL.md");
+
 // ============================================================================
 // Tests for get_skills_for_working_directory subdirectory scoping
 // ============================================================================
@@ -469,6 +482,39 @@ fn test_build_bundled_skill_context() {
             .display()
             .to_string()
     );
+}
+
+#[test]
+fn bundled_user_facing_skills_use_castcodes_names_and_paths() {
+    assert!(MODIFY_SETTINGS_SKILL_SOURCE.contains("CastCodes application settings"));
+    assert!(ADD_MCP_SERVER_SKILL_SOURCE.contains("Adding MCP Servers to CastCodes"));
+    assert!(ADD_MCP_SERVER_SKILL_SOURCE.contains("~/.cast-codes/.mcp.json"));
+    assert!(ADD_MCP_SERVER_SKILL_SOURCE.contains("{repo_root}/.cast-codes/.mcp.json"));
+    assert!(CHANGE_KEYBINDING_SKILL_SOURCE.contains("Customize CastCodes keyboard shortcuts"));
+    assert!(TAB_CONFIGS_SKILL_SOURCE.contains("CastCodes tab config TOML files"));
+    assert!(CREATE_TAB_CONFIG_SKILL_SOURCE.contains("Create a new CastCodes tab config"));
+    assert!(UPDATE_TAB_CONFIG_SKILL_SOURCE.contains("CastCodes build/channel"));
+
+    for source in [
+        ADD_MCP_SERVER_SKILL_SOURCE,
+        CHANGE_KEYBINDING_SKILL_SOURCE,
+        CREATE_TAB_CONFIG_SKILL_SOURCE,
+        MODIFY_SETTINGS_SKILL_SOURCE,
+        TAB_CONFIGS_SKILL_SOURCE,
+        UPDATE_TAB_CONFIG_SKILL_SOURCE,
+    ] {
+        assert!(!source.contains("Warp application settings"));
+        assert!(!source.contains("Warp keyboard shortcut"));
+        assert!(!source.contains("Warp tab config"));
+        assert!(!source.contains("Adding MCP Servers to Warp"));
+        assert!(!source.contains("~/.warp"));
+        assert!(!source.contains("{repo_root}/.warp"));
+        assert!(!source.contains("Warp hot-reloads"));
+        assert!(!source.contains("Warp must be restarted"));
+        assert!(!source.contains("Warp's normalized form"));
+        assert!(!source.contains("Warp-generated"));
+        assert!(!source.contains("Warp opens"));
+    }
 }
 
 // ============================================================================

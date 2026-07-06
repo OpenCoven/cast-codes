@@ -8,7 +8,7 @@ use crate::ai::mcp::{
     VariableType, VariableValue,
 };
 use serde_json;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 use warp_managed_secrets::ManagedSecretValue;
 
 #[test]
@@ -20,6 +20,31 @@ fn mcp_provider_from_file_path_recognizes_warp_home_path() {
             Some(MCPProvider::Warp)
         );
     }
+}
+
+#[test]
+fn warp_mcp_provider_uses_castcodes_project_config_path() {
+    assert_eq!(MCPProvider::Warp.display_name(), "CastCodes");
+    assert_eq!(
+        MCPProvider::Warp.project_config_path(),
+        Path::new(".cast-codes/.mcp.json")
+    );
+    assert_ne!(
+        MCPProvider::Warp.project_config_path(),
+        Path::new(".warp/.mcp.json")
+    );
+    assert_eq!(
+        mcp_provider_from_file_path(Path::new("/repo/.cast-codes/.mcp.json")),
+        Some(MCPProvider::Warp)
+    );
+    assert_eq!(
+        mcp_provider_from_file_path(Path::new("/repo/.warp/.mcp.json")),
+        None
+    );
+    assert_eq!(
+        mcp_provider_from_file_path(Path::new("/repo/.mcp.json")),
+        Some(MCPProvider::Claude)
+    );
 }
 
 #[test]

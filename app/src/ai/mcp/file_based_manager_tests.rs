@@ -255,7 +255,7 @@ fn test_update_file_based_servers_removes_unreferenced_servers() {
     });
 }
 
-/// A Warp-global installation detected from the managed `~/.warp*/.mcp.json`
+/// A CastCodes-global installation detected from the managed `~/.cast-codes/.mcp.json`
 /// watcher uses the home directory as its logical root and still always
 /// auto-spawns.
 #[test]
@@ -270,8 +270,8 @@ fn test_global_warp_server_from_managed_home_root_always_spawns() {
         let manager = setup_app(&mut app);
         let events = subscribe_events(&mut app, &manager);
 
-        // Toggle is off by default; the watcher-produced Warp root should still
-        // be classified as the global Warp config and auto-spawn.
+        // Toggle is off by default; the watcher-produced CastCodes root should still
+        // be classified as the global CastCodes config and auto-spawn.
         manager.update(&mut app, |m, ctx| {
             m.apply_parsed_servers(
                 warp_mcp_config_path.root_path.clone(),
@@ -285,18 +285,18 @@ fn test_global_warp_server_from_managed_home_root_always_spawns() {
             assert_eq!(
                 e.spawned_uuids.len(),
                 1,
-                "Managed Warp MCP config should auto-spawn regardless of toggle"
+                "Managed CastCodes MCP config should auto-spawn regardless of toggle"
             );
         });
 
-        // Flipping the toggle must not despawn the global Warp server.
+        // Flipping the toggle must not despawn the global CastCodes server.
         set_file_based_mcp_enabled(&mut app, true);
         set_file_based_mcp_enabled(&mut app, false);
 
         events.update(&mut app, |e, _| {
             assert!(
                 e.despawned_uuids.is_empty(),
-                "Managed Warp MCP config should never be despawned by toggle changes, got: {:?}",
+                "Managed CastCodes MCP config should never be despawned by toggle changes, got: {:?}",
                 e.despawned_uuids
             );
         });

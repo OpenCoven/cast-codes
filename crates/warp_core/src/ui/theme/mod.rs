@@ -609,6 +609,10 @@ impl TerminalColors {
 /// Optional, tweakcn-aligned semantic UI tokens. Every field is optional;
 /// missing fields fall back to today's derived values in `color.rs`.
 /// Field names mirror tweakcn (`--card`, `--card-foreground`, etc.) snake_cased.
+///
+/// The trailing block (`chrome`, `border_strong`, `border_subtle`,
+/// `primary_hover`, `highlight`) extends the tweakcn set with CastCodes brand
+/// slots; see `resources/design-tokens.css` for the authoritative values.
 #[derive(Serialize, Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct UiTokens {
     #[serde(
@@ -707,6 +711,41 @@ pub struct UiTokens {
         with = "opt_hex_color"
     )]
     pub sidebar_foreground: Option<ColorU>,
+    /// Window chrome (title bar / status bar) background.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub chrome: Option<ColorU>,
+    /// Emphasized border, one step stronger than `border`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub border_strong: Option<ColorU>,
+    /// Hairline border, one step weaker than `border`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub border_subtle: Option<ColorU>,
+    /// Hover state for `primary`-colored interactive elements.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub primary_hover: Option<ColorU>,
+    /// Sparse secondary accent for highlights only (CastCodes gold).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_hex_color"
+    )]
+    pub highlight: Option<ColorU>,
 }
 
 #[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -785,6 +824,14 @@ impl WarpTheme {
         self.ui = Some(ui);
         self.source = Some(source.into());
         self.source_imported_at = Some(imported_at.into());
+        self
+    }
+
+    /// Sets the semantic UI token block without import provenance.
+    /// Used by built-in themes (e.g. CastCodes Dark); `with_ui` is the
+    /// import-flow variant that also records provenance.
+    pub fn with_ui_tokens(mut self, ui: UiTokens) -> Self {
+        self.ui = Some(ui);
         self
     }
 

@@ -625,7 +625,7 @@ pub enum MCPProvider {
 impl MCPProvider {
     pub fn display_name(&self) -> &str {
         match self {
-            MCPProvider::Warp => "Warp",
+            MCPProvider::Warp => "CastCodes",
             MCPProvider::Claude => "Claude",
             MCPProvider::Codex => "Codex",
             MCPProvider::Agents => "Other Agents",
@@ -644,7 +644,7 @@ impl MCPProvider {
     /// Returns the path of the provider's config file relative to the home directory.
     pub fn home_config_path(&self) -> &'static Path {
         match self {
-            MCPProvider::Warp => Path::new(".warp/.mcp.json"),
+            MCPProvider::Warp => Path::new(".cast-codes/.mcp.json"),
             MCPProvider::Claude => Path::new(".claude.json"),
             MCPProvider::Codex => Path::new(".codex/config.toml"),
             MCPProvider::Agents => Path::new(".agents/.mcp.json"),
@@ -654,7 +654,7 @@ impl MCPProvider {
     /// Returns the path of the provider's config file relative to a project root.
     pub fn project_config_path(&self) -> &'static Path {
         match self {
-            MCPProvider::Warp => Path::new(".warp/.mcp.json"),
+            MCPProvider::Warp => Path::new(".cast-codes/.mcp.json"),
             MCPProvider::Claude => Path::new(".mcp.json"),
             MCPProvider::Codex => Path::new(".codex/config.toml"),
             MCPProvider::Agents => Path::new(".agents/.mcp.json"),
@@ -682,6 +682,16 @@ pub fn mcp_provider_from_file_path(file_path: &Path) -> Option<MCPProvider> {
     let mut best: Option<(MCPProvider, usize)> = None;
     for provider in MCPProvider::iter() {
         let cfg = provider.project_config_path();
+        if cfg == Path::new(".mcp.json")
+            && file_path
+                .parent()
+                .and_then(Path::file_name)
+                .is_some_and(|dir| {
+                    [".warp", ".cast-codes", ".agents"].contains(&dir.to_string_lossy().as_ref())
+                })
+        {
+            continue;
+        }
         if file_path.ends_with(cfg) {
             let len = cfg.as_os_str().len();
             if best.is_none_or(|(_, best_len)| len > best_len) {

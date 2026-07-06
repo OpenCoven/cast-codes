@@ -17709,7 +17709,9 @@ impl Workspace {
                 .finish(),
         )
         .with_border(tab_bar_border);
-        if FeatureFlag::NewTabStyling.is_enabled() {
+        if let Some(chrome_bg) = appearance.theme().chrome_bg_override() {
+            tab_bar_container = tab_bar_container.with_background(chrome_bg);
+        } else if FeatureFlag::NewTabStyling.is_enabled() {
             tab_bar_container = tab_bar_container
                 .with_background(internal_colors::fg_overlay_1(appearance.theme()));
         }

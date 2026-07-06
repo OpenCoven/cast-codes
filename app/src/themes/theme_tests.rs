@@ -15,6 +15,7 @@ fn castcodes_dark_theme_uses_phase_1_palette() {
             None,
             Some("CastCodes Dark".to_string()),
         )
+        .with_ui_tokens(castcodes_ui_tokens())
     );
 }
 
@@ -93,20 +94,22 @@ fn in_memory_theme_generation_test() {
     );
 }
 
-/// Backward-compat pixel parity for all 24 built-in themes.
+/// Backward-compat pixel parity for the 23 non-CastCodes built-in themes.
 ///
-/// Every built-in theme must:
+/// Every legacy built-in theme must:
 /// 1. Carry no `ui` block (tasks 1–6 guarantee `WarpTheme::new` sets `ui = None`).
 /// 2. Return the same derived values from `surface_2()`, `outline()`, and
 ///    `active_ui_text_color()` as they would without the override path — i.e.
 ///    the shims must be transparent when `ui` is absent.
+///
+/// `castcodes_dark()` is intentionally excluded: it carries the brand
+/// `UiTokens` block (see `castcodes_dark_carries_brand_ui_tokens`).
 ///
 /// If any of these assertions fire it means a built-in theme was accidentally
 /// given a `ui` block, or one of the accessor fallback paths drifted.
 #[test]
 fn builtin_themes_render_identically_without_ui_block() {
     let builtins: Vec<WarpTheme> = vec![
-        castcodes_dark(),
         dark_theme(),
         light_theme(),
         dracula(),
@@ -134,7 +137,7 @@ fn builtin_themes_render_identically_without_ui_block() {
 
     assert_eq!(
         builtins.len(),
-        24,
+        23,
         "update this test when adding/removing built-in themes"
     );
 
@@ -175,4 +178,121 @@ fn builtin_themes_render_identically_without_ui_block() {
             name
         );
     }
+}
+
+/// `castcodes_dark` must carry the full brand `UiTokens` block and surface it
+/// through the fallback-aware accessors (Phase 1 design contract; values
+/// mirror `resources/design-tokens.css`).
+#[test]
+fn castcodes_dark_carries_brand_ui_tokens() {
+    let theme = castcodes_dark();
+    let ui = theme.ui().expect("castcodes_dark carries a ui block");
+
+    // No import provenance — this is a built-in, not a tweakcn import.
+    assert_eq!(theme.source(), None);
+
+    // Surfaces.
+    assert_eq!(
+        theme.surface_1(),
+        Fill::Solid(ColorU::from_u32(0x161619FF)),
+        "surface_1 should be the brand surface"
+    );
+    assert_eq!(
+        theme.surface_2(),
+        Fill::Solid(ColorU::from_u32(0x161619FF)),
+        "surface_2 should be the brand surface (card)"
+    );
+    assert_eq!(
+        theme.surface_3(),
+        Fill::Solid(ColorU::from_u32(0x1E1E22FF)),
+        "surface_3 should be the elevated surface (popover)"
+    );
+    assert_eq!(
+        theme.chrome_bg_override(),
+        Some(Fill::Solid(ColorU::from_u32(0x0A0A0DFF))),
+        "title/status chrome"
+    );
+    assert_eq!(
+        theme.sidebar_bg(),
+        Fill::Solid(ColorU::from_u32(0x161619FF))
+    );
+
+    // Borders (pre-blended opaque over #0f0f12).
+    assert_eq!(theme.outline(), Fill::Solid(ColorU::from_u32(0x222225FF)));
+    assert_eq!(
+        theme.border_strong(),
+        Fill::Solid(ColorU::from_u32(0x2C2C2EFF))
+    );
+    assert_eq!(
+        theme.border_subtle(),
+        Fill::Solid(ColorU::from_u32(0x19191BFF))
+    );
+
+    // Text hierarchy.
+    assert_eq!(
+        theme.sub_text_color(theme.background()),
+        Fill::Solid(ColorU::from_u32(0x8E8E9AFF)),
+        "secondary text"
+    );
+    assert_eq!(
+        theme.hint_text_color(theme.background()),
+        Fill::Solid(ColorU::from_u32(0x5A5A65FF)),
+        "muted text"
+    );
+    assert_eq!(theme.muted_foreground(), ColorU::from_u32(0x5A5A65FF));
+
+    // Accents.
+    assert_eq!(theme.ring(), Fill::Solid(ColorU::from_u32(0x7C3AEDFF)));
+    assert_eq!(
+        theme.accent_hover(),
+        Fill::Solid(ColorU::from_u32(0x6D28D9FF))
+    );
+    assert_eq!(
+        theme.accent_hover_override(),
+        Some(Fill::Solid(ColorU::from_u32(0x6D28D9FF)))
+    );
+    assert_eq!(
+        theme.highlight_override(),
+        Some(ColorU::from_u32(0xD4A84BFF))
+    );
+    assert_eq!(ui.primary, Some(ColorU::from_u32(0x7C3AEDFF)));
+    assert_eq!(ui.destructive, Some(ColorU::from_u32(0xEF4444FF)));
+}
+
+/// The new CastCodes token accessors must fall back to today's derived values
+/// for themes without a `ui` block, so every legacy theme stays
+/// pixel-identical.
+#[test]
+fn new_brand_accessors_fall_back_without_ui_block() {
+    let theme = dark_theme();
+    assert!(theme.ui().is_none());
+
+    assert_eq!(theme.chrome_bg_override(), None);
+    assert_eq!(theme.highlight_override(), None);
+    assert_eq!(theme.accent_hover_override(), None);
+    assert_eq!(
+        theme.border_strong(),
+        color::internal_colors::fg_overlay_3(&theme)
+    );
+    assert_eq!(
+        theme.border_subtle(),
+        color::internal_colors::fg_overlay_1(&theme)
+    );
+    assert_eq!(
+        theme.surface_1(),
+        Fill::Solid(color::internal_colors::neutral_1(&theme))
+    );
+    assert_eq!(
+        theme.surface_3(),
+        Fill::Solid(color::internal_colors::neutral_3(&theme))
+    );
+    assert_eq!(
+        theme.accent_hover(),
+        color::internal_colors::accent_hover(&theme)
+    );
+    let bg = theme.background();
+    assert_eq!(
+        theme.sub_text_color(bg),
+        Fill::from(color::internal_colors::text_sub(&theme, bg)),
+    );
 }

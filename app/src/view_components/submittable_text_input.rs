@@ -153,10 +153,13 @@ impl View for SubmittableTextInput {
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
+        let theme = appearance.theme();
         let border_fill = if self.has_error {
-            appearance.theme().ui_error_color().into()
+            theme.ui_error_color().into()
+        } else if self.editor.as_ref(app).is_focused() {
+            theme.ring()
         } else {
-            appearance.theme().outline()
+            theme.outline()
         };
 
         let mut submit_button = appearance
@@ -204,7 +207,7 @@ impl View for SubmittableTextInput {
                 .finish(),
         )
         .with_border(Border::all(1.).with_border_fill(border_fill))
-        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(6.)))
         .with_margin_top(self.outer_margin_top)
         .with_margin_bottom(self.outer_margin_bottom)
         .with_padding_left(4.)

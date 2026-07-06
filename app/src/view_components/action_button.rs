@@ -1234,7 +1234,12 @@ pub struct PrimaryTheme;
 impl ActionButtonTheme for PrimaryTheme {
     fn background(&self, hovered: bool, appearance: &Appearance) -> Option<Fill> {
         if hovered {
-            Some(internal_colors::accent_overlay_4(appearance.theme()))
+            Some(
+                appearance
+                    .theme()
+                    .accent_hover_override()
+                    .unwrap_or_else(|| internal_colors::accent_overlay_4(appearance.theme())),
+            )
         } else {
             Some(appearance.theme().accent())
         }

@@ -25,6 +25,7 @@ const MCP_SERVERS_LIST_PAGE_SOURCE: &str = include_str!("mcp_servers/list_page.r
 const PANE_GROUP_SOURCE: &str = include_str!("../pane_group/mod.rs");
 const PLATFORM_PAGE_SOURCE: &str = include_str!("platform_page.rs");
 const PRIVACY_PAGE_SOURCE: &str = include_str!("privacy_page.rs");
+const PRIVACY_SETTINGS_SOURCE: &str = include_str!("../settings/privacy.rs");
 const REFERRALS_PAGE_SOURCE: &str = include_str!("referrals_page.rs");
 const SHOW_BLOCKS_VIEW_SOURCE: &str = include_str!("show_blocks_view.rs");
 const SETTINGS_VIEW_SOURCE: &str = include_str!("mod.rs");
@@ -421,6 +422,9 @@ fn terminal_user_facing_copy_uses_castcodes_terms() {
     assert!(APP_SERVICES_LINUX_SOURCE.contains("/dev/castcodes/CastCodes"));
     assert!(AI_DOCUMENT_VIEW_SOURCE.contains("Failed to create Cast Drive notebook"));
     assert!(AI_DOCUMENT_MODEL_SOURCE.contains("saving AI Document to Cast Drive"));
+    assert!(PRIVACY_SETTINGS_SOURCE.contains("Cast Drive privacy preferences are set"));
+    assert!(PRIVACY_SETTINGS_SOURCE.contains("Cast Drive privacy preferences are not set"));
+    assert!(AI_SETTINGS_SOURCE.contains("CastCodes-managed config files"));
     assert!(AI_PAGE_SOURCE.contains("models from providers without API keys are unavailable"));
     assert!(AI_PAGE_SOURCE.contains("cloud_services_available()"));
     assert!(AI_PAGE_SOURCE.contains("hosted credits"));
@@ -490,6 +494,8 @@ fn terminal_user_facing_copy_uses_castcodes_terms() {
     assert!(!APP_SERVICES_LINUX_SOURCE.contains("/dev/warp/WarpLocal"));
     assert!(!AI_DOCUMENT_VIEW_SOURCE.contains("Failed to create Warp Drive notebook"));
     assert!(!AI_DOCUMENT_MODEL_SOURCE.contains("saving AI Document to Warp Drive"));
+    assert!(!PRIVACY_SETTINGS_SOURCE.contains("Warp Drive privacy preferences"));
+    assert!(!AI_SETTINGS_SOURCE.contains("Warp-native config files"));
     assert!(!AI_PAGE_SOURCE.contains("CastCodes credits"));
     assert!(!AI_PAGE_SOURCE.contains("CastCodes's provided models"));
     assert!(!SERVER_API_SOURCE.contains("Warp server"));
