@@ -90,6 +90,7 @@ const WARP_DRIVE_PAGE_SOURCE: &str = include_str!("warp_drive_page.rs");
 const WARPIFY_PAGE_SOURCE: &str = include_str!("warpify_page.rs");
 const WORKSPACE_ONE_TIME_MODAL_MODEL_SOURCE: &str =
     include_str!("../workspace/one_time_modal_model.rs");
+const WORKSPACE_MOD_SOURCE: &str = include_str!("../workspace/mod.rs");
 const WORKSPACE_VIEW_SOURCE: &str = include_str!("../workspace/view.rs");
 
 // ── SettingsSection classification ──────────────────────────────────────────
@@ -406,6 +407,12 @@ fn api_key_upgrade_cta_is_cloud_service_only() {
 }
 
 #[test]
+fn api_key_hosted_credit_fallback_copy_is_clear() {
+    assert!(AI_PAGE_SOURCE.contains("\"Hosted credit fallback\""));
+    assert!(!AI_PAGE_SOURCE.contains("\"Cast credit fallback\""));
+}
+
+#[test]
 fn castcodes_about_page_does_not_render_warp_logo_assets() {
     assert!(ABOUT_PAGE_SOURCE.contains("\"about castcodes version\""));
     assert!(!ABOUT_PAGE_SOURCE.contains("warp-logo-with-light-title.svg"));
@@ -431,6 +438,64 @@ fn cloud_only_settings_pages_are_gated_by_channel_services() {
         .contains("nav_items.insert(9, SettingsNavItem::Page(SettingsSection::SharedBlocks))"));
     assert!(SETTINGS_VIEW_SOURCE
         .contains("nav_items.insert(10, SettingsNavItem::Page(SettingsSection::WarpDrive))"));
+}
+
+fn editable_binding_block<'a>(source: &'a str, binding_id: &str) -> &'a str {
+    let quoted_binding_id = format!("\"{binding_id}\"");
+    let marker = source
+        .match_indices(&quoted_binding_id)
+        .map(|(index, _)| index)
+        .chain(source.match_indices(binding_id).map(|(index, _)| index))
+        .find(|marker| source[..*marker].rfind("EditableBinding::new(").is_some())
+        .unwrap_or_else(|| panic!("missing binding {binding_id}"));
+    let start = source[..marker]
+        .rfind("EditableBinding::new(")
+        .expect("binding marker should be inside an EditableBinding block");
+    let rest = &source[start..];
+    let end = rest[1..]
+        .find("EditableBinding::new(")
+        .map(|index| index + 1)
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
+
+#[test]
+fn cloud_only_command_palette_bindings_are_gated_by_channel_services() {
+    for binding_id in [
+        "workspace:show_settings_shared_blocks_page",
+        "workspace:show_settings_referrals_page",
+        "workspace:show_settings_environments_page",
+        "workspace:show_invite_modal",
+        "workspace:log_out",
+    ] {
+        assert!(
+            editable_binding_block(WORKSPACE_MOD_SOURCE, binding_id)
+                .contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            "{binding_id} should be hidden when hosted cloud services are unavailable"
+        );
+    }
+}
+
+#[test]
+fn cast_drive_command_palette_bindings_are_gated_by_channel_services() {
+    for binding_id in [
+        "workspace:create_team_notebook",
+        "workspace:create_personal_notebook",
+        "workspace:create_team_workflow",
+        "workspace:create_personal_workflow",
+        "workspace:create_team_folder",
+        "workspace:create_personal_folder",
+        "LEFT_PANEL_WARP_DRIVE_BINDING_NAME",
+        "TOGGLE_WARP_DRIVE_BINDING_NAME",
+        "workspace:search_drive",
+        "workspace:export_all_warp_drive_objects",
+    ] {
+        assert!(
+            editable_binding_block(WORKSPACE_MOD_SOURCE, binding_id)
+                .contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            "{binding_id} should be hidden when hosted cloud services are unavailable"
+        );
+    }
 }
 
 #[test]

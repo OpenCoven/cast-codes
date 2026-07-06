@@ -2,6 +2,7 @@ use fuzzy_match::{match_indices_case_insensitive, FuzzyMatchResult};
 use itertools::Itertools;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use ordered_float::OrderedFloat;
+use warp_core::channel::ChannelState;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::color::internal_colors;
@@ -475,7 +476,9 @@ impl SearchItem for ModelSearchItem {
             .with_child(Container::new(header).with_margin_bottom(12.).finish())
             .with_child(scores);
 
-        if self.disable_reason.as_ref() == Some(&DisableReason::RequiresUpgrade) {
+        if self.disable_reason.as_ref() == Some(&DisableReason::RequiresUpgrade)
+            && ChannelState::cloud_services_available()
+        {
             let upgrade_url = if let Some(team) = UserWorkspaces::as_ref(app).current_team() {
                 UserWorkspaces::upgrade_link_for_team(team.uid)
             } else {
@@ -578,9 +581,11 @@ impl SearchItem for ModelSearchItem {
     }
 
     fn tooltip(&self) -> Option<String> {
-        self.disable_reason
-            .as_ref()
-            .map(|reason| reason.tooltip_text().to_string())
+        self.disable_reason.as_ref().map(|reason| {
+            reason
+                .tooltip_text_for_channel(ChannelState::cloud_services_available())
+                .to_string()
+        })
     }
 
     fn accessibility_label(&self) -> String {

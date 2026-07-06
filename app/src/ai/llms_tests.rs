@@ -42,6 +42,27 @@ fn should_not_clear_preference_requires_upgrade_with_byok() {
 }
 
 #[test]
+fn tooltip_text_uses_local_only_copy_for_hosted_plan_reasons() {
+    assert_eq!(
+        DisableReason::OutOfRequests.tooltip_text_for_channel(true),
+        "Please upgrade your plan to make more requests."
+    );
+    assert_eq!(
+        DisableReason::RequiresUpgrade.tooltip_text_for_channel(true),
+        "Please upgrade your plan to access this model."
+    );
+
+    assert_eq!(
+        DisableReason::OutOfRequests.tooltip_text_for_channel(false),
+        "This hosted model is unavailable in this local-only build."
+    );
+    assert_eq!(
+        DisableReason::RequiresUpgrade.tooltip_text_for_channel(false),
+        "This hosted model is unavailable in this local-only build."
+    );
+}
+
+#[test]
 fn llm_info_deserializes_without_base_model_name() {
     let raw = r#"{
             "display_name": "gpt-4o",

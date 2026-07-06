@@ -65,13 +65,29 @@ pub enum DisableReason {
 impl DisableReason {
     /// Returns a user-facing tooltip explaining why the model is disabled.
     pub fn tooltip_text(&self) -> &'static str {
+        self.tooltip_text_for_channel(true)
+    }
+
+    /// Returns a user-facing tooltip explaining why the model is disabled for
+    /// the current channel's hosted-service availability.
+    pub fn tooltip_text_for_channel(&self, cloud_services_available: bool) -> &'static str {
         match self {
             DisableReason::AdminDisabled => "This model has been disabled by your team admin.",
-            DisableReason::OutOfRequests => "Please upgrade your plan to make more requests.",
+            DisableReason::OutOfRequests if cloud_services_available => {
+                "Please upgrade your plan to make more requests."
+            }
+            DisableReason::OutOfRequests => {
+                "This hosted model is unavailable in this local-only build."
+            }
             DisableReason::ProviderOutage => {
                 "This model is temporarily unavailable due to a provider outage."
             }
-            DisableReason::RequiresUpgrade => "Please upgrade your plan to access this model.",
+            DisableReason::RequiresUpgrade if cloud_services_available => {
+                "Please upgrade your plan to access this model."
+            }
+            DisableReason::RequiresUpgrade => {
+                "This hosted model is unavailable in this local-only build."
+            }
             DisableReason::Unavailable => "This model is unavailable.",
         }
     }

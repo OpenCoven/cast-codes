@@ -581,6 +581,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::CreateTeamNotebook,
         )
         .with_custom_action(CustomAction::NewTeamNotebook)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace")
                 & id!(flags::ENABLE_WARP_DRIVE)
@@ -596,6 +597,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::Notebooks.as_str())
         .with_custom_action(CustomAction::NewPersonalNotebook)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE)),
         EditableBinding::new(
             "workspace:create_team_workflow",
@@ -604,6 +606,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::CreateTeamWorkflow,
         )
         .with_custom_action(CustomAction::NewTeamWorkflow)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace")
                 & id!(flags::ENABLE_WARP_DRIVE)
@@ -619,6 +622,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::Workflow.as_str())
         .with_custom_action(CustomAction::NewPersonalWorkflow)
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE)),
         EditableBinding::new(
             "workspace:create_team_folder",
@@ -626,6 +630,7 @@ pub fn init(app: &mut AppContext) {
                 .with_custom_description(bindings::MAC_MENUS_CONTEXT, "New Team Folder"),
             WorkspaceAction::CreateTeamFolder,
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(
             id!("Workspace")
                 & id!(flags::ENABLE_WARP_DRIVE)
@@ -640,6 +645,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::CreatePersonalFolder,
         )
         .with_group(bindings::BindingGroup::Folders.as_str())
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE) & id!("IsOnline")),
         EditableBinding::new(
             NEW_TAB_BINDING_NAME,
@@ -789,6 +795,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::ToggleWarpDrive,
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE))
         .with_mac_key_binding("ctrl-4")
         .with_linux_or_windows_key_binding("alt-4"),
@@ -815,6 +822,7 @@ pub fn init(app: &mut AppContext) {
                 .with_custom_description(bindings::MAC_MENUS_CONTEXT, "Cast Drive"),
             WorkspaceAction::ToggleWarpDrive,
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE))
         .with_custom_action(CustomAction::ToggleWarpDrive),
         EditableBinding::new(
@@ -1091,6 +1099,7 @@ pub fn init(app: &mut AppContext) {
                 query: None,
             },
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::SearchDrive),
     ]);
@@ -1122,6 +1131,7 @@ pub fn init(app: &mut AppContext) {
         "Log out",
         WorkspaceAction::LogOut,
     )
+    .with_enabled(|| ChannelState::cloud_services_available())
     .with_group(bindings::BindingGroup::Settings.as_str())
     .with_context_predicate(id!("Workspace") & !id!("IsAnonymousUser"))]);
 
@@ -1143,6 +1153,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::ExportAllWarpDriveObjects,
         )
         .with_group(bindings::BindingGroup::Settings.as_str())
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace") & id!(flags::ENABLE_WARP_DRIVE))]);
     }
 
@@ -1443,6 +1454,7 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
                 .with_custom_description(bindings::MAC_MENUS_CONTEXT, "View Shared Blocks..."),
             WorkspaceAction::ShowSettingsPage(SettingsSection::SharedBlocks),
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::ViewSharedBlocks),
@@ -1503,6 +1515,7 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
             BindingDescription::new("Open Settings: Referrals"),
             WorkspaceAction::ShowSettingsPage(SettingsSection::Referrals),
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(
@@ -1510,6 +1523,7 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
             BindingDescription::new("Open Settings: Environments"),
             WorkspaceAction::ShowSettingsPage(SettingsSection::CloudEnvironments),
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(
@@ -1540,6 +1554,7 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
             "Invite People...",
             WorkspaceAction::ShowReferralSettingsPage,
         )
+        .with_enabled(|| ChannelState::cloud_services_available())
         .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::ReferAFriend),
         EditableBinding::new(
