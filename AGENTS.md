@@ -20,6 +20,18 @@ Run this guard before submitting docs, specs, prompts, or generated artifacts:
 ./script/check_ai_attribution
 ```
 
+### Human Contributor Attribution
+
+The No AI Attribution rule above forbids crediting tools. It does not forbid crediting people. When you re-land or build on another person's work (a fork PR, an issue author's proposal, a co-author), credit the human contributor so they appear in the GitHub contributors graph:
+
+```
+Co-Authored-By: Name <ID+username@users.noreply.github.com>
+```
+
+- Use the numeric-id no-reply form. Get the id with `gh api users/<login> --jq .id`.
+- Never use a machine or `.local` email; it links to no account and gives zero credit.
+- Only real human contributors. A `Co-Authored-By:` line that names a model, assistant, vendor, or coding harness still violates the No AI Attribution rule and is caught by `./script/check_ai_attribution`.
+
 ### Rebrand Guard
 
 CastCodes is a staged fork. Do not run blind repository-wide replacements. Many internal crate names and compatibility references intentionally still use upstream names.
