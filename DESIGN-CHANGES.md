@@ -135,34 +135,57 @@ dependencies were added.
 
 ## Deferred (follow-up PRs)
 
-The remainder of Phase 1 is deferred so this change stays additive and
-reviewable. Each item is non-trivial in this codebase because Warp's UI
-layer (warpui + `app/src/`) does not split surfaces into dedicated crates
-the way Zed does.
+The remainder of Phase 1 was originally deferred here. Items 1.3–1.8 have
+since landed via the semantic-token pass below.
 
-### 1.3 Title bar / 1.4 Status bar / 1.5 Sidebar / 1.6 Editor area / 1.7 Inputs / 1.8 Buttons
+### 1.3 Title bar / 1.4 Status bar / 1.5 Sidebar / 1.6 Editor area / 1.7 Inputs / 1.8 Buttons — landed
 
-These styling changes are valid but require:
+Implemented with the "refactor `WarpTheme` to expose semantic slots"
+approach, reusing the existing optional `UiTokens` block rather than adding
+new theme fields:
 
-- Refactoring `WarpTheme` (in `crates/warp_core/src/ui/theme`) to expose
-  semantic slots beyond the current bg/fg/accent triple, OR
-- Updating each rendering site individually to read from `castcodes_dark`
-  and pick derived colors locally.
-
-Either approach is a multi-day pass that touches every panel render. The
-new theme already provides the brand background and accent, so the
-existing `details: Darker` derivation gives the dark, accent-purple flavor
-the brand spec is asking for at a coarse level — finer surface separation
-(surface vs. elevated surface, border at 8% white, etc.) is a follow-up.
+- **`UiTokens` brand slots** (`crates/warp_core/src/ui/theme/mod.rs`): the
+  tweakcn-aligned token block gained CastCodes extensions — `chrome`
+  (title/status bar bg), `border_strong`, `border_subtle`, `primary_hover`,
+  and `highlight` (gold). All optional, hex-serialized, and skipped when
+  absent, so imported/user themes are unaffected.
+- **Provenance-free builder**: `WarpTheme::with_ui_tokens` sets the token
+  block without the tweakcn `source` provenance that `with_ui` records.
+- **Full token block on `castcodes_dark`**
+  (`app/src/themes/default_themes.rs::castcodes_ui_tokens`): every brand
+  slot from `resources/design-tokens.css`, with border tokens pre-blended
+  to opaque over `#0f0f12` (hex serialization is RGB-only): 8% white →
+  `#222225`, 12% → `#2c2c2e`, 4% → `#19191b`.
+- **Fallback-aware accessors** (`crates/warp_core/src/ui/theme/color.rs`):
+  `surface_1()`→`muted`, `surface_3()`→`popover`, `sub_text_color()`→
+  `secondary_foreground`, `hint_text_color()`→`muted_foreground`, plus new
+  `border_strong()`, `border_subtle()`, `chrome_bg_override()`,
+  `accent_hover()`/`accent_hover_override()`, and `highlight_override()`.
+  Every accessor falls back to the previous derived value when the token is
+  absent, so the 23 legacy built-in themes stay pixel-identical (guarded by
+  `builtin_themes_render_identically_without_ui_block` and
+  `new_brand_accessors_fall_back_without_ui_block`).
+- **Render-site wiring**: the tab/title strip takes `chrome_bg_override()`
+  (`app/src/workspace/view.rs::render_tab_bar`); the right panel and
+  vertical-tabs panel honor `ui_sidebar_override()` like the left panel
+  already did; `SubmittableTextInput` uses a 6px control radius and a
+  `ring()` border when focused; `PrimaryTheme` buttons hover with
+  `accent_hover_override()`. Warp has no separate bottom status bar — the
+  chrome token covers the single title/tab strip.
+- **Radius sweep**: modal surfaces previously at 10–12px
+  (auth, launch modal, codex modal, environments page) were clamped to the
+  8px contract maximum. Remaining radii are named constants within the
+  4/6/8px scale.
+- **Motion**: warpui has no transition/easing primitive for hover states,
+  so no timing normalization was needed; nothing bouncy exists. Revisit if
+  an animation primitive is introduced.
 
 ### Build verification
 
-- `cargo check -p cast_agent` ✅ (27.21s).
-- `cargo check -p ai` ✅ (42.21s) with the new `default = ["cast-agent"]`.
+- `cargo test -p warp_core ui::theme` ✅ (31 tests).
+- `cargo test -p warp-app --features gui --lib themes::` ✅ (39 tests, plus
+  the new brand-token and fallback-parity tests).
 
-The theme changes and rebrand string sweeps are syntactic edits to
-existing files in the `app` crate; full `cargo check -p warp-app` on this
-Warp fork is a multi-minute compile and was not run in this session.
 Recommended verification before merge:
 
 ```bash
