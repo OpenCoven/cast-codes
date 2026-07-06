@@ -12,6 +12,7 @@ const APP_SERVICES_WINDOWS_SINGLE_INSTANCE_SOURCE: &str =
     include_str!("../app_services/windows/single_instance_manager.rs");
 const APP_SERVICES_LINUX_SOURCE: &str = include_str!("../app_services/linux/mod.rs");
 const AUTOUPDATE_CHANNEL_VERSIONS_SOURCE: &str = include_str!("../autoupdate/channel_versions.rs");
+const CODE_PAGE_SOURCE: &str = include_str!("code_page.rs");
 const DEBUG_DUMP_SOURCE: &str = include_str!("../debug_dump.rs");
 const DEFAULT_TERMINAL_SOURCE: &str = include_str!("../default_terminal/mod.rs");
 const ENVIRONMENTS_PAGE_SOURCE: &str = include_str!("environments_page.rs");
@@ -299,6 +300,19 @@ fn cloud_only_settings_pages_are_gated_by_channel_services() {
     assert!(PLATFORM_PAGE_SOURCE.contains("ChannelState::cloud_services_available()"));
     assert!(PRIVACY_PAGE_SOURCE.contains("ChannelState::cloud_services_available()"));
     assert!(SHOW_BLOCKS_VIEW_SOURCE.contains("ChannelState::cloud_services_available()"));
+    assert!(WARP_DRIVE_PAGE_SOURCE.contains("ChannelState::cloud_services_available()"));
+    assert!(SETTINGS_VIEW_SOURCE.contains(
+        "if cloud_services_available {\n            settings_pages.push(SettingsPage::new(platform_page_handle));\n            settings_pages.push(SettingsPage::new(referrals_page_handle));\n            settings_pages.push(SettingsPage::new(warp_drive_page_handle));\n            settings_pages.push(SettingsPage::new(show_blocks_view_handle));\n            settings_pages.push(SettingsPage::new(environments_page_handle.clone()));\n        }"
+    ));
+    assert!(SETTINGS_VIEW_SOURCE
+        .contains("settings_pages.push(SettingsPage::new(warp_drive_page_handle))"));
+    assert!(SETTINGS_VIEW_SOURCE.contains(
+        "if cloud_services_available {\n            nav_items.insert(\n                3,"
+    ));
+    assert!(SETTINGS_VIEW_SOURCE
+        .contains("nav_items.insert(9, SettingsNavItem::Page(SettingsSection::SharedBlocks))"));
+    assert!(SETTINGS_VIEW_SOURCE
+        .contains("nav_items.insert(10, SettingsNavItem::Page(SettingsSection::WarpDrive))"));
 }
 
 #[test]
@@ -312,10 +326,12 @@ fn privacy_settings_copy_is_castcodes_branded() {
 #[test]
 fn visible_settings_copy_uses_castcodes_terms_for_shell_and_shared_surfaces() {
     assert!(SETTINGS_VIEW_SOURCE.contains("\"Shell integration\""));
+    assert!(CODE_PAGE_SOURCE.contains(".castcodesindexingignore"));
     assert!(WARPIFY_PAGE_SOURCE.contains("CastCodes adds support for blocks"));
     assert!(WARPIFY_PAGE_SOURCE.contains("Use Tmux shell integration"));
     assert!(SHOW_BLOCKS_VIEW_SOURCE.contains("deleted from hosted servers"));
 
+    assert!(!CODE_PAGE_SOURCE.contains(".warpindexingignore file"));
     assert!(!WARPIFY_PAGE_SOURCE.contains("Warp attempts"));
     assert!(!WARPIFY_PAGE_SOURCE.contains("Warpification\""));
     assert!(!SHOW_BLOCKS_VIEW_SOURCE.contains("Warp servers"));
@@ -1007,8 +1023,8 @@ use nav::{SettingsNavItem, SettingsUmbrella};
 
 /// Builds the nav-items layout used by `SettingsView::new`, matching the real
 /// sidebar ordering so tests exercise realistic nav orders.
-fn realistic_nav_items() -> Vec<SettingsNavItem> {
-    vec![
+fn realistic_nav_items_for_channel(cloud_services_available: bool) -> Vec<SettingsNavItem> {
+    let mut nav_items = vec![
         SettingsNavItem::Page(SettingsSection::Account),
         SettingsNavItem::Umbrella(SettingsUmbrella::new(
             "Agents",
@@ -1019,12 +1035,22 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
             "Code",
             SettingsSection::code_subpages().to_vec(),
         )),
-        SettingsNavItem::Umbrella(SettingsUmbrella::new(
-            "Platform",
-            SettingsSection::cloud_platform_subpages().to_vec(),
-        )),
         SettingsNavItem::Page(SettingsSection::Features),
-    ]
+    ];
+    if cloud_services_available {
+        nav_items.insert(
+            4,
+            SettingsNavItem::Umbrella(SettingsUmbrella::new(
+                "Platform",
+                SettingsSection::cloud_platform_subpages().to_vec(),
+            )),
+        );
+    }
+    nav_items
+}
+
+fn realistic_nav_items() -> Vec<SettingsNavItem> {
+    realistic_nav_items_for_channel(true)
 }
 
 /// Mutably flips an umbrella's `expanded` flag at `nav_index`.
@@ -1176,6 +1202,30 @@ fn umbrella_with_no_visible_subpages_is_skipped_entirely() {
     assert!(stops
         .iter()
         .any(|s| matches!(s, NavStop::CollapsedUmbrella { nav_index: 4, .. })));
+}
+
+#[test]
+fn oss_nav_order_excludes_cloud_platform_umbrella() {
+    let nav_items = realistic_nav_items_for_channel(false);
+    let stops = build_nav_stops(&nav_items, |_| true);
+
+    assert!(stops.iter().all(|s| !matches!(
+        s,
+        NavStop::CollapsedUmbrella {
+            first_subpage: SettingsSection::CloudEnvironments,
+            last_subpage: SettingsSection::OzCloudAPIKeys,
+            ..
+        }
+    )));
+    assert!(stops
+        .iter()
+        .all(|s| !matches!(s, NavStop::Section(SettingsSection::CloudEnvironments))));
+    assert!(stops
+        .iter()
+        .all(|s| !matches!(s, NavStop::Section(SettingsSection::OzCloudAPIKeys))));
+    assert!(stops
+        .iter()
+        .all(|s| !matches!(s, NavStop::Section(SettingsSection::SharedBlocks))));
 }
 
 #[test]

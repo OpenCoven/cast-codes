@@ -63,7 +63,8 @@ const FILE_TRAVERSAL_TIME: &str = "file_traversal_time";
 const MERKLE_TREE_BUILD_TIME: &str = "merkle_tree_build_time";
 const SYNC_TIME: &str = "sync_time";
 
-const SUPPORTED_IGNORES: [&str; 4] = [
+const SUPPORTED_IGNORES: [&str; 5] = [
+    ".castcodesindexingignore",
     ".warpindexingignore",
     ".cursorignore",
     ".cursorindexingignore",

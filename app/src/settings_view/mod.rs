@@ -1137,20 +1137,18 @@ impl SettingsView {
             SettingsPage::new(appearance_page_handle),
             SettingsPage::new(features_page_handle),
             SettingsPage::new(keybindings_handle),
-            SettingsPage::new(platform_page_handle),
             SettingsPage::new(warpify_page_handle),
         ]);
         if cloud_services_available {
+            settings_pages.push(SettingsPage::new(platform_page_handle));
             settings_pages.push(SettingsPage::new(referrals_page_handle));
+            settings_pages.push(SettingsPage::new(warp_drive_page_handle));
+            settings_pages.push(SettingsPage::new(show_blocks_view_handle));
+            settings_pages.push(SettingsPage::new(environments_page_handle.clone()));
         }
-        settings_pages.extend(vec![
-            SettingsPage::new(show_blocks_view_handle),
-            SettingsPage::new(warp_drive_page_handle),
-        ]);
 
         settings_pages.extend(vec![
             SettingsPage::new(mcp_servers_page_handle),
-            SettingsPage::new(environments_page_handle.clone()),
             SettingsPage::new(privacy_page_handle),
             SettingsPage::new(about_page_handle),
         ]);
@@ -1170,23 +1168,28 @@ impl SettingsView {
                     SettingsSection::EditorAndCodeReview,
                 ],
             )),
-            SettingsNavItem::Umbrella(SettingsUmbrella::new(
-                "Platform",
-                vec![
-                    SettingsSection::CloudEnvironments,
-                    SettingsSection::OzCloudAPIKeys,
-                ],
-            )),
             SettingsNavItem::Page(SettingsSection::Appearance),
             SettingsNavItem::Page(SettingsSection::Features),
             SettingsNavItem::Page(SettingsSection::Keybindings),
             SettingsNavItem::Page(SettingsSection::Warpify),
-            SettingsNavItem::Page(SettingsSection::Referrals),
-            SettingsNavItem::Page(SettingsSection::SharedBlocks),
-            SettingsNavItem::Page(SettingsSection::WarpDrive),
             SettingsNavItem::Page(SettingsSection::Privacy),
             SettingsNavItem::Page(SettingsSection::About),
         ];
+        if cloud_services_available {
+            nav_items.insert(
+                3,
+                SettingsNavItem::Umbrella(SettingsUmbrella::new(
+                    "Platform",
+                    vec![
+                        SettingsSection::CloudEnvironments,
+                        SettingsSection::OzCloudAPIKeys,
+                    ],
+                )),
+            );
+            nav_items.insert(8, SettingsNavItem::Page(SettingsSection::Referrals));
+            nav_items.insert(9, SettingsNavItem::Page(SettingsSection::SharedBlocks));
+            nav_items.insert(10, SettingsNavItem::Page(SettingsSection::WarpDrive));
+        }
 
         // Resolve the initial page: map internal backing-page sections to their default subpage.
         let initial_page = match page {
@@ -1194,6 +1197,14 @@ impl SettingsView {
             Some(SettingsSection::Code) => SettingsSection::CodeIndexing,
             Some(section) if section.is_subpage() => section,
             other => other.unwrap_or_default(),
+        };
+        let initial_page = if settings_pages
+            .iter()
+            .any(|page| page.section == initial_page.parent_page_section())
+        {
+            initial_page
+        } else {
+            SettingsSection::default()
         };
 
         // Auto-expand the umbrella if the initial page is one of its subpages.

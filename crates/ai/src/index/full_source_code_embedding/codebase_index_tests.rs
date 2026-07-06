@@ -1656,6 +1656,47 @@ fn test_diff_merkle_node_gitignore_file_changed() {
 }
 
 #[test]
+fn test_build_file_tree_uses_castcodes_indexing_ignore() {
+    VirtualFS::test(
+        "test_build_file_tree_uses_castcodes_indexing_ignore",
+        |dirs, mut sandbox| {
+            let repo_name = "castcodes-virtual";
+
+            sandbox.mkdir(repo_name);
+            sandbox.with_files(vec![
+                Stub::FileWithContent(
+                    format!("{repo_name}/.castcodesindexingignore").as_str(),
+                    "ignored.rs",
+                ),
+                Stub::FileWithContent(format!("{repo_name}/ignored.rs").as_str(), "ignored"),
+                Stub::FileWithContent(format!("{repo_name}/kept.rs").as_str(), "kept"),
+            ]);
+
+            let repo_path = dunce::canonicalize(dirs.tests().join(repo_name)).unwrap();
+            let build_file_tree_result =
+                block_on(CodebaseIndex::build_file_tree(repo_path.clone(), None)).unwrap();
+            let (tree, _) =
+                block_on(MerkleTree::try_new(build_file_tree_result.file_tree)).unwrap();
+
+            let indexed_paths = tree
+                .root_node()
+                .children()
+                .map(|node| node.path().to_path_buf())
+                .collect::<Vec<_>>();
+
+            assert!(
+                indexed_paths.contains(&repo_path.join("kept.rs")),
+                "kept file should be indexed"
+            );
+            assert!(
+                !indexed_paths.contains(&repo_path.join("ignored.rs")),
+                "file ignored by .castcodesindexingignore should not be indexed"
+            );
+        },
+    );
+}
+
+#[test]
 fn test_diff_merkle_node_file_node_with_no_children() {
     VirtualFS::test(
         "test_diff_merkle_node_file_node_with_no_children",
