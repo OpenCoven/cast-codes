@@ -289,6 +289,85 @@ fn subpage_display_names_are_correct() {
 }
 
 #[test]
+fn account_nav_label_matches_channel_capabilities() {
+    assert_eq!(
+        SettingsSection::Account.nav_label_for_channel(true),
+        "Account"
+    );
+    assert_eq!(
+        SettingsSection::Account.nav_label_for_channel(false),
+        "About"
+    );
+    assert_eq!(
+        SettingsSection::Appearance.nav_label_for_channel(false),
+        "Appearance"
+    );
+}
+
+#[test]
+fn mcp_description_copy_matches_channel_capabilities() {
+    let cloud_copy = mcp_servers::list_page::mcp_description_text_for_channel(true);
+    assert!(cloud_copy.contains("team servers"));
+    assert!(cloud_copy.contains("shared with you"));
+
+    let local_copy = mcp_servers::list_page::mcp_description_text_for_channel(false);
+    assert!(!local_copy.contains("team servers"));
+    assert!(!local_copy.contains("shared with you"));
+    assert!(local_copy.contains("custom server"));
+    assert!(local_copy.contains("presets"));
+}
+
+#[test]
+fn mcp_section_titles_match_channel_capabilities() {
+    assert_eq!(
+        mcp_servers::list_page::mcp_gallery_section_title_for_channel(true),
+        "Shared from CastCodes"
+    );
+    assert_eq!(
+        mcp_servers::list_page::mcp_gallery_section_title_for_channel(false),
+        "MCP presets"
+    );
+    assert_eq!(
+        mcp_servers::list_page::mcp_shared_section_title_for_channel(true, Some("Team")),
+        "Shared by CastCodes and Team"
+    );
+    assert_eq!(
+        mcp_servers::list_page::mcp_shared_section_title_for_channel(true, None),
+        "Shared by CastCodes and from other devices"
+    );
+    assert_eq!(
+        mcp_servers::list_page::mcp_shared_section_title_for_channel(false, Some("Team")),
+        "Available MCPs"
+    );
+    assert_eq!(
+        mcp_servers::list_page::mcp_shared_section_title_for_channel(false, None),
+        "Available MCPs"
+    );
+}
+
+#[test]
+fn ai_usage_widget_is_cloud_service_only() {
+    assert!(AI_PAGE_SOURCE
+        .contains("let cloud_services_available = ChannelState::cloud_services_available();"));
+    assert!(AI_PAGE_SOURCE.contains(
+        "if cloud_services_available && !FeatureFlag::UsageBasedPricing.is_enabled() {\n                    widgets.push(Box::new(UsageWidget::default()));\n                }"
+    ));
+    assert!(!AI_PAGE_SOURCE.contains(
+        "if !FeatureFlag::UsageBasedPricing.is_enabled() {\n                    widgets.push(Box::new(UsageWidget::default()));\n                }"
+    ));
+}
+
+#[test]
+fn cloud_agent_computer_use_widget_is_cloud_service_only() {
+    assert!(AI_PAGE_SOURCE.contains(
+        "if cloud_services_available && FeatureFlag::AgentModeComputerUse.is_enabled() {\n                    widgets.push(Box::new(CloudAgentComputerUseWidget::default()));\n                }"
+    ));
+    assert!(!AI_PAGE_SOURCE.contains(
+        "if FeatureFlag::AgentModeComputerUse.is_enabled() {\n                    widgets.push(Box::new(CloudAgentComputerUseWidget::default()));\n                }"
+    ));
+}
+
+#[test]
 fn castcodes_about_page_does_not_render_warp_logo_assets() {
     assert!(ABOUT_PAGE_SOURCE.contains("\"about castcodes version\""));
     assert!(!ABOUT_PAGE_SOURCE.contains("warp-logo-with-light-title.svg"));

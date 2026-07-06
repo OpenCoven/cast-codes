@@ -234,6 +234,13 @@ impl Display for SettingsSection {
 }
 
 impl SettingsSection {
+    pub fn nav_label_for_channel(&self, cloud_services_available: bool) -> String {
+        match self {
+            Self::Account if !cloud_services_available => "About".to_owned(),
+            _ => self.to_string(),
+        }
+    }
+
     /// Returns true if this section is a subpage under any umbrella.
     pub fn is_subpage(&self) -> bool {
         self.is_ai_subpage() || self.is_code_subpage() || self.is_cloud_platform_subpage()

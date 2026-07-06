@@ -177,10 +177,15 @@ impl SettingsPage {
             style = style.set_border_color(appearance.theme().outline().into());
         }
 
+        let label = self
+            .section
+            .nav_label_for_channel(warp_core::channel::ChannelState::cloud_services_available())
+            + &match_data.to_string();
+
         appearance
             .ui_builder()
             .button(ButtonVariant::Text, self.button_state_handle.clone())
-            .with_text_label(self.section.to_string() + &match_data.to_string())
+            .with_text_label(label)
             .with_style(style)
             .build()
     }

@@ -4,6 +4,8 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
+use warp_core::channel::ChannelState;
+
 use crate::{
     appearance::Appearance,
     ui_components::dialog::{dialog_styles, Dialog},
@@ -44,26 +46,26 @@ impl DestructiveMCPConfirmationDialogDisplayOptions {
             cancel_button_label,
         }
     }
-}
 
-#[derive(Debug, Clone)]
-pub enum DestructiveMCPConfirmationDialogVariant {
-    DeleteLocal,
-    DeleteShared,
-    Unshare,
-}
-
-impl From<&DestructiveMCPConfirmationDialogVariant>
-    for DestructiveMCPConfirmationDialogDisplayOptions
-{
-    fn from(variant: &DestructiveMCPConfirmationDialogVariant) -> Self {
+    fn for_variant(
+        variant: &DestructiveMCPConfirmationDialogVariant,
+        cloud_services_available: bool,
+    ) -> Self {
         match *variant {
-            DestructiveMCPConfirmationDialogVariant::DeleteLocal => DestructiveMCPConfirmationDialogDisplayOptions::new(
-                "Delete MCP server?".to_string(),
-                "This will uninstall and remove this MCP server from all your devices.".to_string(),
-                "Delete MCP".to_string(),
-                "Cancel".to_string(),
-            ),
+            DestructiveMCPConfirmationDialogVariant::DeleteLocal => {
+                let description_text = if cloud_services_available {
+                    "This will uninstall and remove this MCP server from all your devices."
+                } else {
+                    "This will uninstall and remove this MCP server from this device."
+                };
+
+                DestructiveMCPConfirmationDialogDisplayOptions::new(
+                    "Delete MCP server?".to_string(),
+                    description_text.to_string(),
+                    "Delete MCP".to_string(),
+                    "Cancel".to_string(),
+                )
+            }
             DestructiveMCPConfirmationDialogVariant::DeleteShared => DestructiveMCPConfirmationDialogDisplayOptions::new(
                 "Delete shared MCP server?".to_string(),
                 "This will not only delete this MCP server for yourself, but also uninstall and remove this MCP server from CastCodes and across all of your teammates' devices.".to_string(),
@@ -77,6 +79,21 @@ impl From<&DestructiveMCPConfirmationDialogVariant>
                 "Cancel".to_string(),
             ),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum DestructiveMCPConfirmationDialogVariant {
+    DeleteLocal,
+    DeleteShared,
+    Unshare,
+}
+
+impl From<&DestructiveMCPConfirmationDialogVariant>
+    for DestructiveMCPConfirmationDialogDisplayOptions
+{
+    fn from(variant: &DestructiveMCPConfirmationDialogVariant) -> Self {
+        Self::for_variant(variant, true)
     }
 }
 
@@ -114,7 +131,10 @@ impl DestructiveMCPConfirmationDialog {
         variant: DestructiveMCPConfirmationDialogVariant,
         ctx: &mut ViewContext<Self>,
     ) {
-        let display_options: DestructiveMCPConfirmationDialogDisplayOptions = (&variant).into();
+        let display_options = DestructiveMCPConfirmationDialogDisplayOptions::for_variant(
+            &variant,
+            ChannelState::cloud_services_available(),
+        );
 
         self.cancel_button.update(ctx, |button, ctx| {
             button.set_label(display_options.cancel_button_label.clone(), ctx);
@@ -150,8 +170,10 @@ impl View for DestructiveMCPConfirmationDialog {
         }
 
         let appearance = Appearance::as_ref(app);
-        let display_options: DestructiveMCPConfirmationDialogDisplayOptions =
-            (&self.variant).into();
+        let display_options = DestructiveMCPConfirmationDialogDisplayOptions::for_variant(
+            &self.variant,
+            ChannelState::cloud_services_available(),
+        );
 
         let dialog = Dialog::new(
             display_options.title_text.clone(),
@@ -189,5 +211,28 @@ impl TypedActionView for DestructiveMCPConfirmationDialog {
                 DestructiveMCPConfirmationDialogEvent::Confirm(self.variant.clone()),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DestructiveMCPConfirmationDialogDisplayOptions, DestructiveMCPConfirmationDialogVariant,
+    };
+
+    #[test]
+    fn delete_local_copy_matches_channel_capabilities() {
+        let cloud_options = DestructiveMCPConfirmationDialogDisplayOptions::for_variant(
+            &DestructiveMCPConfirmationDialogVariant::DeleteLocal,
+            true,
+        );
+        assert!(cloud_options.description_text.contains("all your devices"));
+
+        let local_options = DestructiveMCPConfirmationDialogDisplayOptions::for_variant(
+            &DestructiveMCPConfirmationDialogVariant::DeleteLocal,
+            false,
+        );
+        assert!(local_options.description_text.contains("this device"));
+        assert!(!local_options.description_text.contains("all your devices"));
     }
 }

@@ -59,8 +59,8 @@ use std::cmp::Ordering;
 use std::{collections::HashMap, path::PathBuf};
 use strum::IntoEnumIterator;
 use uuid::Uuid;
-use warp_core::features::FeatureFlag;
 use warp_core::ui::{appearance::AppearanceEvent, theme::color::internal_colors, Icon};
+use warp_core::{channel::ChannelState, features::FeatureFlag};
 use warpui::{
     elements::{
         Align, Border, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment,
@@ -74,7 +74,38 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
-const DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Cast Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. You can also find team servers that have been shared with you here. ";
+const CLOUD_DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Cast Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. You can also find team servers that have been shared with you here. ";
+const LOCAL_DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Cast Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. ";
+
+pub fn mcp_description_text_for_channel(cloud_services_available: bool) -> &'static str {
+    if cloud_services_available {
+        CLOUD_DESCRIPTION_TEXT
+    } else {
+        LOCAL_DESCRIPTION_TEXT
+    }
+}
+
+pub fn mcp_gallery_section_title_for_channel(cloud_services_available: bool) -> &'static str {
+    if cloud_services_available {
+        "Shared from CastCodes"
+    } else {
+        "MCP presets"
+    }
+}
+
+pub fn mcp_shared_section_title_for_channel(
+    cloud_services_available: bool,
+    team_name: Option<&str>,
+) -> String {
+    if !cloud_services_available {
+        return "Available MCPs".to_string();
+    }
+
+    match team_name {
+        Some(name) => format!("Shared by CastCodes and {name}"),
+        None => "Shared by CastCodes and from other devices".to_string(),
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum MCPServersListPageViewEvent {
@@ -1163,7 +1194,9 @@ impl MCPServersListPageView {
 
     fn render_page_body(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
         let description_fragments = vec![
-            FormattedTextFragment::plain_text(DESCRIPTION_TEXT),
+            FormattedTextFragment::plain_text(mcp_description_text_for_channel(
+                ChannelState::cloud_services_available(),
+            )),
             FormattedTextFragment::hyperlink("Learn more.", USER_DOCS_URL),
         ];
 
@@ -1257,10 +1290,10 @@ impl MCPServersListPageView {
                     let team_name = UserWorkspaces::as_ref(app)
                         .current_team()
                         .map(|team| team.name.clone());
-                    let shared_by_text = match team_name {
-                        Some(name) => format!("Shared by CastCodes and {name}"),
-                        None => "Shared by CastCodes and from other devices".to_string(),
-                    };
+                    let shared_by_text = mcp_shared_section_title_for_channel(
+                        ChannelState::cloud_services_available(),
+                        team_name.as_deref(),
+                    );
 
                     page.add_child(self.render_server_cards_section(
                         &shared_by_text,
@@ -1269,8 +1302,11 @@ impl MCPServersListPageView {
                         app,
                     ));
                 } else if !filtered_gallery_cards.is_empty() {
+                    let gallery_section_title = mcp_gallery_section_title_for_channel(
+                        ChannelState::cloud_services_available(),
+                    );
                     page.add_child(self.render_server_cards_section(
-                        "Shared from CastCodes",
+                        gallery_section_title,
                         &filtered_gallery_cards,
                         appearance,
                         app,
