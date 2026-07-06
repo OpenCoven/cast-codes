@@ -1236,9 +1236,9 @@ impl ServerApi {
             .append_pair("include_changelogs", &include_changelogs.to_string());
 
         if include_changelogs {
-            log::info!("Fetching channel versions and changelogs from Warp server");
+            log::info!("Fetching channel versions and changelogs from configured server");
         } else {
-            log::info!("Fetching channel versions (without changelogs) from Warp server");
+            log::info!("Fetching channel versions (without changelogs) from configured server");
         }
 
         let mut request_builder = self
@@ -1262,7 +1262,7 @@ impl ServerApi {
 
         let response = request_builder.send().await?;
         let versions: ChannelVersions = response.json().await?;
-        log::info!("Received channel versions from Warp server: {versions}");
+        log::info!("Received channel versions from configured server: {versions}");
         Ok(versions)
     }
 }

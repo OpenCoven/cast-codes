@@ -79,6 +79,7 @@ mod copy_tests {
     const THEME_PICKER_SLIDE: &str = include_str!("slides/theme_picker_slide.rs");
     const FREE_USER_NO_AI_SLIDE: &str = include_str!("slides/free_user_no_ai_slide.rs");
     const AGENT_CALLOUT_VIEW: &str = include_str!("callout/view.rs");
+    const CALLOUT_EXAMPLE: &str = include_str!("../examples/callout.rs");
 
     #[test]
     fn intro_copy_uses_plain_castcodes_positioning() {
@@ -122,5 +123,11 @@ mod copy_tests {
         }
 
         assert!(AGENT_CALLOUT_VIEW.contains(&expected_callout_title));
+    }
+
+    #[test]
+    fn examples_use_castcodes_terms() {
+        assert!(CALLOUT_EXAMPLE.contains("Meet your CastCodes input"));
+        assert!(!CALLOUT_EXAMPLE.contains("Meet your Warp input"));
     }
 }

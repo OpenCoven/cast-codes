@@ -78,7 +78,7 @@ impl OneTimeModalModel {
                         .did_check_to_trigger_openwarp_launch_modal
                         .set_value(true, ctx)
                     {
-                        log::warn!("Failed to mark OpenWarp launch modal as dismissed: {e}");
+                        log::warn!("Failed to mark CastCodes launch modal as dismissed: {e}");
                     }
                 });
             }
@@ -263,7 +263,7 @@ impl OneTimeModalModel {
                 .did_check_to_trigger_openwarp_launch_modal
                 .set_value(true, ctx)
             {
-                log::warn!("Failed to mark OpenWarp launch modal as dismissed: {e}");
+                log::warn!("Failed to mark CastCodes launch modal as dismissed: {e}");
             }
         });
 

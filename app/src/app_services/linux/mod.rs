@@ -64,7 +64,7 @@ pub fn pass_startup_args_to_existing_instance(
 #[derive(Debug, thiserror::Error)]
 #[cfg(feature = "release_bundle")]
 pub enum StartupArgsForwardingError {
-    /// There's no instance of Warp already running.
+    /// There's no instance of CastCodes already running.
     #[error("no existing instance found to forward args to")]
     NoExistingInstance,
     /// This instance was launched after an auto-update and should not forward
@@ -81,7 +81,7 @@ impl From<zbus::fdo::Error> for StartupArgsForwardingError {
     fn from(value: zbus::fdo::Error) -> Self {
         // While ServiceUnknown usually means that D-Bus doesn't know how to
         // _launch_ something to handle your message, in our case, we're not
-        // registering a service, so this really means that Warp is not already
+        // registering a service, so this really means that CastCodes is not already
         // running.
         if matches!(value, zbus::fdo::Error::ServiceUnknown(_)) {
             StartupArgsForwardingError::NoExistingInstance
@@ -149,12 +149,12 @@ impl ApplicationService {
     }
 }
 
-// A D-Bus client for connecting to an already-running instance of Warp and
+// A D-Bus client for connecting to an already-running instance of CastCodes and
 // invoking org.freedesktop.Application IPC methods.
 #[proxy(
     interface = "org.freedesktop.Application",
-    default_service = "dev.warp.WarpLocal",
-    default_path = "/dev/warp/WarpLocal",
+    default_service = "dev.castcodes.CastCodes",
+    default_path = "/dev/castcodes/CastCodes",
     gen_blocking = false
 )]
 trait ExistingApplication {

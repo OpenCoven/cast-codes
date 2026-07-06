@@ -1192,8 +1192,8 @@ define_settings_group!(AISettings, settings: [
         description: "Whether the \"What's new\" section is shown in the agent view.",
     }
 
-    // Whether or not the user has enabled the ability to use Warp credits even when providing
-    // their own LLM provider API key.
+    // Hosted-service compatibility setting for allowing hosted credits even when providing
+    // your own LLM provider API key. Hidden in local-only CastCodes builds.
     can_use_warp_credits_with_byok: CanUseWarpCreditsWithByok {
         type: bool,
         default: false,
@@ -1201,7 +1201,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "cloud_platform.third_party_api_keys.can_use_warp_credits_with_byok",
-        description: "Whether CastCodes credits can be used even when providing your own API key.",
+        description: "Whether hosted credits can be used even when providing your own API key.",
     }
 
     should_render_use_agent_footer_for_user_commands: ShouldRenderUseAgentToolbarForUserCommands {

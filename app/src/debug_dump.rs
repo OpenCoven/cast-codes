@@ -1,7 +1,7 @@
 //! This module contains the code path for the [`warp_cli::Command::DumpDebugInfo`] subcommand.
 //!
 //! This is intended to never be used by a vast majority of users. This is only intended for users
-//! who are unable to run Warp and want to provide us, the dev team, with useful debugging
+//! who are unable to run CastCodes and want to provide us, the dev team, with useful debugging
 //! information.
 #[cfg(not(windows))]
 use command::blocking::Command;
@@ -9,7 +9,7 @@ use warp_core::channel::ChannelState;
 use warpui::windowing;
 
 pub(crate) fn run() -> anyhow::Result<()> {
-    println!("Warp version: {:?}", ChannelState::app_version());
+    println!("CastCodes version: {:?}", ChannelState::app_version());
 
     #[cfg(not(windows))]
     {

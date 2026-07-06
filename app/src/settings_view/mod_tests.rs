@@ -2,20 +2,33 @@ use super::*;
 use settings_page::MatchData;
 
 const ABOUT_PAGE_SOURCE: &str = include_str!("about_page.rs");
+const AI_DOCUMENT_MODEL_SOURCE: &str = include_str!("../ai/document/ai_document_model.rs");
+const AI_DOCUMENT_VIEW_SOURCE: &str = include_str!("../ai/ai_document_view.rs");
 const AI_PAGE_SOURCE: &str = include_str!("ai_page.rs");
+const AI_SETTINGS_SOURCE: &str = include_str!("../settings/ai.rs");
 const APPEARANCE_PAGE_SOURCE: &str = include_str!("appearance_page.rs");
+const APP_SERVICES_WINDOWS_SOURCE: &str = include_str!("../app_services/windows/mod.rs");
+const APP_SERVICES_WINDOWS_SINGLE_INSTANCE_SOURCE: &str =
+    include_str!("../app_services/windows/single_instance_manager.rs");
+const APP_SERVICES_LINUX_SOURCE: &str = include_str!("../app_services/linux/mod.rs");
+const AUTOUPDATE_CHANNEL_VERSIONS_SOURCE: &str = include_str!("../autoupdate/channel_versions.rs");
+const DEBUG_DUMP_SOURCE: &str = include_str!("../debug_dump.rs");
+const DEFAULT_TERMINAL_SOURCE: &str = include_str!("../default_terminal/mod.rs");
 const ENVIRONMENTS_PAGE_SOURCE: &str = include_str!("environments_page.rs");
 const EXTERNAL_EDITOR_SOURCE: &str = include_str!("features/external_editor.rs");
 const FEATURES_PAGE_SOURCE: &str = include_str!("features_page.rs");
 const GENERAL_SETTINGS_SOURCE: &str = include_str!("../terminal/general_settings.rs");
+const LOCAL_WORKFLOWS_SOURCE: &str = include_str!("../workflows/local_workflows.rs");
 const MAIN_PAGE_SOURCE: &str = include_str!("main_page.rs");
 const MCP_SERVERS_LIST_PAGE_SOURCE: &str = include_str!("mcp_servers/list_page.rs");
+const PANE_GROUP_SOURCE: &str = include_str!("../pane_group/mod.rs");
 const PLATFORM_PAGE_SOURCE: &str = include_str!("platform_page.rs");
 const PRIVACY_PAGE_SOURCE: &str = include_str!("privacy_page.rs");
 const REFERRALS_PAGE_SOURCE: &str = include_str!("referrals_page.rs");
 const SHOW_BLOCKS_VIEW_SOURCE: &str = include_str!("show_blocks_view.rs");
 const SETTINGS_VIEW_SOURCE: &str = include_str!("mod.rs");
 const SESSION_SETTINGS_SOURCE: &str = include_str!("../terminal/session_settings.rs");
+const SERVER_API_SOURCE: &str = include_str!("../server/server_api.rs");
 const SSH_ERROR_SOURCE: &str = include_str!("../terminal/ssh/error.rs");
 const SSH_INSTALL_TMUX_SOURCE: &str = include_str!("../terminal/ssh/install_tmux.rs");
 const SSH_WARPIFY_SOURCE: &str = include_str!("../terminal/ssh/warpify.rs");
@@ -73,6 +86,9 @@ const THEME_PICKER_SLIDE_SOURCE: &str =
     include_str!("../../../crates/onboarding/src/slides/theme_picker_slide.rs");
 const WARP_DRIVE_PAGE_SOURCE: &str = include_str!("warp_drive_page.rs");
 const WARPIFY_PAGE_SOURCE: &str = include_str!("warpify_page.rs");
+const WORKSPACE_ONE_TIME_MODAL_MODEL_SOURCE: &str =
+    include_str!("../workspace/one_time_modal_model.rs");
+const WORKSPACE_VIEW_SOURCE: &str = include_str!("../workspace/view.rs");
 
 // ── SettingsSection classification ──────────────────────────────────────────
 
@@ -362,6 +378,9 @@ fn terminal_user_facing_copy_uses_castcodes_terms() {
     );
     assert!(TERMINAL_INLINE_AWS_BEDROCK_LOGIN_SOURCE
         .contains("Your administrator has enabled AWS Bedrock"));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("Onboarding Callout: Universal Input - Terminal"));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("Onboarding Callout: Universal Input - Project"));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("Onboarding Callout: Universal Input - No Project"));
     assert!(TERMINAL_USE_AGENT_FOOTER_SOURCE.contains("Ask the CastCodes agent"));
     assert!(TERMINAL_WARPIFY_FOOTER_SOURCE.contains("Enable shell integration"));
     assert!(TERMINAL_WARPIFY_BLOCK_BANNER_SOURCE.contains("Enable shell integration"));
@@ -373,6 +392,27 @@ fn terminal_user_facing_copy_uses_castcodes_terms() {
     assert!(TERMINAL_PROFILE_MODEL_SELECTOR_SOURCE.contains("CastCodes benchmarks"));
     assert!(TERMINAL_SHELL_TERMINATED_BANNER_SOURCE
         .contains("Shell integration script output is displayed here"));
+    assert!(PANE_GROUP_SOURCE.contains("CastCodes doesn't currently support your default shell"));
+    assert!(DEBUG_DUMP_SOURCE.contains("CastCodes version"));
+    assert!(DEFAULT_TERMINAL_SOURCE.contains("CastCodes as default terminal"));
+    assert!(LOCAL_WORKFLOWS_SOURCE.contains("author: Some(\"CastCodes\".into())"));
+    assert!(LOCAL_WORKFLOWS_SOURCE.contains("\"castcodes\".into()"));
+    assert!(APP_SERVICES_WINDOWS_SOURCE.contains("there is no other instance of CastCodes"));
+    assert!(APP_SERVICES_WINDOWS_SINGLE_INSTANCE_SOURCE.contains("CastCodes{:?}_URI_CHANNEL"));
+    assert!(APP_SERVICES_WINDOWS_SINGLE_INSTANCE_SOURCE
+        .contains("Local\\\\CastCodes{:?}_SingleInstance"));
+    assert!(APP_SERVICES_LINUX_SOURCE.contains("dev.castcodes.CastCodes"));
+    assert!(APP_SERVICES_LINUX_SOURCE.contains("/dev/castcodes/CastCodes"));
+    assert!(AI_DOCUMENT_VIEW_SOURCE.contains("Failed to create Cast Drive notebook"));
+    assert!(AI_DOCUMENT_MODEL_SOURCE.contains("saving AI Document to Cast Drive"));
+    assert!(AI_PAGE_SOURCE.contains("models from providers without API keys are unavailable"));
+    assert!(AI_PAGE_SOURCE.contains("cloud_services_available()"));
+    assert!(AI_PAGE_SOURCE.contains("hosted credits"));
+    assert!(SERVER_API_SOURCE.contains("channel versions and changelogs from configured server"));
+    assert!(SERVER_API_SOURCE.contains("Received channel versions from configured server"));
+    assert!(AUTOUPDATE_CHANNEL_VERSIONS_SOURCE.contains("channel versions from configured server"));
+    assert!(WORKSPACE_VIEW_SOURCE.contains("CastCodes launch modal state"));
+    assert!(WORKSPACE_ONE_TIME_MODAL_MODEL_SOURCE.contains("mark CastCodes launch modal"));
 
     assert!(!SSH_ERROR_SOURCE.contains("Warpifying the session hit a timeout."));
     assert!(!SSH_ERROR_SOURCE.contains("Error Warpifying session"));
@@ -394,6 +434,7 @@ fn terminal_user_facing_copy_uses_castcodes_terms() {
     assert!(!TERMINAL_VIEW_SOURCE.contains("MenuItemFields::new(\"Ask Warp AI\")"));
     assert!(!TERMINAL_VIEW_SOURCE.contains("Opened Warpify Settings"));
     assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("\"Ask Warp AI"));
+    assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("Onboarding Callout: WarpInput"));
     assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("\"Warpify subshell\""));
     assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("\"Warpify ssh session\""));
     assert!(!TERMINAL_VIEW_SOURCE.contains("Powerlevel10k now supports Warp!"));
@@ -419,6 +460,26 @@ fn terminal_user_facing_copy_uses_castcodes_terms() {
     assert!(!TERMINAL_AMBIENT_AGENT_HARNESS_SELECTOR_SOURCE.contains("with the Warp Agent"));
     assert!(!TERMINAL_MODEL_SPEC_SCORES_SOURCE.contains("Warp's benchmarks"));
     assert!(!TERMINAL_PROFILE_MODEL_SELECTOR_SOURCE.contains("Warp’s benchmarks"));
+    assert!(!PANE_GROUP_SOURCE.contains("Warp doesn't currently support your default shell"));
+    assert!(!DEBUG_DUMP_SOURCE.contains("Warp version"));
+    assert!(!DEFAULT_TERMINAL_SOURCE.contains("Warp as default terminal"));
+    assert!(!LOCAL_WORKFLOWS_SOURCE.contains("author: Some(\"Warp\".into())"));
+    assert!(!LOCAL_WORKFLOWS_SOURCE.contains("\"warp\".into()"));
+    assert!(!APP_SERVICES_WINDOWS_SOURCE.contains("there is no other instance of Warp"));
+    assert!(!APP_SERVICES_WINDOWS_SINGLE_INSTANCE_SOURCE.contains("Warp{:?}_URI_CHANNEL"));
+    assert!(
+        !APP_SERVICES_WINDOWS_SINGLE_INSTANCE_SOURCE.contains("Local\\\\Warp{:?}_SingleInstance")
+    );
+    assert!(!APP_SERVICES_LINUX_SOURCE.contains("dev.warp.WarpLocal"));
+    assert!(!APP_SERVICES_LINUX_SOURCE.contains("/dev/warp/WarpLocal"));
+    assert!(!AI_DOCUMENT_VIEW_SOURCE.contains("Failed to create Warp Drive notebook"));
+    assert!(!AI_DOCUMENT_MODEL_SOURCE.contains("saving AI Document to Warp Drive"));
+    assert!(!AI_PAGE_SOURCE.contains("CastCodes credits"));
+    assert!(!AI_PAGE_SOURCE.contains("CastCodes's provided models"));
+    assert!(!SERVER_API_SOURCE.contains("Warp server"));
+    assert!(!AUTOUPDATE_CHANNEL_VERSIONS_SOURCE.contains("Warp server"));
+    assert!(!WORKSPACE_VIEW_SOURCE.contains("OpenWarp launch modal state"));
+    assert!(!WORKSPACE_ONE_TIME_MODAL_MODEL_SOURCE.contains("mark OpenWarp launch modal"));
 }
 
 #[test]
@@ -444,6 +505,8 @@ fn settings_schema_descriptions_use_castcodes_terms() {
     assert!(GENERAL_SETTINGS_SOURCE.contains("before quitting CastCodes"));
     assert!(SESSION_SETTINGS_SOURCE.contains("CastCodes prompt"));
     assert!(TERMINAL_WARPIFY_SETTINGS_SOURCE.contains("SSH shell integration"));
+    assert!(AI_SETTINGS_SOURCE.contains("hosted credits"));
+    assert!(!AI_SETTINGS_SOURCE.contains("CastCodes credits can be used"));
 
     for source in sources {
         for needle in forbidden {

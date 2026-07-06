@@ -982,7 +982,7 @@ impl AIDocumentView {
             model.sync_to_warp_drive(self.document_id, ctx)
         });
         if !success {
-            log::error!("Failed to create Warp Drive notebook");
+            log::error!("Failed to create Cast Drive notebook");
         }
     }
 

@@ -712,6 +712,23 @@ fn cli_help_points_to_castcodes_docs() {
 }
 
 #[test]
+fn agent_run_share_help_does_not_point_to_upstream_docs() {
+    let mut command = <Args as clap::CommandFactory>::command();
+    command.build();
+
+    let agent = command
+        .find_subcommand_mut("agent")
+        .expect("agent subcommand should exist");
+    let run = agent
+        .find_subcommand_mut("run")
+        .expect("agent run subcommand should exist");
+    let help = run.render_long_help().to_string();
+
+    assert!(help.contains("Learn more in the CastCodes documentation."));
+    assert!(!help.contains("https://docs.warp.dev/knowledge-and-collaboration/session-sharing"));
+}
+
+#[test]
 fn local_only_rejects_hosted_top_level_commands_before_parse() {
     let args = vec![
         "cast-codes".to_string(),

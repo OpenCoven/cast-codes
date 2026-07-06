@@ -6151,20 +6151,19 @@ impl ApiKeysWidget {
         let ai_settings = AISettings::as_ref(app);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
         let is_enabled = is_any_ai_enabled && is_byo_enabled;
+        let description = if warp_core::channel::ChannelState::cloud_services_available() {
+            "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced. Using auto models or models from providers you have not provided API keys for will consume hosted credits."
+        } else {
+            "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced. In local-only builds, models from providers without API keys are unavailable."
+        };
 
-        let mut column = Flex::column()
-            .with_spacing(16.)
-            .with_child(
-                Container::new(
-                    render_ai_setting_description(
-                        "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced. Using auto models or models from providers you have not provided API keys for will consume CastCodes credits.",
-                        is_enabled,
-                        app,
-                    ))
+        let mut column = Flex::column().with_spacing(16.).with_child(
+            Container::new(render_ai_setting_description(description, is_enabled, app))
                 // Remove the bottom margin of the description so that it doesn't
                 // create extra space between the description and the API key inputs.
-                .with_margin_bottom(-styles::DESCRIPTION_MARGIN_BOTTOM).finish()
-            );
+                .with_margin_bottom(-styles::DESCRIPTION_MARGIN_BOTTOM)
+                .finish(),
+        );
 
         /// Helper function to render the UI for an API key input field.
         fn render_api_key_input(
@@ -6305,7 +6304,7 @@ impl ApiKeysWidget {
         );
 
         let description = render_ai_setting_description(
-            "When enabled, agent requests may be routed to one of CastCodes's provided models in the event of an error. CastCodes will prioritize using your API keys over your CastCodes credits.",
+            "When enabled, agent requests may be routed to a hosted fallback model in the event of an error. API keys are prioritized before hosted credits.",
             ai_settings.is_any_ai_enabled(app),
             app,
         );
@@ -6347,7 +6346,7 @@ impl SettingsWidget for ApiKeysWidget {
             )
             .with_child(self.render_api_keys_section(appearance, app, is_byo_enabled));
 
-        if is_byo_enabled {
+        if is_byo_enabled && warp_core::channel::ChannelState::cloud_services_available() {
             column.add_child(
                 Container::new(self.render_can_use_warp_credits_with_byok_toggle(view, app))
                     .with_margin_top(16.)
