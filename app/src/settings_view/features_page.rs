@@ -4313,7 +4313,7 @@ impl SettingsWidget for DefaultTerminalWidget {
     type View = FeaturesPageView;
 
     fn search_terms(&self) -> &str {
-        "warp default terminal application"
+        "castcodes default terminal application"
     }
 
     fn render(

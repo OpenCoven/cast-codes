@@ -186,7 +186,7 @@ impl WarpifyPageView {
         {
             categories.push(
                 Category::new("SSH", vec![Box::new(SSHWidget::default())])
-                    .with_subtitle("Castify your interactive SSH sessions."),
+                    .with_subtitle("Use shell integration for interactive SSH sessions."),
             );
         }
         PageType::new_categorized(categories, None)
@@ -506,8 +506,7 @@ impl TitleWidget {
     fn render_top_of_page(&self, appearance: &Appearance, _app: &AppContext) -> Box<dyn Element> {
         let warpify_description = vec![
             FormattedTextFragment::plain_text(
-                "Configure whether CastCodes adds support for blocks, \
-                    input modes, etc) certain shells. ",
+                "Configure how CastCodes adds block support, input modes, and other shell integration features to supported shells. ",
             ),
             FormattedTextFragment::hyperlink("Learn more", USER_DOCS_URL),
         ];
@@ -527,7 +526,11 @@ impl TitleWidget {
         .finish();
 
         Flex::column()
-            .with_child(render_page_title("Castify", HEADER_FONT_SIZE, appearance))
+            .with_child(render_page_title(
+                "Shell integration",
+                HEADER_FONT_SIZE,
+                appearance,
+            ))
             .with_child(warpify_description)
             .finish()
     }
@@ -537,7 +540,7 @@ impl SettingsWidget for TitleWidget {
     type View = WarpifyPageView;
 
     fn search_terms(&self) -> &str {
-        "ssh subshell warpify session"
+        "ssh shell integration subshell session"
     }
 
     fn render(
@@ -599,7 +602,7 @@ impl SettingsWidget for SubshellsWidget {
     type View = WarpifyPageView;
 
     fn search_terms(&self) -> &str {
-        "warpify subshell"
+        "shell integration subshell"
     }
 
     fn render(
@@ -626,7 +629,7 @@ impl SettingsWidget for SSHWidget {
     type View = WarpifyPageView;
 
     fn search_terms(&self) -> &str {
-        "warpify ssh"
+        "shell integration ssh"
     }
 
     fn render(
@@ -653,7 +656,7 @@ impl SettingsWidget for SSHWidget {
             &WarpifySettings::as_ref(app).enable_ssh_warpification,
             move || {
                 render_body_item::<WarpifyPageAction>(
-                    "Castify SSH Sessions".into(),
+                    "Enable SSH shell integration".into(),
                     None,
                     LocalOnlyIconState::for_setting(
                         EnableSshWarpification::storage_key(),

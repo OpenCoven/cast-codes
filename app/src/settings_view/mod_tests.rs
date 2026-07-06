@@ -346,6 +346,18 @@ fn mcp_section_titles_match_channel_capabilities() {
 }
 
 #[test]
+fn mcp_share_controls_are_cloud_service_only() {
+    let expected_gate =
+        "show_share_icon_button: ChannelState::cloud_services_available() && is_shareable";
+
+    assert_eq!(
+        MCP_SERVERS_LIST_PAGE_SOURCE.matches(expected_gate).count(),
+        2,
+        "template and installation MCP cards should hide share controls when cloud services are unavailable"
+    );
+}
+
+#[test]
 fn ai_usage_widget_is_cloud_service_only() {
     assert!(AI_PAGE_SOURCE
         .contains("let cloud_services_available = ChannelState::cloud_services_available();"));
@@ -365,6 +377,32 @@ fn cloud_agent_computer_use_widget_is_cloud_service_only() {
     assert!(!AI_PAGE_SOURCE.contains(
         "if FeatureFlag::AgentModeComputerUse.is_enabled() {\n                    widgets.push(Box::new(CloudAgentComputerUseWidget::default()));\n                }"
     ));
+}
+
+#[test]
+fn api_key_inputs_are_available_in_local_only_builds() {
+    assert!(ai_page::api_keys_enabled_for_channel(true, true));
+    assert!(!ai_page::api_keys_enabled_for_channel(false, true));
+    assert!(ai_page::api_keys_enabled_for_channel(true, false));
+    assert!(ai_page::api_keys_enabled_for_channel(false, false));
+
+    assert_eq!(
+        AI_PAGE_SOURCE
+            .matches("api_keys_enabled_for_channel(is_byo_enabled, ChannelState::cloud_services_available())")
+            .count()
+            + AI_PAGE_SOURCE
+                .matches("let is_byo_enabled = api_keys_enabled_for_channel(")
+                .count(),
+        3,
+        "API key setup, workspace refresh, and render paths should use channel-aware BYOK availability"
+    );
+}
+
+#[test]
+fn api_key_upgrade_cta_is_cloud_service_only() {
+    assert!(
+        AI_PAGE_SOURCE.contains("if !is_byo_enabled && ChannelState::cloud_services_available() {")
+    );
 }
 
 #[test]
@@ -407,11 +445,18 @@ fn privacy_settings_copy_is_castcodes_branded() {
 fn visible_settings_copy_uses_castcodes_terms_for_shell_and_shared_surfaces() {
     assert!(SETTINGS_VIEW_SOURCE.contains("\"Shell integration\""));
     assert!(CODE_PAGE_SOURCE.contains(".castcodesindexingignore"));
-    assert!(WARPIFY_PAGE_SOURCE.contains("CastCodes adds support for blocks"));
+    assert!(WARPIFY_PAGE_SOURCE.contains("\"Shell integration\""));
+    assert!(WARPIFY_PAGE_SOURCE.contains("Configure how CastCodes adds block support"));
+    assert!(WARPIFY_PAGE_SOURCE.contains("Use shell integration for interactive SSH sessions."));
+    assert!(WARPIFY_PAGE_SOURCE.contains("\"Enable SSH shell integration\""));
     assert!(WARPIFY_PAGE_SOURCE.contains("Use Tmux shell integration"));
     assert!(SHOW_BLOCKS_VIEW_SOURCE.contains("deleted from hosted servers"));
 
     assert!(!CODE_PAGE_SOURCE.contains(".warpindexingignore file"));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("render_page_title(\"Castify\""));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("Castify your interactive SSH sessions."));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("CastCodes adds support for blocks"));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("\"Castify SSH Sessions\""));
     assert!(!WARPIFY_PAGE_SOURCE.contains("Warp attempts"));
     assert!(!WARPIFY_PAGE_SOURCE.contains("Warpification\""));
     assert!(!SHOW_BLOCKS_VIEW_SOURCE.contains("Warp servers"));
@@ -617,6 +662,38 @@ fn settings_schema_descriptions_use_castcodes_terms() {
             );
         }
     }
+}
+
+#[test]
+fn settings_search_terms_use_castcodes_terms() {
+    assert!(FEATURES_PAGE_SOURCE.contains("\"castcodes default terminal application\""));
+    assert!(APPEARANCE_PAGE_SOURCE.contains(
+        "\"left tools panel open closed across tabs file tree project explorer global search cast drive conversation list\""
+    ));
+    assert!(APPEARANCE_PAGE_SOURCE.contains(
+        "\"input type castcodes universal classic style prompt terminal ai developer mode interface shell chips ps1\""
+    ));
+    assert!(APPEARANCE_PAGE_SOURCE.contains("\"prompt ps1 terminal castcodes shell custom\""));
+    assert!(ENVIRONMENTS_PAGE_SOURCE
+        .contains("\"environments environment ambient agents github castcodes assisted manual configuration\""));
+    assert!(WARPIFY_PAGE_SOURCE.contains("\"ssh shell integration subshell session\""));
+    assert!(WARPIFY_PAGE_SOURCE.contains("\"shell integration subshell\""));
+    assert!(WARPIFY_PAGE_SOURCE.contains("\"shell integration ssh\""));
+
+    assert!(!FEATURES_PAGE_SOURCE.contains("\"warp default terminal application\""));
+    assert!(!APPEARANCE_PAGE_SOURCE.contains(
+        "\"left tools panel open closed across tabs file tree project explorer global search warp drive conversation list\""
+    ));
+    assert!(!APPEARANCE_PAGE_SOURCE.contains(
+        "\"input type warp universal classic style prompt terminal ai developer mode interface shell chips ps1\""
+    ));
+    assert!(!APPEARANCE_PAGE_SOURCE.contains("\"prompt ps1 terminal warp shell custom\""));
+    assert!(!ENVIRONMENTS_PAGE_SOURCE.contains(
+        "\"environments environment ambient agents github warp assisted manual configuration\""
+    ));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("\"ssh subshell warpify session\""));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("\"warpify subshell\""));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("\"warpify ssh\""));
 }
 
 #[test]

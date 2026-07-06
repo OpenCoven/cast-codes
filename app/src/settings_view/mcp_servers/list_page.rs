@@ -408,7 +408,7 @@ impl MCPServersListPageView {
             None, // Templates cannot have an error
             title_chip_text.into_iter().collect(),
             ServerCardOptions {
-                show_share_icon_button: is_shareable,
+                show_share_icon_button: ChannelState::cloud_services_available() && is_shareable,
                 ..server_card_status.into()
             },
         );
@@ -464,7 +464,7 @@ impl MCPServersListPageView {
             title_chip_text.into_iter().collect(),
             ServerCardOptions {
                 show_log_out_icon_button: uses_oauth,
-                show_share_icon_button: is_shareable,
+                show_share_icon_button: ChannelState::cloud_services_available() && is_shareable,
                 show_update_available_icon_button: should_show_update_symbol,
                 ..server_card_status.into()
             },

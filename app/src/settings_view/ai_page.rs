@@ -158,6 +158,10 @@ const GIT_OPERATIONS_AUTOGEN_DESCRIPTION: &str =
     "Let AI generate commit messages and pull request titles and descriptions.";
 const WISPR_FLOW_URL: &str = "https://wisprflow.ai/";
 
+pub fn api_keys_enabled_for_channel(is_byo_enabled: bool, cloud_services_available: bool) -> bool {
+    !cloud_services_available || is_byo_enabled
+}
+
 pub fn init_actions_from_parent_view<T: Action + Clone>(
     app: &mut AppContext,
     context: &ContextPredicate,
@@ -6040,6 +6044,8 @@ impl ApiKeysWidget {
         let workspace_handle = UserWorkspaces::handle(ctx);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(ctx);
         let is_byo_enabled = workspace_handle.as_ref(ctx).is_byo_api_key_enabled();
+        let is_byo_enabled =
+            api_keys_enabled_for_channel(is_byo_enabled, ChannelState::cloud_services_available());
 
         let ApiKeys {
             openai: openai_key,
@@ -6095,6 +6101,10 @@ impl ApiKeysWidget {
                         let is_any_ai_enabled =
                             AISettings::handle(ctx).as_ref(ctx).is_any_ai_enabled(ctx);
                         let is_byo_enabled = workspace.as_ref(ctx).is_byo_api_key_enabled();
+                        let is_byo_enabled = api_keys_enabled_for_channel(
+                            is_byo_enabled,
+                            ChannelState::cloud_services_available(),
+                        );
                         let is_enabled = is_any_ai_enabled && is_byo_enabled;
                         let has_key = !editor_clone.as_ref(ctx).is_empty(ctx);
 
@@ -6227,7 +6237,7 @@ impl ApiKeysWidget {
         ));
 
         // Show upgrade CTA if BYOK is not enabled
-        if !is_byo_enabled {
+        if !is_byo_enabled && ChannelState::cloud_services_available() {
             let auth_state = AuthStateProvider::as_ref(app).get();
             let upgrade_text_fragments = if let Some(team) =
                 UserWorkspaces::as_ref(app).current_team()
@@ -6333,6 +6343,8 @@ impl SettingsWidget for ApiKeysWidget {
         let ai_settings = AISettings::as_ref(app);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
         let is_byo_enabled = UserWorkspaces::as_ref(app).is_byo_api_key_enabled();
+        let is_byo_enabled =
+            api_keys_enabled_for_channel(is_byo_enabled, ChannelState::cloud_services_available());
 
         let mut column = Flex::column()
             .with_child(render_separator(appearance))

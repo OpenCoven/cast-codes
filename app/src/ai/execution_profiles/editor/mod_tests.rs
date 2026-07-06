@@ -1,4 +1,5 @@
 use super::ui_helpers::context_window_snap_values;
+use super::upgrade_footer_available_for_channel;
 
 /// Helper: round-trip f32 → u32 for readable assertions and absorb the
 /// negligible f64→f32 drift the snap helper picks up on large ranges.
@@ -81,4 +82,12 @@ fn snap_values_keep_count_reasonable_for_huge_range() {
         "expected at least 5 snap points, got {}",
         values.len()
     );
+}
+
+#[test]
+fn upgrade_footer_requires_cloud_services() {
+    assert!(upgrade_footer_available_for_channel(true, true));
+    assert!(!upgrade_footer_available_for_channel(true, false));
+    assert!(!upgrade_footer_available_for_channel(false, true));
+    assert!(!upgrade_footer_available_for_channel(false, false));
 }

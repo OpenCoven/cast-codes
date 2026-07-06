@@ -29,6 +29,7 @@ use ai::api_keys::{ApiKeyManager, ApiKeyManagerEvent};
 use itertools::Itertools;
 use regex::Regex;
 use thousands::Separable;
+use warp_core::channel::ChannelState;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::fonts::Properties;
 use warpui::platform::Cursor;
@@ -47,6 +48,13 @@ use warpui::{
 };
 
 const MODEL_MENU_WIDTH: f32 = 250.;
+
+fn upgrade_footer_available_for_channel(
+    has_upgrade_gated_models: bool,
+    cloud_services_available: bool,
+) -> bool {
+    has_upgrade_gated_models && cloud_services_available
+}
 
 /// Renders a footer banner for model dropdowns informing free-plan users that
 /// frontier models require an upgrade, with a clickable "Upgrade" link.
@@ -1127,7 +1135,10 @@ impl ExecutionProfileEditorView {
             );
             dropdown.set_rich_items(items, ctx);
 
-            if has_upgrade_gated_models {
+            if upgrade_footer_available_for_channel(
+                has_upgrade_gated_models,
+                ChannelState::cloud_services_available(),
+            ) {
                 let mouse_state = upgrade_mouse_state.clone();
                 dropdown.set_footer(
                     move |app| render_upgrade_footer(mouse_state.clone(), app),
