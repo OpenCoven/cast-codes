@@ -9,6 +9,7 @@ use super::{
 };
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::autoupdate::{self, AutoupdateStage, AutoupdateState};
+use crate::util::links::{GITHUB_ISSUES_URL, USER_DOCS_URL};
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
     appearance::Appearance,
@@ -500,7 +501,7 @@ impl AccountWidget {
                             .ui_builder()
                             .link(
                                 "Contact support".into(),
-                                Some("mailto:support@warp.dev".into()),
+                                Some(GITHUB_ISSUES_URL.into()),
                                 None,
                                 self.ui_state_handles.enterprise_contact_us_link.clone(),
                             )
@@ -694,9 +695,7 @@ impl SettingsWidget for SettingsSyncWidget {
 
         let label_info = AdditionalInfo {
             mouse_state: self.tooltip_state.clone(),
-            on_click_action: Some(MainPageAction::OpenUrl(
-                "https://docs.warp.dev/terminal/more-features/settings-sync".into(),
-            )),
+            on_click_action: Some(MainPageAction::OpenUrl(USER_DOCS_URL.into())),
             secondary_text: None,
             tooltip_override_text: None,
         };

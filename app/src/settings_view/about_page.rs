@@ -5,15 +5,12 @@ use super::{
     },
     SettingsSection,
 };
-use crate::{
-    appearance::Appearance, channel::ChannelState, themes::theme::ColorScheme,
-    workspace::WorkspaceAction,
-};
+use crate::{appearance::Appearance, channel::ChannelState, workspace::WorkspaceAction};
+use warp_core::brand;
 use warpui::{
-    assets::asset_cache::AssetSource,
     elements::{
-        Align, CacheOption, ConstrainedBox, Container, CrossAxisAlignment, Element, Flex, Image,
-        MainAxisAlignment, MouseStateHandle, ParentElement, Wrap,
+        Align, Container, CrossAxisAlignment, Element, Flex, MainAxisAlignment, MouseStateHandle,
+        ParentElement, Text, Wrap,
     },
     ui_components::components::UiComponent,
     AppContext, Entity, View, ViewContext, ViewHandle,
@@ -54,7 +51,7 @@ impl SettingsWidget for AboutPageWidget {
     type View = AboutPageView;
 
     fn search_terms(&self) -> &str {
-        "about warp version"
+        "about castcodes version"
     }
 
     fn render(
@@ -63,16 +60,12 @@ impl SettingsWidget for AboutPageWidget {
         appearance: &Appearance,
         _app: &AppContext,
     ) -> Box<dyn Element> {
-        let theme = appearance.theme();
         let ui_builder = appearance.ui_builder();
 
-        let image_path = if theme.inferred_color_scheme() == ColorScheme::LightOnDark {
-            "bundled/svg/warp-logo-with-light-title.svg"
-        } else {
-            "bundled/svg/warp-logo-with-dark-title.svg"
-        };
-
         let version = ChannelState::app_version().unwrap_or("v#.##.###");
+        let title = Text::new_inline(brand::PRODUCT_NAME, appearance.ui_font_family(), 40.)
+            .with_color(appearance.theme().active_ui_text_color().into())
+            .finish();
 
         let version_text = ui_builder
             .span(version.to_string())
@@ -103,18 +96,7 @@ impl SettingsWidget for AboutPageWidget {
         Align::new(
             Flex::column()
                 .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(
-                    ConstrainedBox::new(
-                        Image::new(
-                            AssetSource::Bundled { path: image_path },
-                            CacheOption::BySize,
-                        )
-                        .finish(),
-                    )
-                    .with_max_height(100.)
-                    .with_max_width(350.)
-                    .finish(),
-                )
+                .with_child(title)
                 .with_child(version_row.finish())
                 .with_child(
                     ui_builder

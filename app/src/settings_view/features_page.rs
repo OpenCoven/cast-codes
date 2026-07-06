@@ -79,6 +79,7 @@ use crate::user_config::{WarpConfig, WarpConfigUpdateEvent};
 use crate::util::bindings::{
     keybinding_name_to_display_string, reset_keybinding_to_default, set_custom_keybinding,
 };
+use crate::util::links::USER_DOCS_URL;
 use crate::view_components::{Dropdown, DropdownItem, FilterableDropdown};
 use crate::workspace::tab_settings::{NewTabPlacement, TabSettings};
 use crate::workspace::WorkspaceAction;
@@ -661,7 +662,7 @@ lazy_static! {
 const NOTIFICATION_CHECKBOX_MARGIN_RIGHT: f32 = 5.;
 const NOTIFICATION_EDITOR_MARGIN: f32 = 5.;
 
-const NOTIFICATIONS_DOCS_URL: &str = "https://docs.warp.dev/terminal/more-features/notifications";
+const NOTIFICATIONS_DOCS_URL: &str = USER_DOCS_URL;
 
 /// WARNING: this constant was computed manually by determining the pixel width
 /// of the quake mode dropdowns based on the number of expanded items in the flex row.
@@ -3799,9 +3800,7 @@ impl SettingsWidget for SessionRestorationWidget {
             "Restore windows, tabs, and panes on startup".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/sessions/session-restoration".into(),
-                )),
+                on_click_action: Some(FeaturesPageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),
@@ -3832,7 +3831,7 @@ impl SettingsWidget for SessionRestorationWidget {
             let link = ui_builder
                 .link(
                     "See docs.".to_owned(),
-                    Some("https://docs.warp.dev/terminal/sessions/session-restoration".to_owned()),
+                    Some(USER_DOCS_URL.to_owned()),
                     None,
                     self.docs_link.clone(),
                 )
@@ -3884,9 +3883,7 @@ impl SettingsWidget for SnackbarHeaderWidget {
             "Show sticky command header".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/blocks/sticky-command-header".into(),
-                )),
+                on_click_action: Some(FeaturesPageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),
@@ -4436,9 +4433,7 @@ impl SettingsWidget for SSHWrapperWidget {
             "Cast SSH Wrapper".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/warpify/ssh-legacy#implementation".into(),
-                )),
+                on_click_action: Some(FeaturesPageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: if view.ssh_wrapper_toggled {
                     Some("This change will take effect in new sessions".to_string())
                 } else {
@@ -4862,10 +4857,7 @@ impl SettingsWidget for GlobalHotkeyWidget {
                         ui_builder
                             .link(
                                 "See docs.".to_owned(),
-                                Some(
-                                    "https://docs.warp.dev/terminal/windows/global-hotkey"
-                                        .to_owned(),
-                                ),
+                                Some(USER_DOCS_URL.to_owned()),
                                 None,
                                 view.button_mouse_states.global_hotkey_link.clone(),
                             )
@@ -5931,10 +5923,7 @@ impl SettingsWidget for MouseReportingWidget {
             "Enable Mouse Reporting".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/full-screen-apps#mouse-and-scroll-reporting"
-                        .into(),
-                )),
+                on_click_action: Some(FeaturesPageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),
@@ -6196,9 +6185,7 @@ impl SettingsWidget for SmartSelectWidget {
             "Double-click smart selection".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/text-selection".into(),
-                )),
+                on_click_action: Some(FeaturesPageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),
@@ -6447,9 +6434,7 @@ impl SettingsWidget for WorkflowsInCommandSearch {
             "Show Global Workflows in Command Search (ctrl-r)".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: Some(FeaturesPageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/entry/yaml-workflows".into(),
-                )),
+                on_click_action: Some(FeaturesPageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),

@@ -11,6 +11,8 @@ mod app_state;
 mod auth;
 mod autoupdate;
 mod banner;
+#[cfg(test)]
+mod castcodes_public_surface_tests;
 mod changelog_model;
 mod chip_configurator;
 #[cfg(not(target_family = "wasm"))]

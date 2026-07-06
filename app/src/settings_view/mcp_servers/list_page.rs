@@ -8,6 +8,7 @@ use crate::settings_view::mcp_servers_page::InstallOrigin;
 use crate::settings_view::settings_page::{
     build_toggle_element, render_body_item_label, LocalOnlyIconState, ToggleState,
 };
+use crate::util::links::USER_DOCS_URL;
 use crate::util::truncation::truncate_from_end;
 use crate::view_components::DismissibleToast;
 use crate::ToastStack;
@@ -1127,7 +1128,7 @@ impl MCPServersListPageView {
                 ),
                 FormattedTextFragment::hyperlink(
                     "See supported providers.",
-                    "https://docs.warp.dev/agent-platform/capabilities/mcp#file-based-mcp-servers",
+                    USER_DOCS_URL,
                 ),
             ]
         });
@@ -1163,10 +1164,7 @@ impl MCPServersListPageView {
     fn render_page_body(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
         let description_fragments = vec![
             FormattedTextFragment::plain_text(DESCRIPTION_TEXT),
-            FormattedTextFragment::hyperlink(
-                "Learn more.",
-                "https://docs.warp.dev/agent-platform/capabilities/mcp",
-            ),
+            FormattedTextFragment::hyperlink("Learn more.", USER_DOCS_URL),
         ];
 
         let description = FormattedTextElement::new(

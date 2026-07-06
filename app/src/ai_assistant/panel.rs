@@ -87,6 +87,10 @@ const ZERO_STATE_HELP_TEXT: &str =
 const SCRIPT_ZERO_STATE_PROMPT: &str = "Write a script to connect to an AWS EC2 instance.";
 const GIT_ZERO_STATE_PROMPT: &str = "How do I undo the most recent commits in git?";
 const FILES_ZERO_STATE_PROMPT: &str = "How do I find all files containing specific text?";
+#[cfg(feature = "cast-agent")]
+const COVEN_CODE_HARNESS: &str = "coven-code";
+#[cfg(feature = "cast-agent")]
+const COVEN_CODE_OPERATION_TITLE: &str = "Coven Code operation";
 
 // The placeholder texts are prepended with a space to give them cushion from the cursor.
 const INIT_PLACEHOLDER_TEXT: &str = " Ask a question...";
@@ -94,6 +98,52 @@ const FOLLOWUP_PLACEHOLDER_TEXT: &str = " Type a response or click one above..."
 const RESTART_BUTTON_TEXT: &str = "Restart";
 
 const ASK_AI_BLOCK_INPUT_LIMIT: usize = 100;
+
+#[cfg(feature = "cast-agent")]
+fn coven_code_agent_message_body(
+    prompt: String,
+    cwd: Option<&std::path::Path>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "text": prompt,
+        "harness": COVEN_CODE_HARNESS,
+        "title": COVEN_CODE_OPERATION_TITLE,
+    });
+    if let Some(cwd) = cwd {
+        body["projectRoot"] = serde_json::Value::String(cwd.to_string_lossy().to_string());
+    }
+    body
+}
+
+#[cfg(all(test, feature = "cast-agent"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coven_code_message_body_targets_coven_code_harness() {
+        let body = coven_code_agent_message_body(
+            "Inspect this project".to_string(),
+            Some(std::path::Path::new("/tmp/castcodes-project")),
+        );
+
+        assert_eq!(
+            body.get("text").and_then(serde_json::Value::as_str),
+            Some("Inspect this project")
+        );
+        assert_eq!(
+            body.get("harness").and_then(serde_json::Value::as_str),
+            Some("coven-code")
+        );
+        assert_eq!(
+            body.get("title").and_then(serde_json::Value::as_str),
+            Some("Coven Code operation")
+        );
+        assert_eq!(
+            body.get("projectRoot").and_then(serde_json::Value::as_str),
+            Some("/tmp/castcodes-project")
+        );
+    }
+}
 
 #[derive(Default)]
 struct MouseStateHandles {
@@ -254,14 +304,14 @@ pub fn init(app: &mut AppContext) {
     app.register_editable_bindings([
         EditableBinding::new(
             "ai_assistant_panel:send_via_coven_gateway",
-            "Stream a message through the Coven Gateway",
+            "Run native Coven Code operation",
             AIAssistantAction::SendViaCovenGateway,
         )
         .with_context_predicate(id!("AIAssistantPanel"))
         .with_key_binding(cmd_or_ctrl("enter")),
         EditableBinding::new(
             "ai_assistant_panel:send_via_coven_gateway:alt",
-            "Stream a message through the Coven Gateway (alternative)",
+            "Run native Coven Code operation (alternative)",
             AIAssistantAction::SendViaCovenGateway,
         )
         .with_context_predicate(id!("AIAssistantPanel"))
@@ -543,7 +593,7 @@ impl AIAssistantPanelView {
                 if !self.is_prompt_too_long(buffer_text.as_str())
                     && !self.is_prompt_empty(buffer_text.as_str())
                 {
-                    self.issue_request(buffer_text, ctx);
+                    self.issue_primary_request(buffer_text, ctx);
                 }
                 ctx.notify();
             }
@@ -701,7 +751,7 @@ impl AIAssistantPanelView {
                 self.input_suggestions_mode = InputSuggestionsMode::Closed;
             }
             InputSuggestionsEvent::ConfirmAndExecuteSuggestion { suggestion, .. } => {
-                self.issue_request(suggestion.to_string(), ctx);
+                self.issue_primary_request(suggestion.to_string(), ctx);
                 self.input_suggestions_mode = InputSuggestionsMode::Closed;
             }
             InputSuggestionsEvent::IgnoreItem { .. } => {
@@ -709,6 +759,22 @@ impl AIAssistantPanelView {
             }
         }
         ctx.notify();
+    }
+
+    fn issue_primary_request(&mut self, request: String, ctx: &mut ViewContext<Self>) {
+        #[cfg(feature = "cast-agent")]
+        {
+            if self.send_via_coven_gateway_with_prompt(request.clone(), ctx) {
+                self.editor.update(ctx, |editor, ctx| {
+                    editor.clear_buffer_and_reset_undo_stack(ctx);
+                    editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
+                });
+                ctx.notify();
+                return;
+            }
+        }
+
+        self.issue_request(request, ctx);
     }
 
     fn issue_request(&mut self, request: String, ctx: &mut ViewContext<Self>) {
@@ -742,11 +808,29 @@ impl AIAssistantPanelView {
             transcript_view.reset(ctx);
         });
 
+        self.reset_coven_stream();
         self.focus_state = PanelFocusState::Editor;
 
         ctx.focus_self();
         ctx.notify();
     }
+
+    #[cfg(feature = "cast-agent")]
+    fn reset_coven_stream(&self) {
+        let mut state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(task) = state.active_task.take() {
+            task.abort();
+        }
+        state.text.clear();
+        state.pending_chunks.clear();
+        state.in_flight = false;
+        state.conversation_id.clear();
+        state.history.clear();
+        super::coven_stream_persist::save(&[]);
+    }
+
+    #[cfg(not(feature = "cast-agent"))]
+    fn reset_coven_stream(&self) {}
 
     fn copy_transcript(&mut self, ctx: &mut ViewContext<Self>) {
         let transcript = self.transcript(ctx);
@@ -773,6 +857,18 @@ impl AIAssistantPanelView {
     fn should_render_zero_state(&self, app: &AppContext) -> bool {
         self.transcript(app).is_empty()
             && matches!(self.request_status(app), RequestStatus::NotInFlight)
+            && !self.has_coven_stream_content()
+    }
+
+    #[cfg(feature = "cast-agent")]
+    fn has_coven_stream_content(&self) -> bool {
+        let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+        state.in_flight || !state.text.is_empty() || !state.history.is_empty()
+    }
+
+    #[cfg(not(feature = "cast-agent"))]
+    fn has_coven_stream_content(&self) -> bool {
+        false
     }
 
     fn transcript<'a>(&self, app: &'a AppContext) -> &'a [TranscriptPart] {
@@ -867,9 +963,8 @@ impl AIAssistantPanelView {
         header.finish()
     }
 
-    /// Stream the current editor buffer through the Cast Agent
-    /// `stream_messages` primitive and render the streamed chunks live
-    /// in the agent panel.
+    /// Stream a prompt through the Cast Agent `stream_messages` primitive
+    /// and render the streamed chunks live in the agent panel.
     ///
     /// Cross-thread plumbing: the cast_agent tokio task pushes chunks
     /// into `self.coven_stream.pending_chunks` (a shared
@@ -882,23 +977,33 @@ impl AIAssistantPanelView {
     /// Logs each chunk too — useful for debugging when the rendered
     /// output looks wrong and you want raw protocol detail.
     ///
-    /// Skips silently if `cast_agent::is_available()` is `false`.
+    /// Returns `false` when the native runtime is unavailable so callers can
+    /// fall back to the legacy request path.
     #[cfg(feature = "cast-agent")]
-    fn send_via_coven_gateway(&self, ctx: &mut ViewContext<Self>) {
+    fn send_via_coven_gateway_with_prompt(
+        &self,
+        prompt: String,
+        ctx: &mut ViewContext<Self>,
+    ) -> bool {
         use futures::StreamExt;
 
-        let prompt = self.editor.as_ref(ctx).buffer_text(ctx).to_string();
         if prompt.trim().is_empty() {
             log::debug!("cast_agent: SendViaCovenGateway invoked with empty prompt; skipping");
-            return;
+            return false;
         }
         let Some(runtime) = ::ai::cast_agent::global() else {
             log::warn!("cast_agent: runtime unavailable, cannot stream");
-            return;
+            return false;
         };
-        if !runtime.is_available() {
-            log::info!("cast_agent: gateway offline, not streaming");
-            return;
+        let direct_socket_path = if runtime.is_available() {
+            None
+        } else {
+            ::ai::cast_agent::CastAgentConfig::default_socket_path()
+                .filter(|path| path.as_path().exists())
+        };
+        if direct_socket_path.is_none() && !runtime.is_available() {
+            log::info!("cast_agent: gateway offline and Coven daemon socket unavailable");
+            return false;
         }
 
         let agent = runtime.agent().clone();
@@ -916,18 +1021,16 @@ impl AIAssistantPanelView {
         // workspace rather than falling back to $HOME. Falls back to
         // letting the bridge default (CASTCODES_BRIDGE_PROJECT_ROOT
         // or $HOME) when current_dir() fails.
-        let body = match std::env::current_dir() {
-            Ok(cwd) => serde_json::json!({
-                "text": prompt,
-                "projectRoot": cwd.to_string_lossy(),
-            }),
+        let cwd = match std::env::current_dir() {
+            Ok(cwd) => Some(cwd),
             Err(err) => {
                 log::debug!(
                     "cast_agent: current_dir() failed ({err}); bridge will default projectRoot"
                 );
-                serde_json::json!({ "text": prompt })
+                None
             }
         };
+        let body = coven_code_agent_message_body(prompt, cwd.as_deref());
         let msg = ::ai::cast_agent::AgentMessage {
             conversation_id: conversation_id.clone(),
             body,
@@ -979,13 +1082,59 @@ impl AIAssistantPanelView {
         let buffer = self.coven_stream.clone();
         let conversation_id_for_task = conversation_id.clone();
         let join = runtime.handle().spawn(async move {
+            let fallback_msg = msg.clone();
             let stream = match agent.stream_messages(msg).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     log::warn!(
                         "cast_agent: stream_messages open failed for {conversation_id_for_task}: {err}"
                     );
+                    let fallback_agent = if let Some(socket_path) = direct_socket_path {
+                        let mut config = ::ai::cast_agent::CastAgentConfig::load();
+                        config.socket_path = Some(socket_path);
+                        Some(::ai::cast_agent::CastAgent::new(Some(config)).await)
+                    } else {
+                        None
+                    };
+                    let fallback_result = match fallback_agent.as_ref() {
+                        Some(agent) => {
+                            use ::ai::cast_agent::AgentBackend as _;
+                            agent.send_message(fallback_msg).await
+                        }
+                        None => {
+                            use ::ai::cast_agent::AgentBackend as _;
+                            agent.send_message(fallback_msg).await
+                        }
+                    };
                     let mut state = buffer.lock().unwrap_or_else(|p| p.into_inner());
+                    match fallback_result {
+                        Ok(response) => {
+                            let content = response
+                                .body
+                                .get("text")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_owned)
+                                .unwrap_or_else(|| response.body.to_string());
+                            if !content.is_empty() {
+                                state.pending_chunks.push(::ai::cast_agent::MessageChunk::Delta {
+                                    conversation_id: conversation_id_for_task.clone(),
+                                    content,
+                                });
+                            }
+                            state.pending_chunks.push(::ai::cast_agent::MessageChunk::Done {
+                                conversation_id: conversation_id_for_task.clone(),
+                            });
+                        }
+                        Err(fallback_err) => {
+                            log::warn!(
+                                "cast_agent: fallback send_message failed for {conversation_id_for_task}: {fallback_err}"
+                            );
+                            state.pending_chunks.push(::ai::cast_agent::MessageChunk::Error {
+                                conversation_id: conversation_id_for_task.clone(),
+                                message: "Coven Code operation failed to start.".to_string(),
+                            });
+                        }
+                    }
                     state.in_flight = false;
                     return;
                 }
@@ -1032,6 +1181,18 @@ impl AIAssistantPanelView {
 
         // Kick off the UI drain loop.
         self.poll_coven_stream(ctx);
+        true
+    }
+
+    #[cfg(feature = "cast-agent")]
+    fn send_via_coven_gateway(&self, ctx: &mut ViewContext<Self>) {
+        let prompt = self.editor.as_ref(ctx).buffer_text(ctx).to_string();
+        if self.send_via_coven_gateway_with_prompt(prompt, ctx) {
+            self.editor.update(ctx, |editor, ctx| {
+                editor.clear_buffer_and_reset_undo_stack(ctx);
+                editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
+            });
+        }
     }
 
     /// UI-side tick that drains `pending_chunks` into rendered `text`
@@ -1048,8 +1209,17 @@ impl AIAssistantPanelView {
                     let mut state = view.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
                     let drained: Vec<_> = state.pending_chunks.drain(..).collect();
                     for chunk in drained {
-                        if let ::ai::cast_agent::MessageChunk::Delta { content, .. } = chunk {
-                            state.text.push_str(&content);
+                        match chunk {
+                            ::ai::cast_agent::MessageChunk::Delta { content, .. } => {
+                                state.text.push_str(&content);
+                            }
+                            ::ai::cast_agent::MessageChunk::Error { message, .. } => {
+                                if !state.text.is_empty() {
+                                    state.text.push('\n');
+                                }
+                                state.text.push_str(&message);
+                            }
+                            ::ai::cast_agent::MessageChunk::Done { .. } => {}
                         }
                     }
                     state.in_flight
@@ -1608,7 +1778,7 @@ impl TypedActionView for AIAssistantPanelView {
                 ctx.emit(AIAssistantPanelEvent::ClosePanel);
             }
             PreparedPrompt(prompt) => {
-                self.issue_request(prompt.to_string(), ctx);
+                self.issue_primary_request(prompt.to_string(), ctx);
             }
             ClickedUrl(url) => {
                 ctx.open_url(&url.url);

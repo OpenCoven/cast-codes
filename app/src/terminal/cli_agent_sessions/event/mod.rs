@@ -57,7 +57,7 @@ pub struct CLIAgentEvent {
 #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
 const VERSIONED_PARSERS: &[EventParser] = &[v1::parse];
 
-/// The current CLI agent protocol version this build of Warp supports.
+/// The current CLI agent protocol version this build of CastCodes supports.
 /// Exported as the `WARP_CLI_AGENT_PROTOCOL_VERSION` env var on the PTY
 /// so plugins can negotiate a compatible payload format.
 #[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
@@ -82,7 +82,7 @@ pub fn parse_event(title: Option<&str>, body: &str) -> Option<CLIAgentEvent> {
         None => {
             log::error!(
                 "Received CLI agent event with unsupported schema version \
-                 {version}. The CLI agent plugin or Warp may need to be updated."
+                 {version}. The CLI agent plugin or CastCodes may need to be updated."
             );
             None
         }

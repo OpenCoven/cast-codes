@@ -1,5 +1,5 @@
 // Hard coded constants to divide keybindings into their respective categories/sections.
-// This should always align with documentation: https://docs.warp.dev/getting-started/keyboard-shortcuts
+// This should always align with the CastCodes keyboard shortcut documentation.
 
 use warpui::keymap::Keystroke;
 

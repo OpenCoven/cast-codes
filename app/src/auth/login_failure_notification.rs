@@ -9,9 +9,9 @@ use warpui::{
 };
 
 use crate::appearance::Appearance;
+use crate::util::links::USER_DOCS_URL;
 
-const LOGIN_TROUBLESHOOTING_DOCS_URL: &str =
-    "https://docs.warp.dev/support-and-community/troubleshooting-and-support/troubleshooting-login-issues";
+const LOGIN_TROUBLESHOOTING_DOCS_URL: &str = USER_DOCS_URL;
 
 /// Represents reasons why login failed.
 pub enum LoginFailureReason {

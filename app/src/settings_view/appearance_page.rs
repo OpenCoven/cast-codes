@@ -47,6 +47,7 @@ use crate::terminal::{ShowJumpToBottomOfBlockButton, SizeInfo};
 use crate::themes::theme::{self, RespectSystemTheme, SelectedSystemThemes, ThemeKind, WarpTheme};
 use crate::user_config::WarpConfig;
 use crate::util::bindings;
+use crate::util::links::USER_DOCS_URL;
 use crate::window_settings::{
     BackgroundBlurRadius, BackgroundBlurTexture, BackgroundOpacity, LeftPanelVisibilityAcrossTabs,
     OpenWindowsAtCustomSize, WindowSettings, WindowSettingsChangedEvent, ZoomLevel,
@@ -2492,7 +2493,7 @@ impl SettingsWidget for CreateCustomThemeWidget {
                 .ui_builder()
                 .link(
                     "Create your own custom theme".to_string(),
-                    Some("https://docs.warp.dev/terminal/appearance/custom-themes".to_string()),
+                    Some(USER_DOCS_URL.to_string()),
                     None,
                     self.mouse_state.clone(),
                 )
@@ -3054,9 +3055,7 @@ impl SettingsWidget for WindowBlurWidget {
         let blur_value = *window_settings.background_blur_radius;
         let label_info = AdditionalInfo {
             mouse_state: self.info_button.clone(),
-            on_click_action: Some(AppearancePageAction::OpenUrl(
-                "https://docs.warp.dev/terminal/appearance/size-opacity-blurring".into(),
-            )),
+            on_click_action: Some(AppearancePageAction::OpenUrl(USER_DOCS_URL.into())),
             secondary_text: None,
             tooltip_override_text: None,
         };
@@ -4915,9 +4914,7 @@ impl SettingsWidget for AltScreenPaddingWidget {
             "Use custom padding in alt-screen".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_mouse_state.clone(),
-                on_click_action: Some(AppearancePageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/full-screen-apps#padding".into(),
-                )),
+                on_click_action: Some(AppearancePageAction::OpenUrl(USER_DOCS_URL.into())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),

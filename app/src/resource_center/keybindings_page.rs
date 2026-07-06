@@ -66,7 +66,7 @@ pub struct KeybindingsView {
 
 /// Keybindings are sorted into these sections,
 /// where "Fundamentals" is the default for any remaining non-categorized ones.
-/// This should always align with documentation: https://docs.warp.dev/getting-started/keyboard-shortcuts
+/// This should always align with the CastCodes keyboard shortcut documentation.
 #[derive(Clone, Eq, PartialEq, Sequence)]
 pub enum KeybindingSection {
     Essentials,

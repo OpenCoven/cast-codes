@@ -40,7 +40,7 @@ const SCROLLBAR_WIDTH: ScrollbarWidth = ScrollbarWidth::Auto;
 
 const UNSHARE_BLOCK_CONFIRMATION_DIALOG_TEXT: &str =
     "Are you sure you want to unshare this block?\n\
-\nIt will no longer be accessible by link and will be permanently deleted from Warp servers.";
+\nIt will no longer be accessible by link and will be permanently deleted from hosted servers.";
 
 #[derive(Clone, Debug)]
 struct UserOwnedBlock {
@@ -618,7 +618,7 @@ impl SettingsPageMeta for ShowBlocksView {
             .get()
             .is_anonymous_or_logged_out();
 
-        !is_anonymous
+        ChannelState::cloud_services_available() && !is_anonymous
     }
 
     fn on_page_selected(&mut self, _: bool, ctx: &mut ViewContext<Self>) {

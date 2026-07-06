@@ -765,10 +765,7 @@ impl CategoriesView {
                 .ui_builder()
                 .link(
                     "creating your own workflow".into(),
-                    Some(
-                        "https://docs.warp.dev/knowledge-and-collaboration/warp-drive/workflows"
-                            .into(),
-                    ),
+                    Some(crate::util::links::USER_DOCS_URL.into()),
                     None,
                     self.link_mouse_state_handles
                         .documentation_link_handle

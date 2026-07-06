@@ -18,6 +18,7 @@ use crate::server::server_api::ai::{
     SendAgentMessageRequest, SendAgentMessageResponse, SpawnAgentRequest, TaskListFilter,
 };
 use crate::server::server_api::ServerApi;
+use crate::util::links::USER_DOCS_URL;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{util::time_format::format_approx_duration_from_now_utc, ServerApiProvider};
 use anyhow::{anyhow, Context as _};
@@ -542,7 +543,7 @@ impl AmbientAgentRunner {
                             }
                             AmbientAgentEvent::TimedOut => {
                                 let task_id_str = spawned_task_id.as_ref().map_or_else(|| "unknown".to_string(), |id| id.to_string());
-                                println!("Agent session with run ID {task_id_str} is not ready after {}s. Check for a sharing link in the ambient agent management panel. See https://docs.warp.dev/agent-platform/cloud-agents/managing-cloud-agents for details.", TASK_STATUS_POLLING_DURATION.as_secs());
+                                println!("Agent session with run ID {task_id_str} is not ready after {}s. Check for a sharing link in the ambient agent management panel. See {USER_DOCS_URL} for details.", TASK_STATUS_POLLING_DURATION.as_secs());
                             }
                         },
                         Err(err) => {

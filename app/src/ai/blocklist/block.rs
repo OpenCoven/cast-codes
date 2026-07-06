@@ -102,6 +102,7 @@ use crate::server::ids::SyncId;
 use crate::server::telemetry::AgentModeRewindEntrypoint;
 use crate::terminal::view::{CodeDiffAction, TerminalAction};
 use crate::ui_components::icons::Icon;
+use crate::util::links::GITHUB_ISSUES_URL;
 #[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::{is_supported_image_file, FileTarget};
 use crate::view_components::action_button::ActionButton;
@@ -5714,7 +5715,7 @@ impl TypedActionView for AIBlock {
                     .write(ClipboardContent::plain_text(debug_id.clone()));
             }
             AIBlockAction::OpenFeedbackDocs => {
-                ctx.open_url("https://docs.warp.dev/support-and-community/troubleshooting-and-support/sending-us-feedback");
+                ctx.open_url(GITHUB_ISSUES_URL);
             }
             AIBlockAction::CancelRequestedAction { action_id } => {
                 self.cancel_action(action_id, ctx);

@@ -8,6 +8,7 @@ use crate::user_config::launch_configs_dir;
 #[cfg(feature = "local_fs")]
 use crate::user_config::{util::file_name_to_human_readable_name, WarpConfig};
 use crate::util::bindings::keybinding_name_to_display_string;
+use crate::util::links::USER_DOCS_URL;
 #[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::FileTarget;
 use markdown_parser::{
@@ -514,10 +515,7 @@ impl LaunchConfigSaveModal {
                     .ui_builder()
                     .link(
                         "Link to Documentation".to_string(),
-                        Some(
-                            "https://docs.warp.dev/terminal/sessions/launch-configurations"
-                                .to_string(),
-                        ),
+                        Some(USER_DOCS_URL.to_string()),
                         None,
                         self.mouse_states.documentation_link_state.clone(),
                     )

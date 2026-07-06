@@ -48,8 +48,9 @@ use crate::{
 use instant::Instant;
 use pathfinder_geometry::vector::vec2f;
 use std::collections::HashMap;
-use warp_core::ui::color::blend::Blend;
-use warp_core::ui::theme::color::internal_colors;
+use warp_core::{
+    channel::ChannelState, ui::color::blend::Blend, ui::theme::color::internal_colors,
+};
 use warp_editor::editor::NavigationKey;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{
@@ -2025,7 +2026,7 @@ impl SettingsPageMeta for EnvironmentsPageView {
     }
 
     fn should_render(&self, _ctx: &AppContext) -> bool {
-        true
+        ChannelState::cloud_services_available()
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {

@@ -1,5 +1,6 @@
 use crate::ai::blocklist::inline_action::inline_action_icons;
 use crate::ui_components::blended_colors;
+use crate::util::links::USER_DOCS_URL;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use pathfinder_color::ColorU;
 use pathfinder_geometry::rect::RectF;
@@ -32,8 +33,8 @@ const WARP_DRIVE_ENV_VAR_COLLECTION_ICON_COLOR: u32 = 0xC464FFFF;
 const ICON_MARGIN: f32 = 4.;
 const TERMINAL_ICON: &str = "bundled/svg/terminal.svg";
 pub const HORIZONTAL_TEXT_MARGIN: f32 = 20.;
-pub const SSH_DOCS_URL: &str = "https://docs.warp.dev/terminal/warpify/ssh";
-pub const SUBSHELL_DOCS_URL: &str = "https://docs.warp.dev/terminal/warpify/subshells";
+pub const SSH_DOCS_URL: &str = USER_DOCS_URL;
+pub const SUBSHELL_DOCS_URL: &str = USER_DOCS_URL;
 
 /// Errored blocks have a red stripe, and subshells have a gray one.
 pub const LEFT_STRIPE_WIDTH: f32 = 5.;
@@ -161,7 +162,7 @@ pub fn description_row(text: &str, theme: &WarpTheme, appearance: &Appearance) -
     .finish()
 }
 
-/// Renders a "Never Warpify this host" link or nothing.
+/// Renders a "Never use shell integration for this host" link or nothing.
 pub fn render_never_warpify_ssh_link(
     ssh_host: &Option<String>,
     app: &AppContext,
@@ -182,7 +183,7 @@ pub fn render_never_warpify_ssh_link(
     let link = appearance
         .ui_builder()
         .link(
-            "Never Warpify this host".into(),
+            "Never use shell integration for this host".into(),
             None,
             Some(Box::new({
                 let ssh_host = ssh_host.clone();

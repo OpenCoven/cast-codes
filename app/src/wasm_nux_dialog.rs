@@ -6,6 +6,7 @@ use crate::settings::app_installation_detection::{
 use crate::settings::{NativePreferenceSettings, UserNativePreference};
 use crate::ui_components::dialog::{dialog_styles, Dialog};
 use crate::uri::web_intent_parser::{self, WebIntent};
+use crate::util::links::USER_DOCS_URL;
 use settings::Setting as _;
 use warpui::elements::{Align, CrossAxisAlignment, Flex};
 use warpui::ui_components::{
@@ -277,12 +278,12 @@ impl TypedActionView for WasmNUXDialog {
                 }
             }
             WasmNUXDialogAction::OpenDownloadDesktopAppLink => {
-                ctx.open_url("https://app.warp.dev/get_warp");
+                ctx.open_url(USER_DOCS_URL);
                 self.requested_download = true;
                 ctx.notify();
             }
             WasmNUXDialogAction::LearnMore => {
-                ctx.open_url("https://www.warp.dev");
+                ctx.open_url(USER_DOCS_URL);
             }
         }
     }

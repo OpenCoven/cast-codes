@@ -34,7 +34,7 @@ pub(super) async fn download_update_and_cleanup(
             appimage::download_update_and_cleanup(version_info, &appimage_path, client).await
         }
         UpdateMethod::PackageManager(package_manager) => {
-            log::info!("Detected that Warp was installed using {package_manager:?}");
+            log::info!("Detected that CastCodes was installed using {package_manager:?}");
             Ok(DownloadReady::Yes)
         }
     }
@@ -155,7 +155,7 @@ mod appimage {
             command.env("WARP_CHANNEL_VERSIONS_PATH", path);
         }
 
-        log::info!("Relaunching warp for update...");
+        log::info!("Relaunching CastCodes for update...");
         command.spawn()?;
         Ok(())
     }
@@ -308,20 +308,20 @@ mod package_manager {
             command.env("WARP_CHANNEL_VERSIONS_PATH", path);
         }
 
-        log::info!("Relaunching warp for update...");
+        log::info!("Relaunching CastCodes for update...");
         command.spawn()?;
         Ok(())
     }
 }
 
-/// Returns which method should be used to update Warp.
+/// Returns which method should be used to update CastCodes.
 #[derive(Debug)]
 pub(crate) enum UpdateMethod {
-    /// We don't know how to update Warp.
+    /// We don't know how to update CastCodes.
     Unknown,
-    /// Warp is running as an AppImage and should be updated in-place.
+    /// CastCodes is running as an AppImage and should be updated in-place.
     AppImage(PathBuf),
-    /// Warp can be updated using the given package manager.
+    /// CastCodes can be updated using the given package manager.
     PackageManager(PackageManager),
 }
 
@@ -396,23 +396,12 @@ impl PackageManager {
                 is_signing_key_configured,
             } => {
                 let repo_prefix = if !is_repo_configured {
-                    let cache_dir = warp_core::paths::cache_dir();
-                    let cache_dir_str = cache_dir.display();
-                    // Back up the existing pacman.conf file just in case
-                    // anything goes wrong, then add the repository config.
-                    format!(
-                        "mkdir -p {cache_dir_str}{and}\\\ncp /etc/pacman.conf {cache_dir_str}{and}\\\nsudo sh -c \"echo '\n[{repo_name}]\nServer = https://releases.warp.dev/linux/pacman/\\$repo/\\$arch' >> /etc/pacman.conf\"{and}\\\n"
-                    )
+                    pacman_repo_config_command(ChannelState::channel(), &repo_name, and)
                 } else {
                     String::new()
                 };
                 let key_prefix = if !is_signing_key_configured {
-                    // Retrieve our key from keys.openpgp.org and locally sign
-                    // it before retrieving the package repository and
-                    // installing the updated package.
-                    format!(
-                        "sudo pacman-key -r \"linux-maintainers@warp.dev\" --keyserver hkp://keys.openpgp.org:80{and}\\\nsudo pacman-key --lsign-key \"linux-maintainers@warp.dev\"{and}\\\n"
-                    )
+                    pacman_signing_key_command(ChannelState::channel(), and)
                 } else {
                     String::new()
                 };
@@ -486,7 +475,8 @@ impl PackageManager {
                 match stdout.trim() {
                     "pacman" => {
                         let is_repo_configured = is_pacman_repo_installed(package_name);
-                        let is_signing_key_configured = is_pacman_signing_key_installed();
+                        let is_signing_key_configured =
+                            is_pacman_signing_key_installed(ChannelState::channel());
                         Ok(Self::Pacman {
                             is_repo_configured,
                             is_signing_key_configured,
@@ -521,6 +511,10 @@ impl PackageManager {
     }
 
     fn needs_repository_configuration(&self) -> bool {
+        if matches!(ChannelState::channel(), Channel::Oss) {
+            return false;
+        }
+
         match self {
             PackageManager::Pacman {
                 is_repo_configured,
@@ -608,7 +602,11 @@ fn is_pacman_repo_installed(package_name: &str) -> bool {
     }
 }
 
-fn is_pacman_signing_key_installed() -> bool {
+fn is_pacman_signing_key_installed(channel: Channel) -> bool {
+    if matches!(channel, Channel::Oss) {
+        return true;
+    }
+
     // Check if the key exists and get its expiry date from pacman's GPG keyring.
     let output = match command::blocking::Command::new("gpg")
         .args([
@@ -682,16 +680,46 @@ fn package_name(channel: Channel) -> &'static str {
         Channel::Dev => "warp-terminal-dev",
         Channel::Integration => "warp-terminal-integration",
         Channel::Local => "warp-terminal-local",
-        Channel::Oss => "warp-oss",
+        Channel::Oss => warp_core::brand::PRODUCT_SLUG,
     }
 }
 
 fn repo_name(channel: Channel) -> String {
+    if matches!(channel, Channel::Oss) {
+        return warp_core::brand::ORG_ID.to_string();
+    }
+
     let package_name = package_name(channel);
     let channel_suffix = package_name
         .strip_prefix("warp-terminal")
         .unwrap_or_default();
     format!("warpdotdev{channel_suffix}")
+}
+
+fn pacman_repo_config_command(channel: Channel, repo_name: &str, and: &str) -> String {
+    if matches!(channel, Channel::Oss) {
+        return String::new();
+    }
+
+    let cache_dir = warp_core::paths::cache_dir();
+    let cache_dir_str = cache_dir.display();
+    // Back up the existing pacman.conf file just in case anything goes wrong,
+    // then add the upstream package repository config for first-party channels.
+    format!(
+        "mkdir -p {cache_dir_str}{and}\\\ncp /etc/pacman.conf {cache_dir_str}{and}\\\nsudo sh -c \"echo '\n[{repo_name}]\nServer = https://releases.warp.dev/linux/pacman/\\$repo/\\$arch' >> /etc/pacman.conf\"{and}\\\n"
+    )
+}
+
+fn pacman_signing_key_command(channel: Channel, and: &str) -> String {
+    if matches!(channel, Channel::Oss) {
+        return String::new();
+    }
+
+    // Retrieve the upstream key from keys.openpgp.org and locally sign it
+    // before retrieving the package repository and installing the update.
+    format!(
+        "sudo pacman-key -r \"linux-maintainers@warp.dev\" --keyserver hkp://keys.openpgp.org:80{and}\\\nsudo pacman-key --lsign-key \"linux-maintainers@warp.dev\"{and}\\\n"
+    )
 }
 
 #[cfg(test)]

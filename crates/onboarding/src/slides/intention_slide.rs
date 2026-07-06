@@ -199,7 +199,7 @@ impl IntentionSlide {
         let header_row = {
             let label = appearance
                 .ui_builder()
-                .paragraph("Build faster with AI agents")
+                .paragraph("Start with native Coven Code")
                 .with_style(UiComponentStyles {
                     font_size: Some(16.),
                     font_weight: Some(Weight::Semibold),
@@ -237,7 +237,7 @@ impl IntentionSlide {
         };
 
         let description = FormattedTextElement::from_str(
-            "Use local coding agents with project context while keeping terminal workflows close.",
+            "Run agentic coding operations in a native CastCodes workspace, backed by Coven Code.",
             appearance.ui_font_family(),
             14.,
         )

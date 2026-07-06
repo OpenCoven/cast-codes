@@ -201,7 +201,7 @@ const PAYMENT_ISSUE_BANNER_LINE_2_ADMIN: &str =
     "Please update your payment information to restore access.";
 
 const PAYMENT_ISSUE_BANNER_LINE_2_ADMIN_ENTERPRISE: &str =
-    "Please contact support@warp.dev to restore access.";
+    "Please open a CastCodes issue to restore access.";
 
 const PAYMENT_ISSUE_BANNER_LINE_2_NONADMIN: &str = "Please contact a team admin to restore access.";
 
@@ -1693,7 +1693,7 @@ impl DriveIndex {
             (DriveIndexVariant::MainIndex, DriveIndexSection::JoinTeam) => {
                 if self.is_online(app) {
                     let join_teams_text = format!(
-                        "Collaborate with {} of your teammates already on Warp.",
+                        "Collaborate with {} of your teammates already on CastCodes.",
                         UserWorkspaces::handle(app)
                             .as_ref(app)
                             .total_teammates_in_joinable_teams()
@@ -2919,7 +2919,7 @@ impl DriveIndex {
                 if mouse_state.is_hovered() {
                     let tooltip = appearance
                         .ui_builder()
-                        .tool_tip(String::from("Syncing Warp Drive"));
+                        .tool_tip(String::from("Syncing Cast Drive"));
 
                     stack.add_positioned_overlay_child(
                         tooltip.build().finish(),

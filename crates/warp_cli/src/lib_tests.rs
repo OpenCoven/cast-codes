@@ -702,6 +702,52 @@ fn local_only_cli_help_hides_hosted_account_commands() {
 }
 
 #[test]
+fn cli_help_points_to_castcodes_docs() {
+    warp_core::features::mark_initialized();
+
+    let help = Args::clap_command().render_help().to_string();
+
+    assert!(help.contains(warp_core::brand::PUBLIC_USER_DOCS_URL));
+    assert!(!help.contains("https://docs.warp.dev/reference/cli"));
+}
+
+#[test]
+fn local_only_rejects_hosted_top_level_commands_before_parse() {
+    let args = vec![
+        "cast-codes".to_string(),
+        "environment".to_string(),
+        "image".to_string(),
+        "list".to_string(),
+    ];
+
+    assert_eq!(hosted_command_for_local_only(&args), Some("environment"));
+}
+
+#[test]
+fn local_only_rejects_hosted_agent_subcommands_before_parse() {
+    let args = vec![
+        "cast-codes".to_string(),
+        "agent".to_string(),
+        "run-cloud".to_string(),
+    ];
+
+    assert_eq!(hosted_command_for_local_only(&args), Some("run-cloud"));
+}
+
+#[test]
+fn local_only_keeps_local_agent_run_parseable() {
+    let args = vec![
+        "cast-codes".to_string(),
+        "agent".to_string(),
+        "run".to_string(),
+        "--prompt".to_string(),
+        "hello".to_string(),
+    ];
+
+    assert_eq!(hosted_command_for_local_only(&args), None);
+}
+
+#[test]
 fn local_only_cli_help_hides_cloud_agent_commands() {
     warp_core::features::mark_initialized();
     assert!(!warp_core::channel::ChannelState::cloud_services_available());

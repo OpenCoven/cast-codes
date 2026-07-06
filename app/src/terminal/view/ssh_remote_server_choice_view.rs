@@ -1,14 +1,14 @@
 //! Inline block view that asks the user whether they want to install
-//! Warp's SSH extension on the remote host the shell just connected to,
+//! CastCodes' SSH extension on the remote host the shell just connected to,
 //! or continue without installing (falling back to the existing
-//! ControlMaster warpification path).
+//! ControlMaster shell integration path).
 //!
 //! Designed from frame 6050:2448 of the Figma file
 //! [Remote session initialization](https://www.figma.com/design/r0BO9cTZCK6pDE6qerg2K0/Remote-session-initialization).
 //!
 //! The view owns:
 //! - a child [`KeyboardNavigableButtons`] handle for the two selectable
-//!   cards ("Install Warp's SSH extension" / "Continue without installing"),
+//!   cards ("Install CastCodes' SSH extension" / "Continue without installing"),
 //! - the [`SessionId`] this prompt is scoped to (used for event forwarding),
 //! - the current "Don't ask me this again" checked state (purely local to
 //!   this prompt instance; persisted to `ssh_extension_install_mode` only
@@ -73,9 +73,9 @@ impl SshRemoteServerChoiceView {
         let buttons = ctx.add_typed_action_view(|_| {
             KeyboardNavigableButtons::new(vec![
                 rich_navigation_button(
-                    "Install Warp's SSH extension".to_string(),
+                    "Install CastCodes' SSH extension".to_string(),
                     Some(
-                        "Install Warp's extension to enable agent features like file browsing, \
+                        "Install CastCodes' extension to enable agent features like file browsing, \
                          code review, and intelligent command completions in this session."
                             .to_string(),
                     ),
@@ -86,7 +86,7 @@ impl SshRemoteServerChoiceView {
                 rich_navigation_button(
                     "Continue without installing".to_string(),
                     Some(
-                        "You'll still get a Warpified experience just without the coding \
+                        "You'll still get shell integration just without the coding \
                          features."
                             .to_string(),
                     ),
@@ -170,11 +170,11 @@ impl SshRemoteServerChoiceView {
             .with_child(Container::new(checkbox_label).with_margin_left(4.).finish())
             .finish();
 
-        // Right: "Manage Warpify settings" link.
+        // Right: "Manage shell integration settings" link.
         let manage_settings_link = appearance
             .ui_builder()
             .link(
-                "Manage Warpify settings".into(),
+                "Manage shell integration settings".into(),
                 None,
                 Some(Box::new(|ctx| {
                     ctx.dispatch_typed_action(SshRemoteServerChoiceViewAction::OpenWarpifySettings);

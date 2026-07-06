@@ -13,6 +13,8 @@ pub const PUBLIC_RELEASES_DOWNLOAD_BASE_URL: &str =
     "https://github.com/OpenCoven/cast-codes/releases/download";
 pub const PUBLIC_RELEASES_API_URL: &str =
     "https://api.github.com/repos/OpenCoven/cast-codes/releases";
+pub const PUBLIC_USER_DOCS_URL: &str =
+    "https://github.com/OpenCoven/cast-codes/blob/main/README.md";
 
 pub const CONFIG_DIR: &str = ".cast-codes";
 pub const LEGACY_CONFIG_DIR: &str = ".warp";

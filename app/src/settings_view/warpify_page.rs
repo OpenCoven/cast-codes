@@ -29,6 +29,7 @@ use crate::{
     appearance::Appearance,
     report_if_error,
     terminal::warpify::settings::WarpifySettings,
+    util::links::USER_DOCS_URL,
     view_components::{SubmittableTextInput, SubmittableTextInputEvent},
 };
 
@@ -52,12 +53,12 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     context: &ContextPredicate,
     builder: fn(SettingsAction) -> T,
 ) {
-    // Add all of the toggle settings from the Warpify Page that you want to show up on the Command Palette here.
+    // Add all of the shell integration settings that should show up in the Command Palette here.
     let mut toggle_binding_pairs = vec![];
 
     if FeatureFlag::SSHTmuxWrapper.is_enabled() {
         toggle_binding_pairs.push(ToggleSettingActionPair::new(
-            "SSH session detection for Warpification",
+            "SSH session detection for shell integration",
             builder(SettingsAction::WarpifyPageToggle(
                 WarpifyPageAction::ToggleTmuxWarpification,
             )),
@@ -75,7 +76,7 @@ const ITEM_VERTICAL_SPACING: f32 = 24.;
 const BUILT_IN_TEXT_INPUT_MARGIN: f32 = 10.;
 const SPACE_AFTER_TEXT_INPUT: f32 = ITEM_VERTICAL_SPACING - BUILT_IN_TEXT_INPUT_MARGIN;
 
-const SSH_TMUX_WARPIFICATION_DESCRIPTION: &str = "The tmux ssh wrapper works in many situations where the default one does not, but may require you to hit a button to warpify. Takes effect in new tabs.";
+const SSH_TMUX_WARPIFICATION_DESCRIPTION: &str = "The tmux ssh wrapper works in many situations where the default one does not, but may require you to hit a button to enable shell integration. Takes effect in new tabs.";
 
 const SSH_EXTENSION_INSTALL_MODE_DESCRIPTION: &str =
     "Controls the installation behavior for the CastCodes SSH extension when a remote host doesn't have it installed.";
@@ -505,13 +506,10 @@ impl TitleWidget {
     fn render_top_of_page(&self, appearance: &Appearance, _app: &AppContext) -> Box<dyn Element> {
         let warpify_description = vec![
             FormattedTextFragment::plain_text(
-                "Configure whether Warp attempts to “Warpify” (add support for blocks, \
+                "Configure whether CastCodes adds support for blocks, \
                     input modes, etc) certain shells. ",
             ),
-            FormattedTextFragment::hyperlink(
-                "Learn more",
-                "https://docs.warp.dev/terminal/warpify/subshells",
-            ),
+            FormattedTextFragment::hyperlink("Learn more", USER_DOCS_URL),
         ];
 
         let warpify_description = FormattedTextElement::new(
@@ -715,12 +713,10 @@ impl SettingsWidget for SSHWidget {
                 let mut column = Flex::column();
 
                 column.add_child(render_body_item::<WarpifyPageAction>(
-                    "Use Tmux Warpification".into(),
+                    "Use Tmux shell integration".into(),
                     Some(AdditionalInfo {
                         mouse_state: self.additional_info_mouse_state.clone(),
-                        on_click_action: Some(WarpifyPageAction::OpenUrl(
-                            "https://docs.warp.dev/terminal/warpify/ssh".into(),
-                        )),
+                        on_click_action: Some(WarpifyPageAction::OpenUrl(USER_DOCS_URL.into())),
                         secondary_text: None,
                         tooltip_override_text: None,
                     }),

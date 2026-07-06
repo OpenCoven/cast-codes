@@ -25,8 +25,9 @@ use warpui::{
 
 use crate::settings::PrivacySettings;
 use crate::themes::theme::ThemeKind;
+use crate::util::links::PRIVACY_POLICY_URL;
 
-const PRIVACY_URL: &str = "https://warp.dev/privacy";
+const PRIVACY_URL: &str = PRIVACY_POLICY_URL;
 
 pub const AUTH_MODAL_GAP: f32 = 16.;
 const MODAL_CORNER_RADIUS: Radius = Radius::Pixels(8.);

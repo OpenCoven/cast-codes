@@ -9,6 +9,7 @@ use crate::editor::{EditorView, SingleLineEditorOptions, TextColors, TextOptions
 use crate::settings::PrivacySettings;
 use crate::themes::theme::Fill as ThemeFill;
 use crate::util::bindings::CustomAction;
+use crate::util::links::PRIVACY_POLICY_URL;
 
 use onboarding::slides::{layout, slide_content};
 use onboarding::{OnboardingIntention, AI_FEATURES, WARP_DRIVE_FEATURES};
@@ -38,7 +39,7 @@ use std::cell::Cell;
 use pathfinder_geometry::vector::vec2f;
 use warpui::elements::{ChildAnchor, ParentAnchor, ParentOffsetBounds};
 
-const TOS_URL: &str = "https://www.warp.dev/terms-of-service";
+const TOS_URL: &str = PRIVACY_POLICY_URL;
 
 // ---------------------------------------------------------------------------
 // Init (keybindings)

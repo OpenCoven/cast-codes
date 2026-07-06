@@ -30,7 +30,7 @@ maybe_define_setting!(SubshellCommandsDenylist, group: WarpifySettings, {
     sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
     private: false,
     toml_path: "warpify.subshells.subshell_commands_denylist",
-    description: "Commands that should not trigger the subshell warpification prompt.",
+    description: "Commands that should not trigger the subshell integration prompt.",
 });
 
 maybe_define_setting!(SshHostsDenylist, group: WarpifySettings, {
@@ -40,7 +40,7 @@ maybe_define_setting!(SshHostsDenylist, group: WarpifySettings, {
     sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
     private: false,
     toml_path: "warpify.ssh.ssh_hosts_denylist",
-    description: "SSH hosts that should not trigger the warpification prompt.",
+    description: "SSH hosts that should not trigger the shell integration prompt.",
 });
 
 maybe_define_setting!(EnableSshWarpification, group: WarpifySettings, {
@@ -50,7 +50,7 @@ maybe_define_setting!(EnableSshWarpification, group: WarpifySettings, {
     sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
     private: false,
     toml_path: "warpify.ssh.enable_ssh_warpification",
-    description: "Whether to enable Warp features in SSH sessions.",
+    description: "Whether to enable CastCodes shell features in SSH sessions.",
 });
 
 maybe_define_setting!(UseSshTmuxWrapper, group: WarpifySettings, {
@@ -60,7 +60,7 @@ maybe_define_setting!(UseSshTmuxWrapper, group: WarpifySettings, {
     sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
     private: false,
     toml_path: "warpify.ssh.use_ssh_tmux_wrapper",
-    description: "Whether to use a tmux-based wrapper for SSH warpification.",
+    description: "Whether to use a tmux-based wrapper for SSH shell integration.",
 });
 
 /// Controls how Warp handles the SSH extension (remote server binary) when connecting

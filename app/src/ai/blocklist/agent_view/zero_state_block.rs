@@ -50,6 +50,7 @@ use crate::{
         },
         TerminalModel,
     },
+    util::links::USER_DOCS_URL,
     util::time_format::format_approx_duration_from_now_utc,
 };
 
@@ -1140,8 +1141,7 @@ fn render_oz_updates(props: OzUpdatesProps<'_>, app: &AppContext) -> Option<Box<
                         })
                         .with_reset_cursor_after_click()
                         .on_click(|_, app, _| {
-                            const CHANGELOG_URL: &str = "https://docs.warp.dev/changelog";
-                            app.open_url(CHANGELOG_URL);
+                            app.open_url(USER_DOCS_URL);
                         })
                         .with_cursor(Cursor::PointingHand)
                         .finish(),

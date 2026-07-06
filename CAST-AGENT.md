@@ -115,12 +115,14 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
   identical content). Closes the coverage gap left by the per-editor
   publisher.
 - ✅ Streaming UI consumer with live rendering —
-  [`AIAssistantAction::SendViaCovenGateway`](app/src/ai_assistant/panel.rs)
-  reads the agent panel's editor buffer, builds an `AgentMessage`,
-  drives a `stream_messages` call on the cast_agent runtime, and
-  renders each `MessageChunk::Delta` into a `COVEN STREAM • LIVE`
-  section below the transcript as chunks arrive. Bound to
-  `cmd+shift+m`; skips when `is_available()` is `false`. Cross-thread
+  [`AIAssistantPanelView::issue_primary_request`](app/src/ai_assistant/panel.rs)
+  sends normal panel submissions through the cast_agent runtime first,
+  carrying `harness: "coven-code"` so the daemon/bridge runs the request
+  with Coven Code under the hood. The panel still falls back to the legacy
+  request path when the runtime or gateway is unavailable. Direct stream
+  actions are bound to Cmd/Ctrl+Enter and Cmd/Ctrl+Shift+M. Each
+  `MessageChunk::Delta` renders into a `COVEN STREAM • LIVE` section
+  below the transcript as chunks arrive. Cross-thread
   plumbing: the cast_agent tokio task pushes chunks into a shared
   `Arc<std::sync::Mutex<CovenStreamState>>`; a UI-side poll loop
   drains the buffer every 100ms via `ctx.spawn` + `Timer::after`,

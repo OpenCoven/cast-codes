@@ -71,6 +71,7 @@ use crate::{
         },
     },
     terminal::view::ConversationRestorationInNewPaneType,
+    util::links::USER_DOCS_URL,
 };
 use ai::skills::ParsedSkill;
 use anyhow::{anyhow, Context as _};
@@ -2300,7 +2301,7 @@ impl AgentDriver {
         match event {
             TerminalDriverEvent::SlowBootstrap => {
                 eprintln!(
-                    "Warning: Terminal session is slow to bootstrap. See https://docs.warp.dev/support-and-community/troubleshooting-and-support/known-issues#shells to troubleshoot."
+                    "Warning: Terminal session is slow to bootstrap. See {USER_DOCS_URL} to troubleshoot."
                 );
             }
             TerminalDriverEvent::EstablishedSharedSession {

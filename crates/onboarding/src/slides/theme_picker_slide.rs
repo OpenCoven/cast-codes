@@ -49,7 +49,7 @@ pub enum ThemePickerSlideAction {
     PrivacySettingsClicked,
 }
 
-const TOS_URL: &str = "https://www.warp.dev/terms-of-service";
+const TOS_URL: &str = "https://github.com/OpenCoven/cast-codes/blob/main/CASTCODES.md";
 
 #[derive(Debug, Clone)]
 struct ThemeOption {

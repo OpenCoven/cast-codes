@@ -16,6 +16,7 @@ use crate::{
     settings::PrivacySettings,
     settings_view::SettingsSection,
     ui_components::icons::Icon,
+    util::links::GITHUB_ISSUES_URL,
     workspace::WorkspaceAction,
     workspaces::user_workspaces::UserWorkspaces,
 };
@@ -363,7 +364,7 @@ impl PromptAlertView {
                     } else {
                         text_fragments.push(FormattedTextFragment::hyperlink(
                             CONTACT_SUPPORT_TEXT,
-                            "mailto:support@warp.dev".to_owned(),
+                            GITHUB_ISSUES_URL.to_owned(),
                         ));
                     }
                 } else {

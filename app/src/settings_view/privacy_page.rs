@@ -74,10 +74,10 @@ const FONT_SIZE: f32 = 12.;
 
 const SAFE_MODE_TITLE: &str = "Secret redaction";
 static SAFE_MODE_DESCRIPTION: LazyLock<&'static str> = LazyLock::new(|| {
-    "When this setting is enabled, Warp will scan blocks, the contents of \
-        Cast Drive objects, and agent prompts for potential sensitive \
-        information and prevent saving or sending this data to any \
-        servers. You can customize this list via regexes."
+    "When this setting is enabled, CastCodes scans terminal blocks, Cast Drive \
+        objects, and agent prompts for potential sensitive information before \
+        they are saved or sent outside this device. You can customize this list \
+        via regexes."
 });
 const USER_SECRET_REGEX_TITLE: &str = "Custom secret redaction";
 const USER_SECRET_REGEX_DESCRIPTION: &str =
@@ -90,16 +90,15 @@ const TELEMETRY_DESCRIPTION_OLD: &str =
 const TELEMETRY_TITLE: &str = "Help improve CastCodes";
 const TELEMETRY_DESCRIPTION: &str =
     "App analytics help us make the product better for you. We may collect \
-    certain console interactions to improve Warp's AI capabilities.";
+    certain console interactions to improve agent capabilities.";
 const TELEMETRY_FREE_TIER_NOTE: &str =
     "On the free tier, analytics must be enabled to use AI features.";
-const TELEMETRY_DOCS_URL: &str =
-    "https://docs.warp.dev/support-and-community/privacy-and-security/privacy#what-telemetry-data-does-warp-collect-and-why";
+const TELEMETRY_DOCS_URL: &str = PRIVACY_POLICY_URL;
 
 const DATA_MANAGEMENT_TITLE: &str = "Manage your data";
 const DATA_MANAGEMENT_DESCRIPTION: &str =
-    "At any time, you may choose to delete your Warp account permanently. \
-    You will no longer be able to use Warp.";
+    "At any time, you may choose to delete your CastCodes account permanently. \
+    You will no longer be able to use hosted CastCodes services.";
 const DATA_MANAGEMENT_LINK_TEXT: &str = "Visit the data management page";
 
 const PRIVACY_POLICY_TITLE: &str = "Privacy policy";
@@ -236,16 +235,24 @@ impl PrivacyPageView {
     }
 
     fn build_page() -> PageType<Self> {
-        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
-            Box::new(SecretRedactionWidget::default()),
-            Box::new(AppAnalyticsWidget::default()),
-            Box::new(CrashReportsWidget::default()),
-            Box::new(CloudConversationStorageWidget::default()),
-        ];
+        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
+            vec![Box::new(SecretRedactionWidget::default())];
+
+        widgets.push(Box::new(AppAnalyticsWidget::default()));
+        widgets.push(Box::new(CrashReportsWidget::default()));
+
+        if ChannelState::cloud_services_available() {
+            widgets.push(Box::new(CloudConversationStorageWidget::default()));
+        }
+
         if ContextFlag::NetworkLogConsole.is_enabled() {
             widgets.push(Box::new(NetworkLogWidget::default()));
         }
-        widgets.push(Box::new(DataManagementWidget::default()));
+
+        if ChannelState::cloud_services_available() {
+            widgets.push(Box::new(DataManagementWidget::default()));
+        }
+
         widgets.push(Box::new(PrivacyPolicyWidget::default()));
         PageType::new_uncategorized(widgets, Some("Privacy"))
     }
@@ -1574,7 +1581,7 @@ impl SettingsWidget for AppAnalyticsWidget {
             Align::new(
                 ui_builder
                     .link(
-                        "Read more about CastCodes's use of data".into(),
+                        "Read the CastCodes privacy policy".into(),
                         Some(TELEMETRY_DOCS_URL.into()),
                         None,
                         self.docs_link_mouse_state.clone(),
@@ -1680,6 +1687,10 @@ impl SettingsWidget for CloudConversationStorageWidget {
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
+        if !ChannelState::cloud_services_available() {
+            return false;
+        }
+
         if !FeatureFlag::CloudConversations.is_enabled() {
             return false;
         }
@@ -1752,7 +1763,7 @@ impl SettingsWidget for CloudConversationStorageWidget {
                         if is_checked {
                             "Agent conversations can be shared with others and are retained \
                             when you log in on different devices. This data is only stored \
-                            for product functionality, and Warp will not use it for analytics."
+                            for product functionality, and CastCodes will not use it for analytics."
                         } else {
                             "Agent conversations are only stored locally on your machine, are \
                             lost upon logout, and cannot be shared. Note: conversation data \
@@ -1815,7 +1826,7 @@ impl SettingsWidget for NetworkLogWidget {
                 ui_builder
                     .paragraph(
                         "We've built a native console that allows you to view all communications \
-                        from Warp to external servers to ensure you feel comfortable that your \
+                        from CastCodes to external servers to ensure you feel comfortable that your \
                         work is always kept safe."
                             .to_owned(),
                     )
@@ -1869,6 +1880,10 @@ impl SettingsWidget for DataManagementWidget {
 
     fn search_terms(&self) -> &str {
         "data management delete account"
+    }
+
+    fn should_render(&self, _app: &AppContext) -> bool {
+        ChannelState::cloud_services_available()
     }
 
     fn render(

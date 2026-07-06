@@ -18,6 +18,7 @@ use crate::{
     changelog_model::{ChangelogHeader, ChangelogModel, ChangelogState, Event as ChangelogEvent},
     themes::theme::Fill,
     ui_components::icons,
+    util::links::USER_DOCS_URL,
 };
 
 use super::{feature_section::FeatureSection, SectionAction, SectionView};
@@ -361,7 +362,7 @@ impl SectionView for ChangelogSectionView {
                 .ui_builder()
                 .link(
                     "Read all changelogs".into(),
-                    Some("https://docs.warp.dev/changelog".into()),
+                    Some(USER_DOCS_URL.into()),
                     None,
                     self.changelog_button_mouse_states
                         .view_changelogs_mouse_state

@@ -19,6 +19,7 @@ use claude::ClaudeCodePluginManager;
 use codex::CodexPluginManager;
 use gemini::GeminiPluginManager;
 use opencode::OpenCodePluginManager;
+use warp_core::channel::ChannelState;
 
 /// Distinguishes whether the plugin instructions modal should show install or update steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,13 +228,12 @@ pub(crate) fn plugin_manager_for_with_shell(
     path_env_var: Option<String>,
 ) -> Option<Box<dyn CliAgentPluginManager>> {
     match agent {
-        CLIAgent::Claude => Some(Box::new(ClaudeCodePluginManager::new(
-            shell_path,
-            shell_type,
-            path_env_var,
-        ))),
+        CLIAgent::Claude if ChannelState::cloud_services_available() => Some(Box::new(
+            ClaudeCodePluginManager::new(shell_path, shell_type, path_env_var),
+        )),
         CLIAgent::OpenCode
-            if FeatureFlag::OpenCodeNotifications.is_enabled()
+            if ChannelState::cloud_services_available()
+                && FeatureFlag::OpenCodeNotifications.is_enabled()
                 && FeatureFlag::HOANotifications.is_enabled() =>
         {
             Some(Box::new(OpenCodePluginManager))
@@ -245,7 +245,8 @@ pub(crate) fn plugin_manager_for_with_shell(
             Some(Box::new(CodexPluginManager))
         }
         CLIAgent::Gemini
-            if FeatureFlag::GeminiNotifications.is_enabled()
+            if ChannelState::cloud_services_available()
+                && FeatureFlag::GeminiNotifications.is_enabled()
                 && FeatureFlag::HOANotifications.is_enabled() =>
         {
             Some(Box::new(GeminiPluginManager::new(
@@ -254,7 +255,8 @@ pub(crate) fn plugin_manager_for_with_shell(
                 path_env_var,
             )))
         }
-        CLIAgent::OpenCode
+        CLIAgent::Claude
+        | CLIAgent::OpenCode
         | CLIAgent::Codex
         | CLIAgent::Gemini
         | CLIAgent::Amp

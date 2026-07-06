@@ -209,14 +209,14 @@ impl TerminalView {
         let sync_future = UpdateManager::as_ref(ctx).initial_load_complete();
         ctx.spawn(
             async move {
-                // Wait for Warp Drive initial sync so environment lookup succeeds.
+                // Wait for Cast Drive initial sync so environment lookup succeeds.
 
                 if sync_future
                     .with_timeout(WARP_DRIVE_SYNC_TIMEOUT)
                     .await
                     .is_err()
                 {
-                    return Err("Timed out waiting for Warp Drive to sync for docker sandbox");
+                    return Err("Timed out waiting for Cast Drive to sync for docker sandbox");
                 }
 
                 // Wait for the terminal session to bootstrap.

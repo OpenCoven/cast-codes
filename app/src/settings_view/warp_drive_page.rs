@@ -5,7 +5,10 @@ use super::{
     },
     LocalOnlyIconState, SettingsSection, ToggleState,
 };
-use crate::{appearance::Appearance, auth::AuthStateProvider, drive::settings::WarpDriveSettings};
+use crate::{
+    appearance::Appearance, auth::AuthStateProvider, drive::settings::WarpDriveSettings,
+    util::links::USER_DOCS_URL,
+};
 use warp_core::{features::FeatureFlag, report_if_error, settings::ToggleableSetting as _};
 use warpui::{
     elements::{Container, Element, Flex, MouseStateHandle, ParentElement, Shrinkable, Text},
@@ -119,7 +122,7 @@ impl SettingsWidget for WarpDriveHeaderWidget {
     type View = WarpDriveSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "warp drive sign up"
+        "cast drive sign up"
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
@@ -206,7 +209,7 @@ impl SettingsWidget for WarpDriveToggleWidget {
     type View = WarpDriveSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "warp drive tools panel command palette search workflows prompts notebooks environment variables"
+        "cast drive tools panel command palette search workflows prompts notebooks environment variables"
     }
 
     fn render(
@@ -226,7 +229,7 @@ impl SettingsWidget for WarpDriveToggleWidget {
             Some(AdditionalInfo {
                 mouse_state: self.info_icon_mouse_state.clone(),
                 on_click_action: Some(WarpDriveSettingsPageAction::OpenUrl(
-                    "https://docs.warp.dev/knowledge-and-collaboration/warp-drive".to_string(),
+                    USER_DOCS_URL.to_string(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,

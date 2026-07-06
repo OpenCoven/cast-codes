@@ -498,13 +498,13 @@ impl<'a> CodebaseIndexSyncOperation<'a> {
                 Ok(Ok(_)) => {
                     return Err(SyncOperationError::Other(anyhow::anyhow!(
                         "Shouldn't receive other task result in channel"
-                    )))
+                    )));
                 }
                 Ok(Err(e)) => return Err(SyncOperationError::ServerSyncError(e)),
                 Err(_) => {
                     return Err(SyncOperationError::Other(anyhow::anyhow!(
                         "Sync queue task cancelled"
-                    )))
+                    )));
                 }
             };
 

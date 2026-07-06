@@ -31,7 +31,7 @@ fn history_path() -> Option<PathBuf> {
 /// Read the persisted history. Returns `Vec::new()` on any error —
 /// the panel treats absent history as "fresh session," not a fatal
 /// startup problem.
-pub fn load() -> Vec<CovenStreamHistoryEntry> {
+pub(super) fn load() -> Vec<CovenStreamHistoryEntry> {
     let Some(path) = history_path() else {
         log::debug!("cast_agent: stream history path unavailable (no home dir)");
         return Vec::new();
@@ -62,7 +62,7 @@ pub fn load() -> Vec<CovenStreamHistoryEntry> {
 /// Write the history to disk. Atomic-ish via write-to-temp +
 /// rename so a crash partway through doesn't truncate the existing
 /// file. Errors logged and dropped.
-pub fn save(entries: &[CovenStreamHistoryEntry]) {
+pub(super) fn save(entries: &[CovenStreamHistoryEntry]) {
     let Some(path) = history_path() else {
         return;
     };

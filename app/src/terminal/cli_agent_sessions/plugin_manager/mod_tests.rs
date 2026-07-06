@@ -2,14 +2,19 @@ use std::cmp::Ordering;
 
 use super::{compare_versions, plugin_manager_for};
 use crate::terminal::CLIAgent;
+use warp_core::channel::{Channel, ChannelState};
 
 #[test]
+#[serial_test::serial]
 fn returns_manager_for_claude() {
+    let _channel_guard = ChannelState::override_channel_for_test(Channel::Stable);
     assert!(plugin_manager_for(CLIAgent::Claude).is_some());
 }
 
 #[test]
+#[serial_test::serial]
 fn returns_manager_for_opencode() {
+    let _channel_guard = ChannelState::override_channel_for_test(Channel::Stable);
     let _oc_guard = crate::features::FeatureFlag::OpenCodeNotifications.override_enabled(true);
     let _hoa_guard = crate::features::FeatureFlag::HOANotifications.override_enabled(true);
     assert!(plugin_manager_for(CLIAgent::OpenCode).is_some());
@@ -23,10 +28,37 @@ fn returns_manager_for_codex() {
 }
 
 #[test]
+#[serial_test::serial]
 fn returns_manager_for_gemini() {
+    let _channel_guard = ChannelState::override_channel_for_test(Channel::Stable);
     let _gemini_guard = crate::features::FeatureFlag::GeminiNotifications.override_enabled(true);
     let _hoa_guard = crate::features::FeatureFlag::HOANotifications.override_enabled(true);
     assert!(plugin_manager_for(CLIAgent::Gemini).is_some());
+}
+
+#[test]
+#[serial_test::serial]
+fn local_only_returns_none_for_gemini_upstream_plugin() {
+    let _channel_guard = ChannelState::override_channel_for_test(Channel::Oss);
+    let _gemini_guard = crate::features::FeatureFlag::GeminiNotifications.override_enabled(true);
+    let _hoa_guard = crate::features::FeatureFlag::HOANotifications.override_enabled(true);
+    assert!(plugin_manager_for(CLIAgent::Gemini).is_none());
+}
+
+#[test]
+#[serial_test::serial]
+fn local_only_returns_none_for_claude_upstream_plugin() {
+    let _channel_guard = ChannelState::override_channel_for_test(Channel::Oss);
+    assert!(plugin_manager_for(CLIAgent::Claude).is_none());
+}
+
+#[test]
+#[serial_test::serial]
+fn local_only_returns_none_for_opencode_upstream_plugin() {
+    let _channel_guard = ChannelState::override_channel_for_test(Channel::Oss);
+    let _oc_guard = crate::features::FeatureFlag::OpenCodeNotifications.override_enabled(true);
+    let _hoa_guard = crate::features::FeatureFlag::HOANotifications.override_enabled(true);
+    assert!(plugin_manager_for(CLIAgent::OpenCode).is_none());
 }
 
 #[test]

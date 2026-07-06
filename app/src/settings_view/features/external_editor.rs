@@ -21,6 +21,7 @@ use crate::{
         },
         EditorSettings, SUPPORTED_EDITORS,
     },
+    util::links::USER_DOCS_URL,
     view_components::{Dropdown, DropdownItem},
 };
 
@@ -323,9 +324,7 @@ impl View for ExternalEditorView {
             "Open Markdown files in CastCodes's Markdown Viewer by default".to_string(),
             Some(AdditionalInfo {
                 mouse_state: self.markdown_viewer_mouse_state.clone(),
-                on_click_action: Some(ExternalEditorAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/markdown-viewer".to_string(),
-                )),
+                on_click_action: Some(ExternalEditorAction::OpenUrl(USER_DOCS_URL.to_string())),
                 secondary_text: None,
                 tooltip_override_text: None,
             }),

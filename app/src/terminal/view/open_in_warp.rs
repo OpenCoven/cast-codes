@@ -22,6 +22,7 @@ use crate::{
         model::session::Session,
         view::inline_banner::{OpenInWarpBannerAction, OpenInWarpBannerState},
     },
+    util::links::USER_DOCS_URL,
     util::openable_file_type::{is_file_openable_in_warp, OpenableFileType},
 };
 use settings::Setting as _;
@@ -41,9 +42,8 @@ use super::{Event, InlineBannerItem, InlineBannerType, TerminalView};
 #[path = "open_in_warp_tests.rs"]
 mod tests;
 
-const LEARN_MORE_MARKDOWN_URL: &str =
-    "https://docs.warp.dev/terminal/more-features/markdown-viewer";
-const LEARN_MORE_CODE_URL: &str = "https://docs.warp.dev/code/overview#built-in-code-editor";
+const LEARN_MORE_MARKDOWN_URL: &str = USER_DOCS_URL;
+const LEARN_MORE_CODE_URL: &str = USER_DOCS_URL;
 
 /// A path to a file that can be opened in Warp, along with its type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,7 +99,7 @@ impl TerminalView {
         }
     }
 
-    /// Whether or not the "Open in Warp" banner is open.
+    /// Whether or not the file-opening banner is open.
     #[cfg(feature = "integration_tests")]
     pub fn is_open_in_warp_banner_open(&self) -> bool {
         self.inline_banners_state.open_in_warp_banner.is_some()
@@ -129,7 +129,7 @@ impl TerminalView {
     }
 
     /// Insert a suggestion banner for opening the file `openable_path`, originating from
-    /// `session`, in a Warp pane.
+    /// `session`, in a CastCodes pane.
     fn suggest_open_in_warp(
         &mut self,
         openable_path: OpenablePath,
@@ -237,7 +237,7 @@ impl TerminalView {
                 match &self.inline_banners_state.open_in_warp_banner {
                     Some(banner_state) => {
                         ActionAccessibilityContent::Custom(AccessibilityContent::new_without_help(
-                            format!("Open {} in Warp", banner_state.target.path.display()),
+                            format!("Open {} in CastCodes", banner_state.target.path.display()),
                             WarpA11yRole::UserAction,
                         ))
                     }
@@ -246,14 +246,14 @@ impl TerminalView {
             }
             OpenInWarpBannerAction::Close => {
                 ActionAccessibilityContent::Custom(AccessibilityContent::new_without_help(
-                    "Close View in Warp banner",
+                    "Close file-opening banner",
                     WarpA11yRole::UserAction,
                 ))
             }
             OpenInWarpBannerAction::LearnMore => {
                 ActionAccessibilityContent::Custom(AccessibilityContent::new(
                     "Learn more",
-                    "Learn more about opening Markdown files in Warp",
+                    "Learn more about opening Markdown files in CastCodes",
                     WarpA11yRole::UserAction,
                 ))
             }
@@ -266,7 +266,7 @@ lazy_static! {
         HashSet::from(["bat", "cat", "glow", "less", "open"]);
 }
 
-/// Examines `command` for a file openable in Warp, returning the resolved path and type if found.
+/// Examines `command` for a file openable in CastCodes, returning the resolved path and type if found.
 async fn check_openable_in_warp(
     command: String,
     working_directory: Option<String>,
@@ -321,7 +321,7 @@ async fn check_openable_in_warp(
                 );
 
                 if async_fs::metadata(&resolved).await.is_ok() {
-                    // We've found a file that exists and can be opened in Warp.
+                    // We've found a file that exists and can be opened in CastCodes.
                     return Some(OpenablePath {
                         path: resolved,
                         file_type,

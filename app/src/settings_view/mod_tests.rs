@@ -1,6 +1,79 @@
 use super::*;
 use settings_page::MatchData;
 
+const ABOUT_PAGE_SOURCE: &str = include_str!("about_page.rs");
+const AI_PAGE_SOURCE: &str = include_str!("ai_page.rs");
+const APPEARANCE_PAGE_SOURCE: &str = include_str!("appearance_page.rs");
+const ENVIRONMENTS_PAGE_SOURCE: &str = include_str!("environments_page.rs");
+const EXTERNAL_EDITOR_SOURCE: &str = include_str!("features/external_editor.rs");
+const FEATURES_PAGE_SOURCE: &str = include_str!("features_page.rs");
+const GENERAL_SETTINGS_SOURCE: &str = include_str!("../terminal/general_settings.rs");
+const MAIN_PAGE_SOURCE: &str = include_str!("main_page.rs");
+const MCP_SERVERS_LIST_PAGE_SOURCE: &str = include_str!("mcp_servers/list_page.rs");
+const PLATFORM_PAGE_SOURCE: &str = include_str!("platform_page.rs");
+const PRIVACY_PAGE_SOURCE: &str = include_str!("privacy_page.rs");
+const REFERRALS_PAGE_SOURCE: &str = include_str!("referrals_page.rs");
+const SHOW_BLOCKS_VIEW_SOURCE: &str = include_str!("show_blocks_view.rs");
+const SETTINGS_VIEW_SOURCE: &str = include_str!("mod.rs");
+const SESSION_SETTINGS_SOURCE: &str = include_str!("../terminal/session_settings.rs");
+const SSH_ERROR_SOURCE: &str = include_str!("../terminal/ssh/error.rs");
+const SSH_INSTALL_TMUX_SOURCE: &str = include_str!("../terminal/ssh/install_tmux.rs");
+const SSH_WARPIFY_SOURCE: &str = include_str!("../terminal/ssh/warpify.rs");
+const TERMINAL_VIEW_SOURCE: &str = include_str!("../terminal/view.rs");
+const TERMINAL_INIT_PROJECT_SOURCE: &str = include_str!("../terminal/view/init_project/mod.rs");
+const TERMINAL_AMBIENT_AGENT_HARNESS_SELECTOR_SOURCE: &str =
+    include_str!("../terminal/view/ambient_agent/harness_selector.rs");
+const TERMINAL_AMBIENT_AGENT_HOST_SELECTOR_SOURCE: &str =
+    include_str!("../terminal/view/ambient_agent/host_selector.rs");
+const TERMINAL_INLINE_AGENT_MODE_SETUP_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/agent_mode_setup.rs");
+const TERMINAL_INLINE_ALIAS_EXPANSION_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/alias_expansion.rs");
+const TERMINAL_INLINE_AWS_BEDROCK_LOGIN_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/aws_bedrock_login.rs");
+const TERMINAL_INLINE_NOTIFICATIONS_DISCOVERY_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/notifications_discovery.rs");
+const TERMINAL_INLINE_OPEN_IN_WARP_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/open_in_warp.rs");
+const TERMINAL_INLINE_SHELL_PROCESS_TERMINATED_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/shell_process_terminated.rs");
+const TERMINAL_INLINE_SSH_SOURCE: &str = include_str!("../terminal/view/inline_banner/ssh.rs");
+const TERMINAL_INLINE_VIM_MODE_SOURCE: &str =
+    include_str!("../terminal/view/inline_banner/vim_mode.rs");
+const TERMINAL_ONBOARDING_AGENTIC_SUGGESTIONS_SOURCE: &str =
+    include_str!("../terminal/view/block_onboarding/onboarding_agentic_suggestions_block.rs");
+const TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE: &str =
+    include_str!("../terminal/view/block_onboarding/onboarding_prompt_block.rs");
+const TERMINAL_OPEN_IN_WARP_SOURCE: &str = include_str!("../terminal/view/open_in_warp.rs");
+const TERMINAL_PROMPT_RENDER_HELPER_SOURCE: &str =
+    include_str!("../terminal/prompt_render_helper.rs");
+const TERMINAL_PROFILE_MODEL_SELECTOR_SOURCE: &str =
+    include_str!("../terminal/profile_model_selector.rs");
+const TERMINAL_SHELL_TERMINATED_BANNER_SOURCE: &str =
+    include_str!("../terminal/view/shell_terminated_banner.rs");
+const TERMINAL_SSH_REMOTE_SERVER_CHOICE_SOURCE: &str =
+    include_str!("../terminal/view/ssh_remote_server_choice_view.rs");
+const TERMINAL_SSH_REMOTE_SERVER_FAILED_BANNER_SOURCE: &str =
+    include_str!("../terminal/view/ssh_remote_server_failed_banner.rs");
+const TERMINAL_TOOLTIPS_SOURCE: &str = include_str!("../terminal/view/tooltips.rs");
+const TERMINAL_VIEW_INIT_SOURCE: &str = include_str!("../terminal/view/init.rs");
+const TERMINAL_USE_AGENT_FOOTER_SOURCE: &str =
+    include_str!("../terminal/view/use_agent_footer/mod.rs");
+const TERMINAL_WARPIFY_FOOTER_SOURCE: &str =
+    include_str!("../terminal/view/use_agent_footer/warpify_footer.rs");
+const TERMINAL_MODEL_SPEC_SCORES_SOURCE: &str =
+    include_str!("../terminal/input/models/model_spec_scores.rs");
+const TERMINAL_WARPIFY_BLOCK_BANNER_SOURCE: &str =
+    include_str!("../terminal/view/block_banner/warpify.rs");
+const TERMINAL_WARPIFY_RENDER_SOURCE: &str = include_str!("../terminal/warpify/render.rs");
+const TERMINAL_WARPIFY_SETTINGS_SOURCE: &str = include_str!("../terminal/warpify/settings.rs");
+const TERMINAL_WARPIFY_SUCCESS_BLOCK_SOURCE: &str =
+    include_str!("../terminal/warpify/success_block.rs");
+const THEME_PICKER_SLIDE_SOURCE: &str =
+    include_str!("../../../crates/onboarding/src/slides/theme_picker_slide.rs");
+const WARP_DRIVE_PAGE_SOURCE: &str = include_str!("warp_drive_page.rs");
+const WARPIFY_PAGE_SOURCE: &str = include_str!("warpify_page.rs");
+
 // ── SettingsSection classification ──────────────────────────────────────────
 
 #[test]
@@ -194,6 +267,244 @@ fn subpage_display_names_are_correct() {
         SettingsSection::OzCloudAPIKeys.to_string(),
         "Agent API Keys"
     );
+    assert_eq!(SettingsSection::Warpify.to_string(), "Shell integration");
+}
+
+#[test]
+fn castcodes_about_page_does_not_render_warp_logo_assets() {
+    assert!(ABOUT_PAGE_SOURCE.contains("\"about castcodes version\""));
+    assert!(!ABOUT_PAGE_SOURCE.contains("warp-logo-with-light-title.svg"));
+    assert!(!ABOUT_PAGE_SOURCE.contains("warp-logo-with-dark-title.svg"));
+}
+
+#[test]
+fn cloud_only_settings_pages_are_gated_by_channel_services() {
+    assert!(ENVIRONMENTS_PAGE_SOURCE.contains("ChannelState::cloud_services_available()"));
+    assert!(PLATFORM_PAGE_SOURCE.contains("ChannelState::cloud_services_available()"));
+    assert!(PRIVACY_PAGE_SOURCE.contains("ChannelState::cloud_services_available()"));
+    assert!(SHOW_BLOCKS_VIEW_SOURCE.contains("ChannelState::cloud_services_available()"));
+}
+
+#[test]
+fn privacy_settings_copy_is_castcodes_branded() {
+    assert!(PRIVACY_PAGE_SOURCE.contains("CastCodes scans terminal blocks"));
+    assert!(PRIVACY_PAGE_SOURCE.contains("delete your CastCodes account permanently"));
+    assert!(!PRIVACY_PAGE_SOURCE.contains("Warp will scan blocks"));
+    assert!(!PRIVACY_PAGE_SOURCE.contains("delete your Warp account permanently"));
+}
+
+#[test]
+fn visible_settings_copy_uses_castcodes_terms_for_shell_and_shared_surfaces() {
+    assert!(SETTINGS_VIEW_SOURCE.contains("\"Shell integration\""));
+    assert!(WARPIFY_PAGE_SOURCE.contains("CastCodes adds support for blocks"));
+    assert!(WARPIFY_PAGE_SOURCE.contains("Use Tmux shell integration"));
+    assert!(SHOW_BLOCKS_VIEW_SOURCE.contains("deleted from hosted servers"));
+
+    assert!(!WARPIFY_PAGE_SOURCE.contains("Warp attempts"));
+    assert!(!WARPIFY_PAGE_SOURCE.contains("Warpification\""));
+    assert!(!SHOW_BLOCKS_VIEW_SOURCE.contains("Warp servers"));
+}
+
+#[test]
+fn terminal_user_facing_copy_uses_castcodes_terms() {
+    assert!(SSH_ERROR_SOURCE.contains("Shell integration hit a timeout."));
+    assert!(SSH_ERROR_SOURCE.contains("Error setting up shell integration"));
+    assert!(SSH_ERROR_SOURCE.contains("Use shell integration without TMUX"));
+    assert!(SSH_ERROR_SOURCE.contains("Continue without shell integration"));
+    assert!(SSH_WARPIFY_SOURCE.contains("Setting up SSH shell integration"));
+    assert!(TERMINAL_INIT_PROJECT_SOURCE.contains("No code is stored on hosted servers."));
+    assert!(
+        TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE.contains("CastCodes has a custom prompt builder")
+    );
+    assert!(TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE
+        .contains("CastCodes works with many custom prompts"));
+    assert!(TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE.contains("CastCodes prompt"));
+    assert!(TERMINAL_ONBOARDING_AGENTIC_SUGGESTIONS_SOURCE.contains("Welcome to CastCodes!"));
+    assert!(TERMINAL_ONBOARDING_AGENTIC_SUGGESTIONS_SOURCE
+        .contains("matrix theme for my CastCodes terminal"));
+    assert!(TERMINAL_INLINE_OPEN_IN_WARP_SOURCE
+        .contains("CastCodes can directly display Markdown files"));
+    assert!(TERMINAL_INLINE_OPEN_IN_WARP_SOURCE.contains("View in CastCodes"));
+    assert!(TERMINAL_INLINE_OPEN_IN_WARP_SOURCE.contains("Edit in CastCodes"));
+    assert!(TERMINAL_OPEN_IN_WARP_SOURCE.contains("Open {} in CastCodes"));
+    assert!(TERMINAL_TOOLTIPS_SOURCE.contains("\"Open in CastCodes\""));
+    assert!(TERMINAL_VIEW_SOURCE.contains("MenuItemFields::new(\"Open in CastCodes\")"));
+    assert!(TERMINAL_VIEW_SOURCE.contains("Opened shell integration settings"));
+    assert!(SSH_INSTALL_TMUX_SOURCE.contains("enable shell integration for your SSH session"));
+    assert!(TERMINAL_SSH_REMOTE_SERVER_CHOICE_SOURCE.contains("Install CastCodes' SSH extension"));
+    assert!(TERMINAL_SSH_REMOTE_SERVER_CHOICE_SOURCE.contains("Manage shell integration settings"));
+    assert!(TERMINAL_SSH_REMOTE_SERVER_FAILED_BANNER_SOURCE
+        .contains("Couldn't connect to the CastCodes SSH extension"));
+    assert!(TERMINAL_PROMPT_RENDER_HELPER_SOURCE.contains("Installing CastCodes SSH Extension"));
+    assert!(TERMINAL_VIEW_SOURCE.contains("MenuItemFields::new(\"Ask AI\")"));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("\"Ask AI about Selection\""));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("\"Ask AI about last block\""));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("\"Enable shell integration\""));
+    assert!(TERMINAL_VIEW_INIT_SOURCE.contains("\"Enable SSH shell integration\""));
+    assert!(TERMINAL_VIEW_SOURCE.contains("Powerlevel10k now supports CastCodes!"));
+    assert!(TERMINAL_WARPIFY_SUCCESS_BLOCK_SOURCE.contains("Shell integration enabled"));
+    assert!(
+        TERMINAL_WARPIFY_SUCCESS_BLOCK_SOURCE.contains("automatically enable shell integration")
+    );
+    assert!(TERMINAL_WARPIFY_RENDER_SOURCE.contains("Never use shell integration for this host"));
+    assert!(TERMINAL_VIEW_SOURCE.contains("incompatible with CastCodes"));
+    assert!(TERMINAL_VIEW_SOURCE.contains("CastCodes notifications"));
+    assert!(TERMINAL_INIT_PROJECT_SOURCE.contains("CastCodes can create one for you"));
+    assert!(TERMINAL_INLINE_ALIAS_EXPANSION_SOURCE.contains("CastCodes can auto-expand aliases"));
+    assert!(
+        TERMINAL_INLINE_NOTIFICATIONS_DISCOVERY_SOURCE.contains("CastCodes was denied permissions")
+    );
+    assert!(TERMINAL_INLINE_SHELL_PROCESS_TERMINATED_SOURCE
+        .contains("CastCodes' initialization script"));
+    assert!(TERMINAL_INLINE_VIM_MODE_SOURCE.contains("Enable CastCodes' Vim keybindings"));
+    assert!(
+        TERMINAL_INLINE_AGENT_MODE_SETUP_SOURCE.contains("Optimize CastCodes for this codebase")
+    );
+    assert!(TERMINAL_INLINE_AWS_BEDROCK_LOGIN_SOURCE
+        .contains("Your administrator has enabled AWS Bedrock"));
+    assert!(TERMINAL_USE_AGENT_FOOTER_SOURCE.contains("Ask the CastCodes agent"));
+    assert!(TERMINAL_WARPIFY_FOOTER_SOURCE.contains("Enable shell integration"));
+    assert!(TERMINAL_WARPIFY_BLOCK_BANNER_SOURCE.contains("Enable shell integration"));
+    assert!(TERMINAL_INLINE_SSH_SOURCE.contains("SSH shell integration enabled"));
+    assert!(TERMINAL_INLINE_SSH_SOURCE.contains("SSH shell integration disabled"));
+    assert!(TERMINAL_AMBIENT_AGENT_HOST_SELECTOR_SOURCE.contains("Host::Warp => \"Hosted\""));
+    assert!(TERMINAL_AMBIENT_AGENT_HARNESS_SELECTOR_SOURCE.contains("with the hosted agent"));
+    assert!(TERMINAL_MODEL_SPEC_SCORES_SOURCE.contains("CastCodes benchmarks"));
+    assert!(TERMINAL_PROFILE_MODEL_SELECTOR_SOURCE.contains("CastCodes benchmarks"));
+    assert!(TERMINAL_SHELL_TERMINATED_BANNER_SOURCE
+        .contains("Shell integration script output is displayed here"));
+
+    assert!(!SSH_ERROR_SOURCE.contains("Warpifying the session hit a timeout."));
+    assert!(!SSH_ERROR_SOURCE.contains("Error Warpifying session"));
+    assert!(!SSH_ERROR_SOURCE.contains("Warpify without TMUX"));
+    assert!(!SSH_ERROR_SOURCE.contains("Continue without Warpification"));
+    assert!(!SSH_WARPIFY_SOURCE.contains("Warpifying SSH Session"));
+    assert!(!TERMINAL_INIT_PROJECT_SOURCE.contains("Warp servers"));
+    assert!(!TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE.contains("Warp has a custom prompt builder"));
+    assert!(!TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE.contains("Warp prompt"));
+    assert!(!TERMINAL_ONBOARDING_AGENTIC_SUGGESTIONS_SOURCE.contains("Welcome to Warp!"));
+    assert!(!TERMINAL_INLINE_OPEN_IN_WARP_SOURCE.contains("View in Warp"));
+    assert!(!TERMINAL_INLINE_OPEN_IN_WARP_SOURCE.contains("Edit in Warp"));
+    assert!(!TERMINAL_TOOLTIPS_SOURCE.contains("\"Open in Warp\""));
+    assert!(!TERMINAL_SSH_REMOTE_SERVER_CHOICE_SOURCE.contains("Install Warp's SSH extension"));
+    assert!(!TERMINAL_SSH_REMOTE_SERVER_CHOICE_SOURCE.contains("Manage Warpify settings"));
+    assert!(!TERMINAL_SSH_REMOTE_SERVER_FAILED_BANNER_SOURCE
+        .contains("Couldn't connect to the Warp SSH extension"));
+    assert!(!TERMINAL_PROMPT_RENDER_HELPER_SOURCE.contains("Warp SSH Extension"));
+    assert!(!TERMINAL_VIEW_SOURCE.contains("MenuItemFields::new(\"Ask Warp AI\")"));
+    assert!(!TERMINAL_VIEW_SOURCE.contains("Opened Warpify Settings"));
+    assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("\"Ask Warp AI"));
+    assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("\"Warpify subshell\""));
+    assert!(!TERMINAL_VIEW_INIT_SOURCE.contains("\"Warpify ssh session\""));
+    assert!(!TERMINAL_VIEW_SOURCE.contains("Powerlevel10k now supports Warp!"));
+    assert!(!TERMINAL_WARPIFY_SUCCESS_BLOCK_SOURCE.contains("Session Warpified"));
+    assert!(!TERMINAL_WARPIFY_SUCCESS_BLOCK_SOURCE.contains("automatically Warpify"));
+    assert!(!TERMINAL_WARPIFY_RENDER_SOURCE.contains("Never Warpify this host"));
+    assert!(!TERMINAL_VIEW_SOURCE.contains("incompatible with Warp"));
+    assert!(!TERMINAL_VIEW_SOURCE.contains("Warp notifications"));
+    assert!(!TERMINAL_INIT_PROJECT_SOURCE.contains("Warp can create one for you"));
+    assert!(!TERMINAL_INLINE_ALIAS_EXPANSION_SOURCE.contains("Warp can auto-expand aliases"));
+    assert!(!TERMINAL_INLINE_NOTIFICATIONS_DISCOVERY_SOURCE.contains("Warp was denied permissions"));
+    assert!(
+        !TERMINAL_INLINE_SHELL_PROCESS_TERMINATED_SOURCE.contains("Warp's initialization script")
+    );
+    assert!(!TERMINAL_INLINE_VIM_MODE_SOURCE.contains("Enable Warp's Vim keybindings"));
+    assert!(!TERMINAL_INLINE_AGENT_MODE_SETUP_SOURCE.contains("Optimize Warp for this codebase"));
+    assert!(!TERMINAL_INLINE_AWS_BEDROCK_LOGIN_SOURCE.contains("Your Warp admin"));
+    assert!(!TERMINAL_USE_AGENT_FOOTER_SOURCE.contains("Ask the Warp agent"));
+    assert!(!TERMINAL_WARPIFY_FOOTER_SOURCE.contains("Warpify subshell"));
+    assert!(!TERMINAL_WARPIFY_BLOCK_BANNER_SOURCE.contains("Warpify subshell"));
+    assert!(!TERMINAL_INLINE_SSH_SOURCE.contains("Warp SSH wrapper"));
+    assert!(!TERMINAL_AMBIENT_AGENT_HOST_SELECTOR_SOURCE.contains("Host::Warp => \"Warp\""));
+    assert!(!TERMINAL_AMBIENT_AGENT_HARNESS_SELECTOR_SOURCE.contains("with the Warp Agent"));
+    assert!(!TERMINAL_MODEL_SPEC_SCORES_SOURCE.contains("Warp's benchmarks"));
+    assert!(!TERMINAL_PROFILE_MODEL_SELECTOR_SOURCE.contains("Warp’s benchmarks"));
+}
+
+#[test]
+fn settings_schema_descriptions_use_castcodes_terms() {
+    let sources = [
+        GENERAL_SETTINGS_SOURCE,
+        SESSION_SETTINGS_SOURCE,
+        TERMINAL_WARPIFY_SETTINGS_SOURCE,
+    ];
+    let forbidden = [
+        "description: \"Whether to show a warning dialog before quitting Warp.",
+        "description: \"Whether to quit Warp when the last window is closed.",
+        "description: \"Whether to restore the previous session when Warp starts up.",
+        "description: \"Whether to launch Warp automatically when you log in.",
+        "description: \"The shell to use when Warp starts up.",
+        "description: \"Whether to use your shell's PS1 prompt instead of the Warp prompt.",
+        "description: \"Commands that should not trigger the subshell warpification prompt.",
+        "description: \"SSH hosts that should not trigger the warpification prompt.",
+        "description: \"Whether to enable Warp features in SSH sessions.",
+        "description: \"Whether to use a tmux-based wrapper for SSH warpification.",
+    ];
+
+    assert!(GENERAL_SETTINGS_SOURCE.contains("before quitting CastCodes"));
+    assert!(SESSION_SETTINGS_SOURCE.contains("CastCodes prompt"));
+    assert!(TERMINAL_WARPIFY_SETTINGS_SOURCE.contains("SSH shell integration"));
+
+    for source in sources {
+        for needle in forbidden {
+            assert!(
+                !source.contains(needle),
+                "settings schema description should not contain {needle}"
+            );
+        }
+    }
+}
+
+#[test]
+fn settings_sources_do_not_link_to_warp_owned_support_surfaces() {
+    let upstream_docs_host = ["docs", "warp", "dev"].join(".");
+    let upstream_support = ["support", "warp.dev"].join("@");
+    let upstream_sales = ["sales", "warp.dev"].join("@");
+    let upstream_referrals = ["referrals", "warp.dev"].join("@");
+    let upstream_typeform = ["warpdotdev", "typeform", "com"].join(".");
+    let upstream_marketing_host = ["www", "warp", "dev"].join(".");
+    let forbidden = [
+        upstream_docs_host.as_str(),
+        upstream_support.as_str(),
+        upstream_sales.as_str(),
+        upstream_referrals.as_str(),
+        upstream_typeform.as_str(),
+        upstream_marketing_host.as_str(),
+    ];
+    let sources = [
+        ABOUT_PAGE_SOURCE,
+        AI_PAGE_SOURCE,
+        APPEARANCE_PAGE_SOURCE,
+        EXTERNAL_EDITOR_SOURCE,
+        FEATURES_PAGE_SOURCE,
+        MAIN_PAGE_SOURCE,
+        MCP_SERVERS_LIST_PAGE_SOURCE,
+        PLATFORM_PAGE_SOURCE,
+        PRIVACY_PAGE_SOURCE,
+        REFERRALS_PAGE_SOURCE,
+        SHOW_BLOCKS_VIEW_SOURCE,
+        SSH_INSTALL_TMUX_SOURCE,
+        TERMINAL_INLINE_OPEN_IN_WARP_SOURCE,
+        TERMINAL_ONBOARDING_AGENTIC_SUGGESTIONS_SOURCE,
+        TERMINAL_ONBOARDING_PROMPT_BLOCK_SOURCE,
+        TERMINAL_OPEN_IN_WARP_SOURCE,
+        TERMINAL_SSH_REMOTE_SERVER_CHOICE_SOURCE,
+        TERMINAL_SSH_REMOTE_SERVER_FAILED_BANNER_SOURCE,
+        TERMINAL_VIEW_SOURCE,
+        TERMINAL_WARPIFY_RENDER_SOURCE,
+        THEME_PICKER_SLIDE_SOURCE,
+        WARP_DRIVE_PAGE_SOURCE,
+        WARPIFY_PAGE_SOURCE,
+    ];
+
+    for source in sources {
+        for needle in forbidden {
+            assert!(
+                !source.contains(needle),
+                "settings source should not link to {needle}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -225,6 +536,10 @@ fn subpage_from_str_parses_display_names() {
     assert_eq!(
         SettingsSection::from_str("Agent API Keys"),
         Ok(SettingsSection::OzCloudAPIKeys)
+    );
+    assert_eq!(
+        SettingsSection::from_str("Shell integration"),
+        Ok(SettingsSection::Warpify)
     );
 }
 

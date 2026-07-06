@@ -55,7 +55,7 @@ const DESCRIPTION_TEXT: &str = "Rules enhance the agent by providing structured 
 const SEARCH_PLACEHOLDER_TEXT: &str = "Search rules";
 const ZERO_STATE_TEXT: &str = "Once you add a rule, it will be shown here.";
 const ZERO_STATE_TEXT_PROJECT: &str =
-    "Once you generate a WARP.md rules file for a project, it will appear here.";
+    "Once you generate an AGENTS.md rules file for a project, it will appear here.";
 
 const DISABLED_BANNER_TEXT: &str =
     "Your rules are disabled and won't be used as context in sessions. You can ";

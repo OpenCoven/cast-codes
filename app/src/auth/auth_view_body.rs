@@ -10,6 +10,7 @@ use crate::{
     settings::{AISettings, PrivacySettings},
     themes::theme::Fill as ThemeFill,
     util::color::{darken, lighten},
+    util::links::PRIVACY_POLICY_URL,
 };
 
 use anyhow::anyhow;
@@ -44,7 +45,7 @@ use super::{
     AuthStateProvider,
 };
 
-const TOS_URL: &str = "https://www.warp.dev/terms-of-service";
+const TOS_URL: &str = PRIVACY_POLICY_URL;
 
 const COMMON_BODY_UI_FONT_SIZE: f32 = 12.;
 const AUTH_MODAL_GAP: f32 = 16.;

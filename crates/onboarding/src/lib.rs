@@ -27,7 +27,7 @@ pub use callout::{OnboardingCalloutView, OnboardingKeybindings};
 /// Shared by the intention slide's agent card checklist and the login slide's
 /// skip-login confirmation dialog so the two always stay in sync.
 pub const AI_FEATURES: &[&str] = &[
-    "CastCodes agents",
+    "Native Coven Code operations",
     "Next command predictions",
     "Prompt suggestions",
     "Codebase context",
@@ -102,7 +102,8 @@ mod copy_tests {
 
     #[test]
     fn intention_copy_is_concrete_and_local_first() {
-        assert!(INTENTION_SLIDE.contains("local coding agents"));
+        assert!(INTENTION_SLIDE.contains("native Coven Code"));
+        assert!(INTENTION_SLIDE.contains("backed by Coven Code"));
         assert!(!INTENTION_SLIDE.contains("best in class"));
         assert!(!INTENTION_SLIDE.contains("agent driven development AI features"));
     }

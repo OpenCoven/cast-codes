@@ -11,6 +11,7 @@ use super::{
 };
 use crate::auth::AuthStateProvider;
 use crate::server::{ids::ApiKeyUid, server_api::auth::AuthClient};
+use crate::util::links::USER_DOCS_URL;
 use crate::util::truncation::truncate_from_end;
 use crate::{
     appearance::Appearance,
@@ -21,7 +22,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use std::collections::HashMap;
-use warp_core::features::FeatureFlag;
+use warp_core::{channel::ChannelState, features::FeatureFlag};
 use warpui::{
     elements::{
         Align, Border, ChildView, ConstrainedBox, Container, CrossAxisAlignment, Element, Empty,
@@ -38,7 +39,7 @@ use warpui::{
 
 const MODAL_WIDTH: f32 = 460.;
 const MODAL_HEIGHT: f32 = 320.;
-const API_KEY_DOCS_URL: &str = "https://docs.warp.dev/reference/cli/api-keys";
+const API_KEY_DOCS_URL: &str = USER_DOCS_URL;
 
 #[derive(Clone, Copy)]
 pub enum PlatformPageViewEvent {
@@ -693,6 +694,10 @@ impl SettingsPageMeta for PlatformPageView {
     }
 
     fn should_render(&self, ctx: &AppContext) -> bool {
+        if !ChannelState::cloud_services_available() {
+            return false;
+        }
+
         let is_anonymous = AuthStateProvider::as_ref(ctx)
             .get()
             .is_anonymous_or_logged_out();

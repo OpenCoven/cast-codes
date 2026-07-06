@@ -19,6 +19,7 @@ use crate::{
     safe_info,
     server::server_api::referral::{ReferralInfo, ReferralsClient},
     ui_components::blended_colors,
+    util::links::{GITHUB_ISSUES_URL, USER_DOCS_URL},
     view_components::ToastFlavor,
 };
 use warpui::{
@@ -94,10 +95,7 @@ const CLAIMED_REFERRAL_COUNT_LEFT_MARGIN: f32 = 40.;
 const CLAIMED_REFERRAL_CLIP: usize = 999;
 
 const TERMS_LINK_TEXT: &str = "Certain restrictions apply.";
-const TERMS_URL: &str =
-    "https://docs.warp.dev/support-and-community/community/refer-a-friend#referral-program-terms-and-conditions";
-const TERMS_CONTACT_TEXT: &str =
-    " If you have any questions about the referral program, please contact referrals@warp.dev.";
+const TERMS_URL: &str = USER_DOCS_URL;
 
 enum ApiState {
     Loading,
@@ -778,7 +776,13 @@ impl ReferralsWidget {
                         FormattedText::new([FormattedTextLine::Line(vec![
                             FormattedTextFragment::plain_text("*"),
                             FormattedTextFragment::hyperlink(TERMS_LINK_TEXT, TERMS_URL),
-                            FormattedTextFragment::plain_text(TERMS_CONTACT_TEXT),
+                            FormattedTextFragment::plain_text(
+                                " If you have any questions about the referral program, ",
+                            ),
+                            FormattedTextFragment::hyperlink(
+                                "open a CastCodes issue.",
+                                GITHUB_ISSUES_URL,
+                            ),
                         ])]),
                         12.,
                         appearance.ui_font_family(),

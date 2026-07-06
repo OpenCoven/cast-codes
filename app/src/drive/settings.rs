@@ -15,9 +15,9 @@ define_settings_group!(WarpDriveSettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "warp_drive.sorting_choice",
-        description: "The sort order for items in Warp Drive.",
+        description: "The sort order for items in Cast Drive.",
     },
-    // Controls whether Warp Drive appears in the tools panel, command palette, and command search.
+    // Controls whether Cast Drive appears in the tools panel, command palette, and command search.
     enable_warp_drive: EnableWarpDrive {
         type: bool,
         default: true,
@@ -25,12 +25,12 @@ define_settings_group!(WarpDriveSettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         private: false,
         toml_path: "warp_drive.enabled",
-        description: "Whether Warp Drive is enabled.",
+        description: "Whether Cast Drive is enabled.",
     },
 ]);
 
 impl WarpDriveSettings {
-    /// Returns whether Warp Drive should be considered enabled.
+    /// Returns whether Cast Drive should be considered enabled.
     /// Returns `false` when the user is anonymous or fully logged out,
     /// regardless of the user setting.
     pub fn is_warp_drive_enabled(app: &warpui::AppContext) -> bool {

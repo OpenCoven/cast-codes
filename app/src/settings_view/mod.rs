@@ -218,6 +218,7 @@ impl Display for SettingsSection {
             SettingsSection::SharedBlocks => write!(f, "Shared blocks"),
             SettingsSection::MCPServers => write!(f, "MCP Servers"),
             SettingsSection::WarpDrive => write!(f, "Cast Drive"),
+            SettingsSection::Warpify => write!(f, "Shell integration"),
             SettingsSection::WarpAgent => write!(f, "Cast Agent"),
             SettingsSection::AgentProfiles => write!(f, "Profiles"),
             SettingsSection::AgentMCPServers => write!(f, "MCP servers"),
@@ -315,7 +316,7 @@ impl FromStr for SettingsSection {
             "Referrals" => Ok(Self::Referrals),
             "Shared blocks" => Ok(Self::SharedBlocks),
             // "Warpify" kept for backward compatibility with persisted user settings.
-            "Castify" | "Warpify" => Ok(Self::Warpify),
+            "Shell integration" | "Castify" | "Warpify" => Ok(Self::Warpify),
             // "Warp Drive" kept for backward compatibility with persisted user settings.
             "Cast Drive" | "WarpDrive" | "Warp Drive" => Ok(Self::WarpDrive),
             // "Warp Agent" kept for backward compatibility with persisted user settings.
