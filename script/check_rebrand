@@ -69,6 +69,16 @@ app_src_paths=(
   app/src/tips/tip_view.rs
 )
 
+existing_scan_paths=()
+for path in "${scan_paths[@]}"; do
+  [[ -e "$path" ]] && existing_scan_paths+=("$path")
+done
+
+existing_app_src_paths=()
+for path in "${app_src_paths[@]}"; do
+  [[ -e "$path" ]] && existing_app_src_paths+=("$path")
+done
+
 patterns=(
   'Warp'
   'warp\.dev'
@@ -85,14 +95,14 @@ trap 'rm -f "$tmp"' EXIT
 
 for pattern in "${patterns[@]}"; do
   rg -n --hidden --glob '!*.png' --glob '!*.ico' --glob '!*.bmp' --glob '!*.icns' \
-    "$pattern" "${scan_paths[@]}" >> "$tmp" || true
+    "$pattern" "${existing_scan_paths[@]}" >> "$tmp" || true
 done
 
 # Scan in-app Rust source for "Warp" appearing inside quoted string literals
 # only. Internal identifiers (types, enum variants, env vars, log keys, file
 # paths) are out of scope by design. Exclude tests.
 rg -n --type rust --glob '!**/*_tests.rs' --glob '!**/tests/**' \
-  '"[^"]*\bWarp\b[^"]*"' "${app_src_paths[@]}" >> "$tmp" || true
+  '"[^"]*\bWarp\b[^"]*"' "${existing_app_src_paths[@]}" >> "$tmp" || true
 
 if [[ ! -s "$tmp" ]]; then
   echo "CastCodes rebrand guard passed."

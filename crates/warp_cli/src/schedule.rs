@@ -32,7 +32,7 @@ impl ScheduleCommand {
         if let Some(create) = self.create {
             ScheduleSubcommand::Create(create)
         } else if let Some(cmd) = self.subcommand {
-            cmd
+            cmd.into_runnable_subcommand()
         } else {
             panic!("Either subcommand or create args are required");
         }
@@ -44,6 +44,8 @@ impl ScheduleCommand {
 pub enum ScheduleSubcommand {
     /// Create a scheduled Oz agent.
     Create(CreateScheduleArgs),
+    /// Create a scheduled agent that turns OpenCoven Feedback into follow-up tasks.
+    Feedback(FeedbackScheduleArgs),
     /// List scheduled Oz agents.
     List,
     /// Get a scheduled Oz agent's configuration.
@@ -61,6 +63,15 @@ pub enum ScheduleSubcommand {
     Unpause(UnpauseScheduleArgs),
     /// Delete a scheduled Oz agent.
     Delete(DeleteScheduleArgs),
+}
+
+impl ScheduleSubcommand {
+    fn into_runnable_subcommand(self) -> Self {
+        match self {
+            ScheduleSubcommand::Feedback(args) => ScheduleSubcommand::Create(args.into_create()),
+            subcommand => subcommand,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Args)]
@@ -126,6 +137,111 @@ pub struct CreateScheduleArgs {
     /// with the self-hosted worker's name.
     #[arg(long = "host", value_name = "WORKER_ID")]
     pub worker_host: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct FeedbackScheduleArgs {
+    /// Cron schedule expression for checking feedback.
+    #[arg(long = "cron")]
+    pub cron: String,
+
+    /// OpenCoven Feedback host or base URL, for example feedback.opencoven.dev.
+    #[arg(long = "feedback-host", value_name = "HOST", value_parser = normalize_feedback_host)]
+    pub feedback_host: String,
+
+    /// Name of the scheduled feedback task.
+    #[arg(long = "name", default_value = "Feedback task triage")]
+    pub name: String,
+
+    /// Product slug to triage.
+    #[arg(long = "product", default_value = "cast-codes")]
+    pub product: String,
+
+    #[command(flatten)]
+    pub model: ModelArgs,
+
+    #[command(flatten)]
+    pub environment: EnvironmentCreateArgs,
+
+    #[command(flatten)]
+    pub config_file: ConfigFileArgs,
+
+    #[command(flatten)]
+    pub scope: ObjectScope,
+
+    /// Additional MCP servers to configure for this feedback task.
+    #[arg(long = "mcp", value_name = "SPEC")]
+    pub mcp_specs: Vec<MCPSpec>,
+
+    /// Where this job should be hosted.
+    #[arg(long = "host", value_name = "WORKER_ID")]
+    pub worker_host: Option<String>,
+}
+
+impl FeedbackScheduleArgs {
+    pub fn into_create(self) -> CreateScheduleArgs {
+        let mut mcp_specs = vec![MCPSpec::Json(feedback_mcp_json(&self.feedback_host))];
+        mcp_specs.extend(self.mcp_specs);
+
+        CreateScheduleArgs {
+            name: self.name,
+            cron: self.cron,
+            model: self.model,
+            environment: self.environment,
+            config_file: self.config_file,
+            scope: self.scope,
+            mcp_specs,
+            prompt: Some(feedback_task_prompt(&self.product, &self.feedback_host)),
+            skill: None,
+            worker_host: self.worker_host,
+        }
+    }
+}
+
+fn normalize_feedback_host(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("feedback host cannot be empty".to_string());
+    }
+
+    let candidate = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    };
+
+    let url = url::Url::parse(&candidate).map_err(|err| format!("invalid feedback host: {err}"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("feedback host must use http or https".to_string());
+    }
+    if url.host_str().is_none() {
+        return Err("feedback host must include a host name".to_string());
+    }
+    if !matches!(url.path(), "" | "/") {
+        return Err("feedback host must not include a path".to_string());
+    }
+
+    let host = url.host_str().unwrap();
+    let authority = match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    };
+    Ok(format!("{}://{authority}", url.scheme()))
+}
+
+fn feedback_mcp_json(base_url: &str) -> String {
+    format!(r#"{{"opencoven-feedback":{{"url":"{base_url}/api/mcp"}}}}"#)
+}
+
+fn feedback_task_prompt(product: &str, base_url: &str) -> String {
+    format!(
+        "Review OpenCoven Feedback for product `{product}` at {base_url}. \
+         Create follow-up implementation tasks for new, high-signal, actionable feedback. \
+         For each task include the public feedback link, concise problem statement, affected area, \
+         priority, reproduction evidence when available, and suggested next step. \
+         Deduplicate against existing tasks when visible. Do not publish, post comments, close feedback, \
+         change integrations, or announce releases without explicit approval."
+    )
 }
 
 #[derive(Debug, Clone, Args)]

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::browser_model::DEFAULT_BROWSER_URL;
+
 /// Search engine choices exposed in `general.default_search_engine`.
 ///
 /// Each variant maps to a URL prefix that is concatenated with the
@@ -83,7 +85,7 @@ pub enum Resolved {
 pub fn resolve_with_engine(raw: &str, engine: SearchEngine) -> Resolved {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Resolved::Url("about:home".to_string());
+        return Resolved::Url(DEFAULT_BROWSER_URL.to_string());
     }
 
     // Defensively reject `javascript:` URLs typed into the address bar.
@@ -173,9 +175,12 @@ mod tests {
     }
 
     #[test]
-    fn empty_input_goes_to_about_home() {
-        assert_eq!(resolve(""), Resolved::Url("about:home".to_string()));
-        assert_eq!(resolve("   "), Resolved::Url("about:home".to_string()));
+    fn empty_input_goes_to_default_browser_url() {
+        assert_eq!(resolve(""), Resolved::Url(DEFAULT_BROWSER_URL.to_string()));
+        assert_eq!(
+            resolve("   "),
+            Resolved::Url(DEFAULT_BROWSER_URL.to_string())
+        );
     }
 
     #[test]

@@ -3,12 +3,22 @@
 # if it takes 2x as long as the slow timeout (i.e.: 60s total).
 slow-timeout = { period = "30s", terminate-after = 2 }
 
+[test-groups]
+settings-file-reload = { max-threads = 1 }
+
 [[profile.default.overrides]]
 filter = 'package(integration)'
 # Integration tests are heavier-weight than unit tests, so have each one
 # count twice against the parallelism limit.  This improves overall runtime
 # of the test suite, despite running fewer integration tests at a time.
 threads-required = 2
+
+[[profile.default.overrides]]
+filter = 'test(test_settings_file_hot_reload_applies_new_values) | test(test_settings_error_banner_on_reload_with_invalid_value) | test(test_settings_error_banner_on_reload_with_invalid_toml)'
+# Settings file reload integration tests are app-heavy and can exceed the
+# default 60s termination threshold under full-suite load.
+test-group = 'settings-file-reload'
+slow-timeout = { period = "45s", terminate-after = 3 }
 
 [profile.ci]
 # Print out output for failing tests as soon as they fail, and also at the end

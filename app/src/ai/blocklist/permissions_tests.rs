@@ -479,7 +479,7 @@ fn test_can_write_files_mcp_config_always_denied() {
 
         let mcp_config_paths = vec![
             PathBuf::from("/project/.mcp.json"),
-            PathBuf::from("/project/.warp/.mcp.json"),
+            PathBuf::from("/project/.cast-codes/.mcp.json"),
             PathBuf::from("/project/.codex/config.toml"),
         ];
 

@@ -18,9 +18,15 @@ foreach ($source in $sources) {
         Path = $source
         ReportSummary = $true
         Recurse = $true
-        Fix = $fix
     }
+    if ($fix) {
+        $scriptAnalyzerParams.Fix = $true
+    }
+    $errorCountBefore = $Error.Count
     $results = Invoke-ScriptAnalyzer @scriptAnalyzerParams
+    if ($Error.Count -gt $errorCountBefore) {
+        throw $Error[0]
+    }
     Write-Output $results
     $errorsAndWarnings = $results | Where-Object { $_.Severity -ge [Microsoft.Windows.PowerShell.ScriptAnalyzer.Generic.DiagnosticSeverity]::Warning }
     $problemCount = ($errorsAndWarnings | Measure-Object).Count

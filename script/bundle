@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Prefer rustup shims when available so rust-toolchain.toml is honored even if
+# another Rust install appears earlier in PATH.
+if [[ -x "$HOME/.cargo/bin/cargo" && -x "$HOME/.cargo/bin/rustc" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 OS_TYPE="$(uname -s)"
 
 if [[ "$OS_TYPE" = "Darwin" ]]; then

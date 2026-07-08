@@ -16,8 +16,6 @@
 //! failure, or a failed write all degrade gracefully to "no history"
 //! — the panel just shows an empty history list and starts fresh.
 
-#![cfg(feature = "cast-agent")]
-
 use std::path::PathBuf;
 
 use super::panel::CovenStreamHistoryEntry;

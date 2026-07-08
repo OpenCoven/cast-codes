@@ -1389,7 +1389,7 @@ pub(crate) fn initialize_app(
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "crash_reporting")] {
-            let is_crash_reporting_enabled = crash_reporting::init(ctx);
+            let _is_crash_reporting_enabled = crash_reporting::init(ctx);
         } else {
             let _is_crash_reporting_enabled = false;
         }

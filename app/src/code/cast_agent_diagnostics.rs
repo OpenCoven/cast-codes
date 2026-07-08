@@ -22,8 +22,6 @@
 //! pattern, so the second call just overwrites the first's entries with
 //! identical content. Idempotent; safe; no deduplication needed.
 
-#![cfg(feature = "cast-agent")]
-
 use std::collections::HashSet;
 
 use lsp::{LanguageServerId, LspEvent, LspManagerModel, LspManagerModelEvent, LspServerModel};
@@ -32,7 +30,7 @@ use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 /// Eagerly instantiate the collector at app startup. Idempotent —
 /// `add_singleton_model` only runs the builder once per type.
 pub fn init(app: &mut AppContext) {
-    app.add_singleton_model(|ctx| CastAgentDiagnosticsCollector::new(ctx));
+    app.add_singleton_model(CastAgentDiagnosticsCollector::new);
 }
 
 #[derive(Default)]
@@ -61,7 +59,7 @@ impl CastAgentDiagnosticsCollector {
         let existing_servers: Vec<ModelHandle<LspServerModel>> = {
             let mgr = lsp_manager.as_ref(ctx);
             mgr.workspace_roots()
-                .filter_map(|root| mgr.servers_for_workspace(root).map(|s| s.clone()))
+                .filter_map(|root| mgr.servers_for_workspace(root).cloned())
                 .flatten()
                 .collect()
         };
@@ -82,7 +80,7 @@ impl CastAgentDiagnosticsCollector {
             let new_servers: Vec<ModelHandle<LspServerModel>> = manager_for_callback
                 .as_ref(ctx)
                 .servers_for_workspace(path)
-                .map(|s| s.clone())
+                .cloned()
                 .unwrap_or_default();
             for server in new_servers {
                 me.subscribe_to_server(server, ctx);

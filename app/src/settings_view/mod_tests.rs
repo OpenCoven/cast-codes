@@ -381,6 +381,16 @@ fn cloud_agent_computer_use_widget_is_cloud_service_only() {
 }
 
 #[test]
+fn cloud_agent_workspace_entrypoints_are_gated_by_channel_services() {
+    assert!(WORKSPACE_VIEW_SOURCE.contains(
+        "is_any_ai_enabled\n            && ChannelState::cloud_services_available()\n            && FeatureFlag::AgentView.is_enabled()\n            && FeatureFlag::CloudMode.is_enabled()"
+    ));
+    assert!(WORKSPACE_VIEW_SOURCE.contains(
+        "if !ChannelState::cloud_services_available()\n            || !FeatureFlag::AgentView.is_enabled()\n            || !FeatureFlag::CloudMode.is_enabled()"
+    ));
+}
+
+#[test]
 fn api_key_inputs_are_available_in_local_only_builds() {
     assert!(ai_page::api_keys_enabled_for_channel(true, true));
     assert!(!ai_page::api_keys_enabled_for_channel(false, true));
@@ -482,6 +492,12 @@ fn editable_binding_blocks_containing<'a>(source: &'a str, pattern: &str) -> Vec
     blocks
 }
 
+fn editable_binding_is_gated_by_channel_services(block: &str) -> bool {
+    block.contains(".with_enabled(ChannelState::cloud_services_available)")
+        || (block.contains(".with_enabled(||")
+            && block.contains("ChannelState::cloud_services_available()"))
+}
+
 #[test]
 fn all_cast_drive_bindings_are_gated_by_channel_services() {
     let blocks = editable_binding_blocks_containing(WORKSPACE_MOD_SOURCE, "ENABLE_WARP_DRIVE");
@@ -492,7 +508,7 @@ fn all_cast_drive_bindings_are_gated_by_channel_services() {
 
     for block in blocks {
         assert!(
-            block.contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            editable_binding_is_gated_by_channel_services(block),
             "Cast Drive binding should be hidden when hosted cloud services are unavailable: {block}"
         );
     }
@@ -501,6 +517,7 @@ fn all_cast_drive_bindings_are_gated_by_channel_services() {
 #[test]
 fn cloud_only_command_palette_bindings_are_gated_by_channel_services() {
     for binding_id in [
+        "NEW_AMBIENT_AGENT_TAB_BINDING_NAME",
         "workspace:show_settings_shared_blocks_page",
         "workspace:show_settings_referrals_page",
         "workspace:show_settings_environments_page",
@@ -508,8 +525,10 @@ fn cloud_only_command_palette_bindings_are_gated_by_channel_services() {
         "workspace:log_out",
     ] {
         assert!(
-            editable_binding_block(WORKSPACE_MOD_SOURCE, binding_id)
-                .contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            editable_binding_is_gated_by_channel_services(editable_binding_block(
+                WORKSPACE_MOD_SOURCE,
+                binding_id
+            )),
             "{binding_id} should be hidden when hosted cloud services are unavailable"
         );
     }
@@ -530,8 +549,10 @@ fn cast_drive_command_palette_bindings_are_gated_by_channel_services() {
         "workspace:export_all_warp_drive_objects",
     ] {
         assert!(
-            editable_binding_block(WORKSPACE_MOD_SOURCE, binding_id)
-                .contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            editable_binding_is_gated_by_channel_services(editable_binding_block(
+                WORKSPACE_MOD_SOURCE,
+                binding_id
+            )),
             "{binding_id} should be hidden when hosted cloud services are unavailable"
         );
     }
@@ -548,8 +569,10 @@ fn cast_drive_auxiliary_bindings_are_gated_by_channel_services() {
         "workspace:import_to_team_drive",
     ] {
         assert!(
-            editable_binding_block(WORKSPACE_MOD_SOURCE, binding_id)
-                .contains(".with_enabled(|| ChannelState::cloud_services_available())"),
+            editable_binding_is_gated_by_channel_services(editable_binding_block(
+                WORKSPACE_MOD_SOURCE,
+                binding_id
+            )),
             "{binding_id} should be hidden when hosted cloud services are unavailable"
         );
     }

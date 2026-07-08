@@ -337,7 +337,7 @@ fn needs_settings_file_migration(ctx: &AppContext) -> bool {
         return false;
     }
 
-    if super::user_preferences_toml_file_path().exists() {
+    if settings_file_exists_for_migration() {
         return false;
     }
 
@@ -347,6 +347,16 @@ fn needs_settings_file_migration(ctx: &AppContext) -> bool {
         .unwrap_or_default()
         .as_deref()
         != Some("true")
+}
+
+#[cfg(test)]
+fn settings_file_exists_for_migration() -> bool {
+    false
+}
+
+#[cfg(not(test))]
+fn settings_file_exists_for_migration() -> bool {
+    super::user_preferences_toml_file_path().exists()
 }
 
 /// Performs a one-time migration of public settings from the platform-native

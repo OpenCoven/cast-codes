@@ -5,9 +5,8 @@ use pathfinder_geometry::{
 
 use crate::{
     elements::{
-        new_scrollable::{util::child_constraint_for_axis, ScrollableAxis},
-        Axis, ClippedScrollStateHandle, ScrollData, ScrollStateHandle, SelectableElement,
-        Vector2FExt,
+        new_scrollable::util::child_constraint_for_axis, Axis, ClippedScrollStateHandle,
+        ScrollData, ScrollStateHandle, SelectableElement, Vector2FExt,
     },
     event::DispatchedEvent,
     units::{IntoPixels, Pixels},
@@ -15,6 +14,8 @@ use crate::{
     SizeConstraint,
 };
 
+#[cfg(debug_assertions)]
+use super::ScrollableAxis;
 use super::{
     util::{scroll_clipped_scrollable_handle_with_delta, scroll_delta_for_axis},
     NewScrollableElement, SingleAxisConfig,

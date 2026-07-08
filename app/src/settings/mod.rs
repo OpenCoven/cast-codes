@@ -594,3 +594,13 @@ pub fn user_preferences_file_path() -> PathBuf {
 pub fn user_preferences_toml_file_path() -> PathBuf {
     warp_core::paths::config_local_dir().join("settings.toml")
 }
+
+#[cfg(feature = "integration_tests")]
+pub fn request_settings_file_reload_for_test(ctx: &mut warpui::AppContext) {
+    use crate::user_config::{WarpConfig, WarpConfigUpdateEvent};
+    use warpui::SingletonEntity;
+
+    WarpConfig::handle(ctx).update(ctx, |_, ctx| {
+        ctx.emit(WarpConfigUpdateEvent::Settings);
+    });
+}

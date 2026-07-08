@@ -5,13 +5,20 @@
 //! or individual setting values are invalid — and that the banner clears
 //! when the file is fixed.
 
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use warp::{
     features::FeatureFlag,
     integration_testing::{
         step::new_step_with_default_assertions,
         terminal::wait_until_bootstrapped_single_pane_for_tab, view_getters::workspace_view,
     },
+    settings::request_settings_file_reload_for_test,
 };
 use warpui::{async_assert, integration::TestStep};
 
@@ -102,6 +109,8 @@ pub fn test_settings_error_banner_on_startup_with_invalid_value() -> Builder {
 /// the banner disappears.
 pub fn test_settings_error_banner_on_reload_with_invalid_toml() -> Builder {
     FeatureFlag::SettingsFile.set_enabled(true);
+    let invalid_reload_requested = Arc::new(AtomicBool::new(false));
+    let fixed_reload_requested = Arc::new(AtomicBool::new(false));
 
     new_builder()
         .with_setup(move |utils| {
@@ -140,9 +149,15 @@ pub fn test_settings_error_banner_on_reload_with_invalid_toml() -> Builder {
                     let path = toml_file_path();
                     std::fs::write(&path, "broken [toml =").expect("should write invalid TOML");
                 })
-                .add_named_assertion(
-                    "Banner should appear after reload with invalid TOML",
-                    |app, window_id| {
+                .add_named_assertion("Banner should appear after reload with invalid TOML", {
+                    let invalid_reload_requested = Arc::clone(&invalid_reload_requested);
+                    move |app, window_id| {
+                        if !invalid_reload_requested.swap(true, Ordering::SeqCst) {
+                            app.update(|ctx| {
+                                request_settings_file_reload_for_test(ctx);
+                            });
+                        }
+
                         let workspace = workspace_view(app, window_id);
                         workspace.read(app, |view, _| {
                             async_assert!(
@@ -150,8 +165,8 @@ pub fn test_settings_error_banner_on_reload_with_invalid_toml() -> Builder {
                                 "Workspace should show settings error banner after reload"
                             )
                         })
-                    },
-                ),
+                    }
+                }),
         )
         // Step 3: Fix the file — banner should disappear.
         .with_step(
@@ -161,9 +176,15 @@ pub fn test_settings_error_banner_on_reload_with_invalid_toml() -> Builder {
                     let path = toml_file_path();
                     std::fs::write(&path, "# valid empty TOML\n").expect("should write valid TOML");
                 })
-                .add_named_assertion(
-                    "Banner should disappear after file is fixed",
-                    |app, window_id| {
+                .add_named_assertion("Banner should disappear after file is fixed", {
+                    let fixed_reload_requested = Arc::clone(&fixed_reload_requested);
+                    move |app, window_id| {
+                        if !fixed_reload_requested.swap(true, Ordering::SeqCst) {
+                            app.update(|ctx| {
+                                request_settings_file_reload_for_test(ctx);
+                            });
+                        }
+
                         let workspace = workspace_view(app, window_id);
                         workspace.read(app, |view, _| {
                             async_assert!(
@@ -171,8 +192,8 @@ pub fn test_settings_error_banner_on_reload_with_invalid_toml() -> Builder {
                                 "Banner should clear when settings file is fixed"
                             )
                         })
-                    },
-                ),
+                    }
+                }),
         )
 }
 
@@ -184,6 +205,7 @@ pub fn test_settings_error_banner_on_reload_with_invalid_toml() -> Builder {
 /// file change, the settings error banner appears.
 pub fn test_settings_error_banner_on_reload_with_invalid_value() -> Builder {
     FeatureFlag::SettingsFile.set_enabled(true);
+    let invalid_reload_requested = Arc::new(AtomicBool::new(false));
 
     new_builder()
         .with_setup(move |utils| {
@@ -222,9 +244,15 @@ pub fn test_settings_error_banner_on_reload_with_invalid_value() -> Builder {
                     std::fs::write(&path, "[appearance.text]\nfont_size = \"not_a_number\"\n")
                         .expect("should write invalid value");
                 })
-                .add_named_assertion(
-                    "Banner should appear for invalid value",
-                    |app, window_id| {
+                .add_named_assertion("Banner should appear for invalid value", {
+                    let invalid_reload_requested = Arc::clone(&invalid_reload_requested);
+                    move |app, window_id| {
+                        if !invalid_reload_requested.swap(true, Ordering::SeqCst) {
+                            app.update(|ctx| {
+                                request_settings_file_reload_for_test(ctx);
+                            });
+                        }
+
                         let workspace = workspace_view(app, window_id);
                         workspace.read(app, |view, _| {
                             async_assert!(
@@ -232,7 +260,7 @@ pub fn test_settings_error_banner_on_reload_with_invalid_value() -> Builder {
                                 "Workspace should show error banner for invalid setting value"
                             )
                         })
-                    },
-                ),
+                    }
+                }),
         )
 }

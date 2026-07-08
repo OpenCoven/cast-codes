@@ -1142,6 +1142,81 @@ fn schedule_create_accepts_mcp_json() {
 }
 
 #[test]
+fn schedule_feedback_creates_feedback_task_schedule() {
+    let args = Args::try_parse_from([
+        "warp",
+        "schedule",
+        "feedback",
+        "--cron",
+        "0 9 * * *",
+        "--feedback-host",
+        "feedback.opencoven.dev",
+    ])
+    .unwrap();
+
+    let Some(Command::CommandLine(boxed_cmd)) = args.command else {
+        panic!("Expected `warp schedule feedback` command");
+    };
+    let CliCommand::Schedule(schedule_cmd) = boxed_cmd.as_ref() else {
+        panic!("Expected `warp schedule feedback` command");
+    };
+
+    let ScheduleSubcommand::Create(create_args) = schedule_cmd.clone().into_subcommand() else {
+        panic!("Expected `warp schedule feedback` to create a schedule");
+    };
+
+    assert_eq!(create_args.name, "Feedback task triage");
+    assert_eq!(create_args.cron, "0 9 * * *");
+    assert!(create_args.prompt.as_deref().is_some_and(|prompt| {
+        prompt.contains("at https://feedback.opencoven.dev")
+            && prompt.contains("Create follow-up implementation tasks")
+    }));
+    assert!(matches!(
+        create_args.mcp_specs.as_slice(),
+        [crate::mcp::MCPSpec::Json(parsed_json)]
+            if parsed_json.contains(r#""opencoven-feedback""#)
+                && parsed_json.contains(r#""https://feedback.opencoven.dev/api/mcp""#)
+    ));
+}
+
+#[test]
+fn schedule_feedback_preserves_explicit_http_feedback_host() {
+    let args = Args::try_parse_from([
+        "warp",
+        "schedule",
+        "feedback",
+        "--cron",
+        "*/15 * * * *",
+        "--feedback-host",
+        "http://localhost:8787/",
+    ])
+    .unwrap();
+
+    let Some(Command::CommandLine(boxed_cmd)) = args.command else {
+        panic!("Expected `warp schedule feedback` command");
+    };
+    let CliCommand::Schedule(schedule_cmd) = boxed_cmd.as_ref() else {
+        panic!("Expected `warp schedule feedback` command");
+    };
+
+    let ScheduleSubcommand::Create(create_args) = schedule_cmd.clone().into_subcommand() else {
+        panic!("Expected `warp schedule feedback` to create a schedule");
+    };
+
+    assert!(
+        create_args
+            .prompt
+            .as_deref()
+            .is_some_and(|prompt| prompt.contains("at http://localhost:8787"))
+    );
+    assert!(matches!(
+        create_args.mcp_specs.as_slice(),
+        [crate::mcp::MCPSpec::Json(parsed_json)]
+            if parsed_json.contains(r#""http://localhost:8787/api/mcp""#)
+    ));
+}
+
+#[test]
 fn schedule_create_accepts_team_scope() {
     let args = Args::try_parse_from([
         "warp",

@@ -6040,6 +6040,7 @@ impl Workspace {
 
         // 3. Agent handoff mode (if flags enabled)
         if is_any_ai_enabled
+            && ChannelState::cloud_services_available()
             && FeatureFlag::AgentView.is_enabled()
             && FeatureFlag::CloudMode.is_enabled()
         {
@@ -10443,7 +10444,10 @@ impl Workspace {
     }
 
     fn add_ambient_agent_tab(&mut self, ctx: &mut ViewContext<Self>) {
-        if !FeatureFlag::AgentView.is_enabled() || !FeatureFlag::CloudMode.is_enabled() {
+        if !ChannelState::cloud_services_available()
+            || !FeatureFlag::AgentView.is_enabled()
+            || !FeatureFlag::CloudMode.is_enabled()
+        {
             return;
         }
 

@@ -31,6 +31,7 @@ pub fn run(
     let output_format = global_options.output_format;
     match command.into_subcommand() {
         ScheduleSubcommand::Create(args) => create(ctx, args),
+        ScheduleSubcommand::Feedback(args) => create(ctx, args.into_create()),
         ScheduleSubcommand::List => list(ctx, output_format),
         ScheduleSubcommand::Get(args) => get(ctx, output_format, args),
         ScheduleSubcommand::Pause(args) => pause(ctx, args),

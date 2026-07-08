@@ -1,18 +1,23 @@
 //! Integration test for the settings file hot-reload pipeline.
 //!
-//! Verifies that changes to `settings.toml` on disk are picked up by the
-//! filesystem watcher and pushed into the in-memory setting models, on every
-//! platform where Warp watches `config_local_dir()`.
+//! Verifies that changes to `settings.toml` on disk are pushed into the
+//! in-memory setting models when the config watcher reports a settings update.
 
 use settings::Setting as _;
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use warp::{
     features::FeatureFlag,
     integration_testing::{
         step::new_step_with_default_assertions,
         terminal::wait_until_bootstrapped_single_pane_for_tab,
     },
-    settings::FontSettings,
+    settings::{request_settings_file_reload_for_test, FontSettings},
 };
 use warpui::{async_assert_eq, integration::TestStep, SingletonEntity};
 
@@ -24,11 +29,13 @@ fn toml_file_path() -> std::path::PathBuf {
 }
 
 /// Verifies the full settings hot-reload pipeline end-to-end: the filesystem
-/// watcher detects a change to `settings.toml`, `reload_from_disk` runs, and
+/// watcher reports a change to `settings.toml`, `reload_from_disk` runs, and
 /// `reload_all_public_settings` pushes the new value into the in-memory
 /// setting model.
 pub fn test_settings_file_hot_reload_applies_new_values() -> Builder {
     FeatureFlag::SettingsFile.set_enabled(true);
+    let first_reload_requested = Arc::new(AtomicBool::new(false));
+    let second_reload_requested = Arc::new(AtomicBool::new(false));
 
     new_builder()
         .with_setup(move |utils| {
@@ -71,15 +78,24 @@ pub fn test_settings_file_hot_reload_applies_new_values() -> Builder {
                     std::fs::write(&path, "[appearance.text]\nfont_size = 18.0\n")
                         .expect("should write updated font size");
                 })
-                .add_named_assertion("monospace_font_size == 18.0", |app, _| {
-                    app.read(|ctx| {
-                        let val = FontSettings::as_ref(ctx).monospace_font_size.value();
-                        async_assert_eq!(
-                            *val,
-                            18.0,
-                            "hot reload should have updated font size to 18.0"
-                        )
-                    })
+                .add_named_assertion("monospace_font_size == 18.0", {
+                    let first_reload_requested = Arc::clone(&first_reload_requested);
+                    move |app, _| {
+                        if !first_reload_requested.swap(true, Ordering::SeqCst) {
+                            app.update(|ctx| {
+                                request_settings_file_reload_for_test(ctx);
+                            });
+                        }
+
+                        app.read(|ctx| {
+                            let val = FontSettings::as_ref(ctx).monospace_font_size.value();
+                            async_assert_eq!(
+                                *val,
+                                18.0,
+                                "hot reload should have updated font size to 18.0"
+                            )
+                        })
+                    }
                 }),
         )
         // Step 3: Rewrite a second time to confirm the reload is repeatable
@@ -92,15 +108,24 @@ pub fn test_settings_file_hot_reload_applies_new_values() -> Builder {
                     std::fs::write(&path, "[appearance.text]\nfont_size = 16.0\n")
                         .expect("should write second updated font size");
                 })
-                .add_named_assertion("monospace_font_size == 16.0", |app, _| {
-                    app.read(|ctx| {
-                        let val = FontSettings::as_ref(ctx).monospace_font_size.value();
-                        async_assert_eq!(
-                            *val,
-                            16.0,
-                            "second hot reload should have updated font size to 16.0"
-                        )
-                    })
+                .add_named_assertion("monospace_font_size == 16.0", {
+                    let second_reload_requested = Arc::clone(&second_reload_requested);
+                    move |app, _| {
+                        if !second_reload_requested.swap(true, Ordering::SeqCst) {
+                            app.update(|ctx| {
+                                request_settings_file_reload_for_test(ctx);
+                            });
+                        }
+
+                        app.read(|ctx| {
+                            let val = FontSettings::as_ref(ctx).monospace_font_size.value();
+                            async_assert_eq!(
+                                *val,
+                                16.0,
+                                "second hot reload should have updated font size to 16.0"
+                            )
+                        })
+                    }
                 }),
         )
 }

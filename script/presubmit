@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Prefer rustup shims when available so rust-toolchain.toml is honored even if
+# another Rust install appears earlier in PATH.
+if [[ -x "$HOME/.cargo/bin/cargo" && -x "$HOME/.cargo/bin/rustc" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 # Script to run presubmit checks. Devs can run this script locally before sending out PRs for review to ensure
 # CI is passing for their PR.
 
@@ -29,7 +35,14 @@ cargo clippy -p warp_completer --all-targets --tests -- -D warnings
 echo "clippy succeeded..."
 
 echo "Running clang-format..."
-./script/run-clang-format.py -r --extensions 'c,h,cpp,m' ./crates/warpui/src/ ./app/src/
+CLANG_FORMAT_EXECUTABLE="${CLANG_FORMAT_EXECUTABLE:-clang-format}"
+if ! command -v "$CLANG_FORMAT_EXECUTABLE" >/dev/null 2>&1; then
+    XCRUN_CLANG_FORMAT="$(xcrun -find clang-format 2>/dev/null || true)"
+    if [[ -n "$XCRUN_CLANG_FORMAT" ]]; then
+        CLANG_FORMAT_EXECUTABLE="$XCRUN_CLANG_FORMAT"
+    fi
+fi
+./script/run-clang-format.py -r --extensions 'c,h,cpp,m' --clang-format-executable "$CLANG_FORMAT_EXECUTABLE" ./crates/warpui/src/ ./app/src/
 echo "clang-format succeeded..."
 
 echo "Running wgslfmt..."
@@ -39,7 +52,7 @@ find . -name "*.wgsl" -exec wgslfmt --check {} +
 echo "wgslfmt succeeded..."
 
 # check to see if we can run powershell on the device
-if command -v pwsh /dev/null 2>&1; then
+if command -v pwsh >/dev/null 2>&1; then
     echo "Running PSScriptAnalyzer..."
     ./script/lint_powershell -ci
     echo "PsScriptAnalyzer succeeded..."
