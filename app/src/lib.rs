@@ -2029,9 +2029,7 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
                 manager.close_notebooks(ctx);
             });
 
-            PersistenceWriter::handle(ctx).update(ctx, |writer, _ctx| {
-                writer.terminate();
-            });
+            workspace::run_shutdown_persistence(ctx);
 
             // Shutdown all LSP servers gracefully before app termination
             lsp::LspManagerModel::handle(ctx).update(ctx, |manager, ctx| {

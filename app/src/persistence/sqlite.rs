@@ -783,6 +783,36 @@ fn deduplicate_events(events: Vec<ModelEvent>) -> Vec<ModelEvent> {
     }
 }
 
+/// Deletes every persisted app-state row (windows, tabs, panes, panels, etc.).
+///
+/// Used by `save_app_state` before inserting a fresh snapshot, and by
+/// integration-test helpers that need to reset the persisted session.
+pub(super) fn delete_app_state(conn: &mut SqliteConnection) -> Result<(), Error> {
+    diesel::delete(schema::app::dsl::app).execute(conn)?;
+    diesel::delete(schema::terminal_panes::dsl::terminal_panes).execute(conn)?;
+    diesel::delete(schema::notebook_panes::dsl::notebook_panes).execute(conn)?;
+    diesel::delete(schema::code_panes::dsl::code_panes).execute(conn)?;
+    diesel::delete(schema::env_var_collection_panes::dsl::env_var_collection_panes)
+        .execute(conn)?;
+    diesel::delete(schema::workflow_panes::dsl::workflow_panes).execute(conn)?;
+    diesel::delete(schema::settings_panes::dsl::settings_panes).execute(conn)?;
+    diesel::delete(schema::ai_memory_panes::dsl::ai_memory_panes).execute(conn)?;
+    diesel::delete(schema::ai_document_panes::dsl::ai_document_panes).execute(conn)?;
+    diesel::delete(schema::mcp_server_panes::dsl::mcp_server_panes).execute(conn)?;
+    diesel::delete(schema::code_review_panes::dsl::code_review_panes).execute(conn)?;
+    diesel::delete(schema::ambient_agent_panes::dsl::ambient_agent_panes).execute(conn)?;
+    diesel::delete(schema::welcome_panes::dsl::welcome_panes).execute(conn)?;
+    diesel::delete(schema::browser_panes::dsl::browser_panes).execute(conn)?;
+    diesel::delete(schema::pane_leaves::dsl::pane_leaves).execute(conn)?;
+    diesel::delete(schema::pane_branches::dsl::pane_branches).execute(conn)?;
+    diesel::delete(schema::pane_nodes::dsl::pane_nodes).execute(conn)?;
+    diesel::delete(schema::tabs::dsl::tabs).execute(conn)?;
+    diesel::delete(schema::windows::dsl::windows).execute(conn)?;
+    diesel::delete(schema::active_mcp_servers::dsl::active_mcp_servers).execute(conn)?;
+    diesel::delete(schema::panels::dsl::panels).execute(conn)?;
+    Ok(())
+}
+
 // Used in the save_app_state function to help make the code more readable.
 struct SaveAppStateNodeTraversal<'a> {
     node: &'a PaneNodeSnapshot,
@@ -795,28 +825,7 @@ struct SaveAppStateNodeTraversal<'a> {
 fn save_app_state(conn: &mut SqliteConnection, app_state: &AppState) -> Result<()> {
     conn.transaction::<(), Error, _>(|conn| {
         // Remove old app state
-        diesel::delete(schema::app::dsl::app).execute(conn)?;
-        diesel::delete(schema::terminal_panes::dsl::terminal_panes).execute(conn)?;
-        diesel::delete(schema::notebook_panes::dsl::notebook_panes).execute(conn)?;
-        diesel::delete(schema::code_panes::dsl::code_panes).execute(conn)?;
-        diesel::delete(schema::env_var_collection_panes::dsl::env_var_collection_panes)
-            .execute(conn)?;
-        diesel::delete(schema::workflow_panes::dsl::workflow_panes).execute(conn)?;
-        diesel::delete(schema::settings_panes::dsl::settings_panes).execute(conn)?;
-        diesel::delete(schema::ai_memory_panes::dsl::ai_memory_panes).execute(conn)?;
-        diesel::delete(schema::ai_document_panes::dsl::ai_document_panes).execute(conn)?;
-        diesel::delete(schema::mcp_server_panes::dsl::mcp_server_panes).execute(conn)?;
-        diesel::delete(schema::code_review_panes::dsl::code_review_panes).execute(conn)?;
-        diesel::delete(schema::ambient_agent_panes::dsl::ambient_agent_panes).execute(conn)?;
-        diesel::delete(schema::welcome_panes::dsl::welcome_panes).execute(conn)?;
-        diesel::delete(schema::browser_panes::dsl::browser_panes).execute(conn)?;
-        diesel::delete(schema::pane_leaves::dsl::pane_leaves).execute(conn)?;
-        diesel::delete(schema::pane_branches::dsl::pane_branches).execute(conn)?;
-        diesel::delete(schema::pane_nodes::dsl::pane_nodes).execute(conn)?;
-        diesel::delete(schema::tabs::dsl::tabs).execute(conn)?;
-        diesel::delete(schema::windows::dsl::windows).execute(conn)?;
-        diesel::delete(schema::active_mcp_servers::dsl::active_mcp_servers).execute(conn)?;
-        diesel::delete(schema::panels::dsl::panels).execute(conn)?;
+        delete_app_state(conn)?;
 
         let mut active_window_id = None;
 
