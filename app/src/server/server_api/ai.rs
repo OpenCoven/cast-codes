@@ -2452,6 +2452,9 @@ impl From<warp_graphql::queries::get_feature_model_choices::LlmProvider> for LLM
             warp_graphql::queries::get_feature_model_choices::LlmProvider::Anthropic => {
                 LLMProvider::Anthropic
             }
+            warp_graphql::queries::get_feature_model_choices::LlmProvider::GithubCopilot => {
+                LLMProvider::GithubCopilot
+            }
             warp_graphql::queries::get_feature_model_choices::LlmProvider::Google => {
                 LLMProvider::Google
             }
@@ -2474,6 +2477,7 @@ impl From<warp_graphql::workspace::LlmProvider> for LLMProvider {
         match value {
             warp_graphql::workspace::LlmProvider::Openai => LLMProvider::OpenAI,
             warp_graphql::workspace::LlmProvider::Anthropic => LLMProvider::Anthropic,
+            warp_graphql::workspace::LlmProvider::GithubCopilot => LLMProvider::GithubCopilot,
             warp_graphql::workspace::LlmProvider::Google => LLMProvider::Google,
             warp_graphql::workspace::LlmProvider::Xai => LLMProvider::Xai,
             warp_graphql::workspace::LlmProvider::Unknown => LLMProvider::Unknown,

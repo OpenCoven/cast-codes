@@ -1931,6 +1931,7 @@ type LlmPricing {
 
 enum LlmProvider {
   ANTHROPIC
+  GITHUB_COPILOT
   GOOGLE
   OPENAI
   UNKNOWN

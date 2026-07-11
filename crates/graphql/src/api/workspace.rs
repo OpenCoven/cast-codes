@@ -77,6 +77,7 @@ pub struct LlmPricing {
 pub enum LlmProvider {
     Openai,
     Anthropic,
+    GithubCopilot,
     Google,
     Xai,
     Unknown,
