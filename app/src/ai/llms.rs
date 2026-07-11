@@ -36,6 +36,7 @@ pub fn is_using_api_key_for_provider(provider: &LLMProvider, app: &AppContext) -
     match provider {
         LLMProvider::OpenAI => api_keys.is_some_and(|keys| keys.openai.is_some()),
         LLMProvider::Anthropic => api_keys.is_some_and(|keys| keys.anthropic.is_some()),
+        LLMProvider::GithubCopilot => api_keys.is_some_and(|keys| keys.github_copilot.is_some()),
         LLMProvider::Google => api_keys.is_some_and(|keys| keys.google.is_some()),
         _ => false,
     }
@@ -121,6 +122,7 @@ pub struct LLMSpec {
 pub enum LLMProvider {
     OpenAI,
     Anthropic,
+    GithubCopilot,
     Google,
     Xai,
     Unknown,
@@ -132,6 +134,7 @@ impl LLMProvider {
         match self {
             LLMProvider::OpenAI => Some(Icon::OpenAILogo),
             LLMProvider::Anthropic => Some(Icon::ClaudeLogo),
+            LLMProvider::GithubCopilot => Some(Icon::CopilotLogo),
             LLMProvider::Google => Some(Icon::GeminiLogo),
             LLMProvider::Xai => None,
             LLMProvider::Unknown => None,
