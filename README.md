@@ -14,7 +14,7 @@ This repository is still a staged external rebrand. Internal Rust crate/module n
 - Public URL scheme: `castcodes://`
 - Local terminal and code workflows are in scope.
 - Coven-powered agent sessions are the core product direction.
-- Cast Agent is the CastCodes integration layer for Coven runtime data and agent panel behavior.
+- Familiar is the CastCodes agent — the integration layer for Coven runtime data and agent panel behavior.
 
 The public CastCodes build is local-only by default. It does not include sign-in, hosted telemetry, hosted crash reporting, billing, shared sessions, upstream release feeds, or upstream feedback flows. Feedback links route to this fork's GitHub issue tracker.
 

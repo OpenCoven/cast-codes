@@ -262,7 +262,7 @@ fn match_data_countable_zero_is_not_truthy() {
 
 #[test]
 fn subpage_display_names_are_correct() {
-    assert_eq!(SettingsSection::WarpAgent.to_string(), "Cast Agent");
+    assert_eq!(SettingsSection::WarpAgent.to_string(), "Familiar");
     assert_eq!(SettingsSection::AgentProfiles.to_string(), "Profiles");
     assert_eq!(SettingsSection::AgentMCPServers.to_string(), "MCP servers");
     assert_eq!(SettingsSection::Knowledge.to_string(), "Knowledge");
@@ -915,10 +915,18 @@ fn settings_sources_do_not_link_to_warp_owned_support_surfaces() {
 
 #[test]
 fn subpage_from_str_parses_display_names() {
-    // The legacy "Warp Agent" name plus the new "Cast Agent" display name must
-    // resolve to SettingsSection::WarpAgent so existing deep links, persisted
-    // telemetry strings, and external callers continue to work after the
-    // user-facing rename (see specs/GH1063/product.md, Behavior #8).
+    // The legacy "Warp Agent"/"Cast Agent" names plus the new "Familiar" display
+    // name must resolve to SettingsSection::WarpAgent so existing deep links,
+    // persisted telemetry strings, and external callers continue to work after
+    // the user-facing rename (see specs/GH1063/product.md, Behavior #8).
+    assert_eq!(
+        SettingsSection::from_str("Familiar"),
+        Ok(SettingsSection::WarpAgent)
+    );
+    assert_eq!(
+        SettingsSection::from_str("Cast Agent"),
+        Ok(SettingsSection::WarpAgent)
+    );
     assert_eq!(
         SettingsSection::from_str("Warp Agent"),
         Ok(SettingsSection::WarpAgent)

@@ -219,7 +219,7 @@ impl Display for SettingsSection {
             SettingsSection::MCPServers => write!(f, "MCP Servers"),
             SettingsSection::WarpDrive => write!(f, "Cast Drive"),
             SettingsSection::Warpify => write!(f, "Shell integration"),
-            SettingsSection::WarpAgent => write!(f, "Cast Agent"),
+            SettingsSection::WarpAgent => write!(f, "Familiar"),
             SettingsSection::AgentProfiles => write!(f, "Profiles"),
             SettingsSection::AgentMCPServers => write!(f, "MCP servers"),
             SettingsSection::Knowledge => write!(f, "Knowledge"),
@@ -326,8 +326,8 @@ impl FromStr for SettingsSection {
             "Shell integration" | "Castify" | "Warpify" => Ok(Self::Warpify),
             // "Warp Drive" kept for backward compatibility with persisted user settings.
             "Cast Drive" | "WarpDrive" | "Warp Drive" => Ok(Self::WarpDrive),
-            // "Warp Agent" kept for backward compatibility with persisted user settings.
-            "Cast Agent" | "Warp Agent" => Ok(Self::WarpAgent),
+            // "Cast Agent"/"Warp Agent" kept for backward compatibility with persisted user settings.
+            "Familiar" | "Cast Agent" | "Warp Agent" => Ok(Self::WarpAgent),
             "Profiles" | "AgentProfiles" => Ok(Self::AgentProfiles),
             "MCP servers" | "AgentMCPServers" => Ok(Self::AgentMCPServers),
             "Knowledge" => Ok(Self::Knowledge),

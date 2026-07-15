@@ -115,7 +115,7 @@ impl CastAgentRuntime {
         self.agent.sessions_snapshot()
     }
 
-    /// Display name ("Cast Agent").
+    /// Display name ("Familiar").
     pub fn agent_name(&self) -> &'static str {
         self.agent.agent_name()
     }

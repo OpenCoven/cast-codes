@@ -64,8 +64,22 @@ dependencies were added.
   updated to `"Cast Drive"`.
 - Existing `app/src/settings_view/mod.rs:339-341` aliases
   (`"Cast Drive" | "WarpDrive" | "Warp Drive"`,
-  `"Cast Agent" | "Warp Agent"`) preserve back-compat with persisted user
-  settings per [`CASTCODES.md`](CASTCODES.md) naming rules.
+  `"Familiar" | "Cast Agent" | "Warp Agent"`) preserve back-compat with
+  persisted user settings per [`CASTCODES.md`](CASTCODES.md) naming rules.
+
+### Familiar agent rename
+
+- The user-visible integrated agent is renamed from **"Cast Agent"** to
+  **"Familiar"** across all display strings: the `AgentBackend::agent_name()`
+  return value, `AI_ASSISTANT_FEATURE_NAME`/`ASK_AI_ASSISTANT_TEXT`, the agent
+  panel labels and transcript headers, the `SettingsSection::WarpAgent` display
+  name, AI settings/MCP copy, command-search items, and the onboarding agent
+  slide. Internal identifiers (`cast_agent` crate, `CastAgent`, the
+  `SettingsSection::WarpAgent` variant) are unchanged per the staged-rebrand
+  policy.
+- `SettingsSection::from_str` now accepts `"Familiar"` in addition to the
+  retained `"Cast Agent"`/`"Warp Agent"` back-compat aliases, so persisted
+  settings and deep links keep resolving after the rename.
 
 ### Design tokens (shadcn-style)
 

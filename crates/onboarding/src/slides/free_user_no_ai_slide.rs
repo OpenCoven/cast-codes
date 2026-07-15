@@ -120,7 +120,7 @@ impl FreeUserNoAiSlide {
             0,
             Icon::Code2,
             "Agent development with the built-in CastCodes agent",
-            "Iterate, plan, and build with Cast Agent inside CastCodes.",
+            "Iterate, plan, and build with your Familiar inside CastCodes.",
             agent_price_badge.to_string(),
             true, // badge is green
             self.agent_mouse_state.clone(),

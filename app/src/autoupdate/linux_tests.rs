@@ -20,7 +20,7 @@ fn oss_pacman_update_command_does_not_configure_warp_infrastructure() {
         is_repo_configured: false,
         is_signing_key_configured: false,
     }
-    .update_command(&ShellType::Bash, "update_id");
+    .update_command(ShellType::Bash, "update_id");
 
     assert!(command.contains("sudo pacman -Sy cast-codes"));
     assert!(!command.contains("releases.warp.dev"));

@@ -66,7 +66,7 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
     assert!(WORKSPACE_VIEW_SOURCE.contains("links::USER_DOCS_URL.to_string()"));
     assert!(NOTEBOOK_EDITOR_VIEW_SOURCE.contains("\"Open in CastCodes\""));
     assert!(WORKFLOW_VIEW_SOURCE.contains("Run in CastCodes"));
-    assert!(WORKFLOW_VIEW_SOURCE.contains("Cast Agent"));
+    assert!(WORKFLOW_VIEW_SOURCE.contains("Familiar"));
     assert!(WORKFLOW_CATEGORIES_SOURCE.contains("crate::util::links::USER_DOCS_URL"));
     assert!(REWARD_VIEW_SOURCE.contains("exclusive CastCodes theme"));
     assert!(AI_AGENT_TIPS_SOURCE.contains("USER_DOCS_URL"));
@@ -76,7 +76,7 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
     assert!(DRIVE_INDEX_SOURCE.contains("Syncing Cast Drive"));
     assert!(DRIVE_INDEX_SOURCE.contains("CastCodes issue"));
     assert!(DRIVE_INDEX_SOURCE.contains("teammates already on CastCodes"));
-    assert!(DRIVE_WORKFLOWS_MODAL_SOURCE.contains("with Cast Agent"));
+    assert!(DRIVE_WORKFLOWS_MODAL_SOURCE.contains("with your Familiar"));
     assert!(DRIVE_SETTINGS_SOURCE.contains("Cast Drive"));
     assert!(DRIVE_MOD_SOURCE.contains("Sort order for Cast Drive items."));
     assert!(LINUX_AUTOUPDATE_SOURCE.contains("Channel::Oss => warp_core::brand::PRODUCT_SLUG"));
@@ -85,8 +85,8 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
     assert!(LINUX_AUTOUPDATE_SOURCE.contains("Relaunching CastCodes for update"));
     assert!(LINUX_AUTOUPDATE_SOURCE.contains("fn pacman_repo_config_command"));
     assert!(LINUX_AUTOUPDATE_SOURCE.contains("fn pacman_signing_key_command"));
-    assert!(COMMAND_SEARCH_WARP_AI_SOURCE.contains("Cast Agent"));
-    assert!(COMMAND_SEARCH_SEARCHER_SOURCE.contains("using Cast Agent"));
+    assert!(COMMAND_SEARCH_WARP_AI_SOURCE.contains("Familiar"));
+    assert!(COMMAND_SEARCH_SEARCHER_SOURCE.contains("using the Familiar"));
     assert!(AI_BLOCK_SOURCE.contains("GITHUB_ISSUES_URL"));
     assert!(CLI_BLOCK_SOURCE.contains("GITHUB_ISSUES_URL"));
     assert!(AI_TELEMETRY_BANNER_SOURCE.contains("PRIVACY_POLICY_URL"));
