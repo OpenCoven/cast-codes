@@ -106,9 +106,10 @@ impl CastAgentConfig {
         dirs::home_dir().map(|h| h.join(".coven").join("token"))
     }
 
-    /// Default Unix-socket location used by the OpenCoven daemon.
-    /// Returned for callers that want to opt in (e.g. set `COVEN_SOCKET`
-    /// programmatically) — `load()` does NOT auto-detect.
+    /// Default Unix-socket location used by the OpenCoven daemon
+    /// (`~/.coven/coven.sock`). `load()` auto-detects this path when it
+    /// exists and no explicit transport was configured; callers can also
+    /// use it directly to opt in (e.g. set `COVEN_SOCKET`).
     pub fn default_socket_path() -> Option<PathBuf> {
         dirs::home_dir().map(|h| h.join(".coven").join("coven.sock"))
     }
@@ -179,7 +180,11 @@ mod tests {
         // Even when a TCP gateway was chosen and a socket was detected,
         // the explicit socket takes precedence.
         assert_eq!(
-            resolve_socket_path(Some(p("/tmp/x.sock")), true, Some(p("/home/.coven/coven.sock"))),
+            resolve_socket_path(
+                Some(p("/tmp/x.sock")),
+                true,
+                Some(p("/home/.coven/coven.sock"))
+            ),
             Some(p("/tmp/x.sock"))
         );
     }
