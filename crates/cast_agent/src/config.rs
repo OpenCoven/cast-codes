@@ -5,12 +5,16 @@
 //! 4. Defaults: TCP `http://localhost:3999` (the CastCodes ↔ Coven daemon
 //!    gateway bridge), no socket, no token.
 //!
-//! Transport selection: if `socket_path` is `Some(_)` after resolution
-//! (env or file — there is no auto-detect; choosing Unix transport must
-//! be explicit), the gateway uses the Unix transport and talks
-//! `/api/v1/*` directly to the daemon. Otherwise it uses TCP and talks
-//! `/v1/*` to `gateway_url` — by default the local bridge at
-//! `127.0.0.1:3999` (see `~/.coven/castcodes-gateway-bridge.mjs`).
+//! Transport selection: if `socket_path` is `Some(_)` after resolution,
+//! the gateway uses the Unix transport and talks `/api/v1/*` directly to
+//! the daemon. `socket_path` is resolved from `COVEN_SOCKET` (env), the
+//! `socket_path` config key (file), and finally auto-detection of the
+//! daemon's default socket (`~/.coven/coven.sock`) when it exists on disk
+//! and no explicit TCP `gateway_url` was chosen. Auto-detect makes
+//! coven-code native-by-default; set `COVEN_GATEWAY_URL` to force the TCP
+//! bridge instead. Otherwise it uses TCP and talks `/v1/*` to
+//! `gateway_url` — by default the local bridge at `127.0.0.1:3999`
+//! (see `~/.coven/castcodes-gateway-bridge.mjs`).
 //!
 //! Why TCP-by-default with the bridge in front: the bridge speaks plain
 //! HTTP, so it works from any local consumer (CastCodes desktop, future
@@ -52,12 +56,16 @@ impl CastAgentConfig {
         let mut cfg = Self::default();
         let file_cfg = Self::load_file().unwrap_or_default();
 
-        // 1. Gateway URL — env > file > default.
-        cfg.gateway_url = std::env::var("COVEN_GATEWAY_URL")
+        // 1. Gateway URL — env > file > default. Track whether the caller
+        //    explicitly pointed us at a TCP gateway: if they did, we must
+        //    not silently override that choice with the auto-detected
+        //    daemon socket below.
+        let explicit_gateway = std::env::var("COVEN_GATEWAY_URL")
             .ok()
             .filter(|v| !v.trim().is_empty())
-            .or_else(|| file_cfg.gateway_url.filter(|v| !v.trim().is_empty()))
-            .unwrap_or_else(|| DEFAULT_GATEWAY_URL.to_string());
+            .or_else(|| file_cfg.gateway_url.filter(|v| !v.trim().is_empty()));
+        let gateway_was_explicit = explicit_gateway.is_some();
+        cfg.gateway_url = explicit_gateway.unwrap_or_else(|| DEFAULT_GATEWAY_URL.to_string());
 
         // 2. Token — env > file > token-file.
         cfg.token = std::env::var("COVEN_TOKEN")
@@ -66,15 +74,24 @@ impl CastAgentConfig {
             .or_else(|| file_cfg.token.filter(|v| !v.trim().is_empty()))
             .or_else(Self::load_token_file);
 
-        // 3. Socket path — env > file. NO auto-detect: choosing Unix
-        // transport must be explicit, so the default behaviour is the
-        // bridge TCP path even on machines where the daemon socket
-        // happens to exist.
-        cfg.socket_path = std::env::var("COVEN_SOCKET")
+        // 3. Socket path — env > file > auto-detect. An explicit
+        //    `COVEN_SOCKET` (env) or `socket_path` (file) always wins.
+        let explicit_socket = std::env::var("COVEN_SOCKET")
             .ok()
             .filter(|v| !v.trim().is_empty())
             .map(|v| PathBuf::from(v.trim()))
             .or_else(|| file_cfg.socket_path.filter(|v| !v.as_os_str().is_empty()));
+
+        // 4. Auto-detect the live daemon socket. CastCodes ships coven-code
+        //    as its native agent, so when nothing explicit was configured
+        //    and the OpenCoven daemon's socket actually exists on disk we
+        //    prefer talking to it directly (`/api/v1/*`) over the TCP
+        //    bridge — the bridge is a separate process that is usually not
+        //    running, which would otherwise leave the agent in degraded
+        //    mode and force a fallback to the inherited hosted path.
+        let detected_socket = Self::default_socket_path().filter(|p| p.exists());
+        cfg.socket_path =
+            resolve_socket_path(explicit_socket, gateway_was_explicit, detected_socket);
 
         cfg
     }
@@ -89,9 +106,10 @@ impl CastAgentConfig {
         dirs::home_dir().map(|h| h.join(".coven").join("token"))
     }
 
-    /// Default Unix-socket location used by the OpenCoven daemon.
-    /// Returned for callers that want to opt in (e.g. set `COVEN_SOCKET`
-    /// programmatically) — `load()` does NOT auto-detect.
+    /// Default Unix-socket location used by the OpenCoven daemon
+    /// (`~/.coven/coven.sock`). `load()` auto-detects this path when it
+    /// exists and no explicit transport was configured; callers can also
+    /// use it directly to opt in (e.g. set `COVEN_SOCKET`).
     pub fn default_socket_path() -> Option<PathBuf> {
         dirs::home_dir().map(|h| h.join(".coven").join("coven.sock"))
     }
@@ -122,4 +140,76 @@ struct FileConfig {
     token: Option<String>,
     #[serde(default)]
     socket_path: Option<PathBuf>,
+}
+
+/// Decide the effective Unix-socket path from the three inputs, keeping
+/// the auto-detect precedence rules out of the filesystem/env-reading
+/// `load()` so they can be unit-tested hermetically.
+///
+/// - An `explicit` socket (from `COVEN_SOCKET` or the config file) always
+///   wins.
+/// - Otherwise, if the caller did NOT explicitly point us at a TCP gateway
+///   (`gateway_was_explicit == false`), fall back to the auto-`detected`
+///   daemon socket (already existence-filtered by the caller).
+/// - If a TCP gateway was chosen explicitly, honour it: return `None` so
+///   the gateway client keeps the TCP transport.
+fn resolve_socket_path(
+    explicit: Option<PathBuf>,
+    gateway_was_explicit: bool,
+    detected: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(explicit) = explicit {
+        return Some(explicit);
+    }
+    if gateway_was_explicit {
+        return None;
+    }
+    detected
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn p(s: &str) -> PathBuf {
+        PathBuf::from(s)
+    }
+
+    #[test]
+    fn explicit_socket_always_wins() {
+        // Even when a TCP gateway was chosen and a socket was detected,
+        // the explicit socket takes precedence.
+        assert_eq!(
+            resolve_socket_path(
+                Some(p("/tmp/x.sock")),
+                true,
+                Some(p("/home/.coven/coven.sock"))
+            ),
+            Some(p("/tmp/x.sock"))
+        );
+    }
+
+    #[test]
+    fn auto_detects_when_nothing_explicit() {
+        assert_eq!(
+            resolve_socket_path(None, false, Some(p("/home/.coven/coven.sock"))),
+            Some(p("/home/.coven/coven.sock"))
+        );
+    }
+
+    #[test]
+    fn explicit_tcp_gateway_suppresses_auto_detect() {
+        // User pointed us at a TCP bridge on purpose: don't clobber it
+        // even though the daemon socket exists on disk.
+        assert_eq!(
+            resolve_socket_path(None, true, Some(p("/home/.coven/coven.sock"))),
+            None
+        );
+    }
+
+    #[test]
+    fn no_socket_when_nothing_available() {
+        assert_eq!(resolve_socket_path(None, false, None), None);
+        assert_eq!(resolve_socket_path(None, true, None), None);
+    }
 }
