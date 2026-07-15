@@ -285,7 +285,9 @@ impl GatewayClient {
                     .and_then(serde_json::Value::as_str)
                     .map(String::from)
             })
-            .unwrap_or_else(|| "claude".into());
+            // CastCodes' native agent is coven-code; headless callers that
+            // don't specify a harness get it too, matching the agent panel.
+            .unwrap_or_else(|| "coven-code".into());
 
         let title = msg
             .body
