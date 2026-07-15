@@ -1456,7 +1456,7 @@ define_settings_group!(AISettings, settings: [
         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::No),
         private: false,
         toml_path: "agents.warp_agent.other.agent_attribution_enabled",
-        description: "Legacy Cast Agent attribution preference retained for compatibility.",
+        description: "Legacy Familiar attribution preference retained for compatibility.",
     }
 ]);
 

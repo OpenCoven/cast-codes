@@ -60,10 +60,10 @@ pub enum CommandSearchItemAction {
     /// The user requested to run the AI query search item with this query text.
     RunAIQuery(String),
 
-    /// The user accepted the search item to open Cast Agent.
+    /// The user accepted the search item to open the Familiar.
     OpenWarpAI,
 
-    /// The user accepted the search item to translate the query to a command using Cast Agent.
+    /// The user accepted the search item to translate the query to a command using the Familiar.
     TranslateUsingWarpAI,
 }
 

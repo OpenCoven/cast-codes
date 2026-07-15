@@ -15981,7 +15981,7 @@ impl Workspace {
                 let command = code.trim().to_string();
                 let args_state =
                     ArgumentsState::for_command_workflow(&Default::default(), command.clone());
-                let workflow = Workflow::new("Command from Cast Agent", command)
+                let workflow = Workflow::new("Command from Familiar", command)
                     .with_arguments(args_state.arguments);
                 self.run_workflow_in_active_input(
                     &WorkflowType::AIGenerated {
@@ -16033,7 +16033,7 @@ impl Workspace {
                     model.mark_oz_launch_modal_dismissed(ctx);
                 });
 
-                // Clear the "Introducing Cast Agent" custom tab name so normal tab naming rules apply.
+                // Clear the "Introducing Familiar" custom tab name so normal tab naming rules apply.
                 if let Some(pane_group_id) = self.oz_launch_modal.tab_pane_group_id.take() {
                     if let Some(tab) = self
                         .tabs
@@ -16517,7 +16517,7 @@ impl Workspace {
         let body = appearance
             .ui_builder()
             .wrappable_text(
-                "Ask the Cast Agent to explain errors, suggest commands or write scripts."
+                "Ask your Familiar to explain errors, suggest commands or write scripts."
                     .to_owned(),
                 true,
             )
@@ -19903,7 +19903,7 @@ impl Workspace {
     }
 
     fn open_tab_and_focus_oz_launch_modal(&mut self, ctx: &mut ViewContext<Self>) {
-        // Create a new tab with one terminal session titled "Introducing Cast Agent"
+        // Create a new tab with one terminal session titled "Introducing Familiar"
         self.add_tab_with_pane_layout(
             PanesLayout::SingleTerminal(Box::new(NewTerminalOptions {
                 shell: None,
@@ -19912,7 +19912,7 @@ impl Workspace {
                 ..Default::default()
             })),
             Arc::new(HashMap::new()),
-            Some("Introducing Cast Agent".to_string()),
+            Some("Introducing Familiar".to_string()),
             ctx,
         );
         self.oz_launch_modal.tab_pane_group_id = self

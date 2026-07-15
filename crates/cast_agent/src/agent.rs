@@ -50,7 +50,7 @@ pub trait AgentBackend: Send + Sync {
     /// Whether the backend can reach its gateway right now. Cached.
     fn is_available(&self) -> bool;
 
-    /// Display name for telemetry / UI ("Cast Agent").
+    /// Display name for telemetry / UI ("Familiar").
     fn agent_name(&self) -> &'static str;
 }
 
@@ -163,6 +163,6 @@ impl AgentBackend for CastAgent {
     }
 
     fn agent_name(&self) -> &'static str {
-        "Cast Agent"
+        "Familiar"
     }
 }

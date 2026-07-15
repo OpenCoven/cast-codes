@@ -3135,7 +3135,7 @@ impl SettingsWidget for GlobalAIWidget {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_child(
                 Text::new_inline(
-                    "Cast Agent",
+                    "Familiar",
                     appearance.ui_font_family(),
                     PRIMARY_HEADER_FONT_SIZE,
                 )
@@ -4395,7 +4395,7 @@ impl AgentsWidget {
         );
         render_ai_list(
             "Command denylist",
-            "Regular expressions to match commands that the Cast Agent should always ask permission to execute.",
+            "Regular expressions to match commands that your Familiar should always ask permission to execute.",
             list,
             view,
             ai_settings,
@@ -4430,7 +4430,7 @@ impl AgentsWidget {
 
         render_ai_list(
             "Command allowlist",
-            "Regular expressions to match commands that can be automatically executed by the Cast Agent.",
+            "Regular expressions to match commands that can be automatically executed by your Familiar.",
             list,
             view,
             ai_settings,
@@ -4532,7 +4532,7 @@ impl AgentsWidget {
             appearance,
             "Base model",
             Some(
-                "This model serves as the primary engine behind the Cast Agent. It powers most interactions and invokes other models for tasks like planning or code generation when necessary. CastCodes may automatically switch to alternate models based on model availability or for auxiliary tasks such as conversation summarization.",
+                "This model serves as the primary engine behind your Familiar. It powers most interactions and invokes other models for tasks like planning or code generation when necessary. CastCodes may automatically switch to alternate models based on model availability or for auxiliary tasks such as conversation summarization.",
             ),
             Some(show_in_prompt_checkbox),
             LocalOnlyIconState::Hidden,
@@ -4563,7 +4563,7 @@ impl AgentsWidget {
 
         let codebase_context_description = vec![
             FormattedTextFragment::plain_text(
-                "Allow the Cast Agent to generate an outline of your codebase that can be used for context. No code is ever stored on our servers. ",
+                "Allow your Familiar to generate an outline of your codebase that can be used for context. No code is ever stored on our servers. ",
             ),
             FormattedTextFragment::hyperlink(
                 "Learn more",
@@ -4636,7 +4636,7 @@ impl AgentsWidget {
         let subtext = {
             let subtext_fragments = vec![
                 FormattedTextFragment::plain_text(
-                    "You haven't added any MCP servers yet. Once you do, you'll be able to control how much autonomy the Cast Agent has when interacting with them. ",
+                    "You haven't added any MCP servers yet. Once you do, you'll be able to control how much autonomy your Familiar has when interacting with them. ",
                 ),
                 FormattedTextFragment::hyperlink_action(
                     "Add a server",
@@ -4717,7 +4717,7 @@ impl AgentsWidget {
         {
             let allowlist = self.render_mcp_list(
                 "MCP allowlist",
-                "Allow the Cast Agent to call these MCP servers.",
+                "Allow your Familiar to call these MCP servers.",
                 &view.mcp_allowlist_dropdown,
                 BlocklistAIPermissions::as_ref(app).get_mcp_allowlist(app, None),
                 view.mcp_allowlist_mouse_state_handles.clone(),
@@ -4734,7 +4734,7 @@ impl AgentsWidget {
         {
             let denylist = self.render_mcp_list(
                 "MCP denylist",
-                "The Cast Agent will always ask for permission before calling any MCP servers on this list.",
+                "Your Familiar will always ask for permission before calling any MCP servers on this list.",
                 &view.mcp_denylist_dropdown,
                 BlocklistAIPermissions::as_ref(app).get_mcp_denylist(app, None),
                 view.mcp_denylist_mouse_state_handles.clone(),
@@ -5103,7 +5103,7 @@ impl SettingsWidget for MCPServersWidget {
 
         let mcp_description = vec![
             FormattedTextFragment::plain_text(
-                "Add MCP servers to extend the Cast Agent's capabilities. \
+                "Add MCP servers to extend your Familiar's capabilities. \
             MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. ",
             ),
             FormattedTextFragment::hyperlink("Learn more", USER_DOCS_URL),
@@ -5232,7 +5232,7 @@ impl AIFactWidget {
 
         let rules_description = vec![
             FormattedTextFragment::plain_text(
-                "Rules help the Cast Agent follow your conventions, whether for codebases or specific workflows. ",
+                "Rules help your Familiar follow your conventions, whether for codebases or specific workflows. ",
             ),
             FormattedTextFragment::hyperlink(
                 "Learn more",
@@ -5310,7 +5310,7 @@ impl AIFactWidget {
         );
 
         let description = render_ai_setting_description(
-            "The Cast Agent can leverage your Cast Drive Contents to tailor responses to your personal and team developer workflows and environments. This includes any Workflows, Notebooks, and Environment Variables.",
+            "Your Familiar can leverage your Cast Drive Contents to tailor responses to your personal and team developer workflows and environments. This includes any Workflows, Notebooks, and Environment Variables.",
             ai_settings.is_any_ai_enabled(app),
             app,
         );
@@ -6172,9 +6172,9 @@ impl ApiKeysWidget {
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
         let is_enabled = is_any_ai_enabled && is_byo_enabled;
         let description = if warp_core::channel::ChannelState::cloud_services_available() {
-            "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced. Using auto models or models from providers you have not provided API keys for will consume hosted credits."
+            "Use your own API keys from model providers for your Familiar to use. API keys are stored locally and never synced. Using auto models or models from providers you have not provided API keys for will consume hosted credits."
         } else {
-            "Use your own API keys from model providers for the Cast Agent to use. API keys are stored locally and never synced. In local-only builds, models from providers without API keys are unavailable."
+            "Use your own API keys from model providers for your Familiar to use. API keys are stored locally and never synced. In local-only builds, models from providers without API keys are unavailable."
         };
 
         let mut column = Flex::column().with_spacing(16.).with_child(

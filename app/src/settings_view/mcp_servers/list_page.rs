@@ -74,8 +74,8 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
-const CLOUD_DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Cast Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. You can also find team servers that have been shared with you here. ";
-const LOCAL_DESCRIPTION_TEXT: &str = "Add MCP servers to extend the Cast Agent's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. ";
+const CLOUD_DESCRIPTION_TEXT: &str = "Add MCP servers to extend your Familiar's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. You can also find team servers that have been shared with you here. ";
+const LOCAL_DESCRIPTION_TEXT: &str = "Add MCP servers to extend your Familiar's capabilities. MCP servers expose data sources or tools to agents through a standardized interface, essentially acting like plugins. Add a custom server, or use the presets to get started with popular servers. ";
 
 pub fn mcp_description_text_for_channel(cloud_services_available: bool) -> &'static str {
     if cloud_services_available {
