@@ -91,6 +91,25 @@ const FILES_ZERO_STATE_PROMPT: &str = "How do I find all files containing specif
 const COVEN_CODE_HARNESS: &str = "coven-code";
 #[cfg(feature = "cast-agent")]
 const COVEN_CODE_OPERATION_TITLE: &str = "Coven Code operation";
+/// Shown in the stream section when Coven Code is the native agent but
+/// the daemon isn't reachable. We deliberately do NOT fall back to the
+/// inherited hosted agent path — coven-code is the only agent this build
+/// speaks to — so we tell the user how to bring it online instead.
+#[cfg(feature = "cast-agent")]
+const COVEN_CODE_OFFLINE_NOTICE: &str =
+    "Coven Code is offline. Start the Coven daemon (`coven daemon serve`) to run the agent.";
+
+/// Outcome of routing a prompt to the native Coven Code agent.
+#[cfg(feature = "cast-agent")]
+enum CovenDispatch {
+    /// A daemon session (or stream) was started for the prompt.
+    Dispatched,
+    /// Nothing to send (e.g. an empty prompt); caller should no-op.
+    Skipped,
+    /// The Coven runtime/daemon is unavailable. Caller surfaces an
+    /// offline notice rather than routing to the inherited hosted path.
+    Offline,
+}
 
 // The placeholder texts are prepended with a space to give them cushion from the cursor.
 const INIT_PLACEHOLDER_TEXT: &str = " Ask a question...";
@@ -762,21 +781,35 @@ impl AIAssistantPanelView {
     }
 
     fn issue_primary_request(&mut self, request: String, ctx: &mut ViewContext<Self>) {
+        // When the cast-agent feature is compiled in, Coven Code is the
+        // native — and only — agent this build talks to. We route every
+        // primary request to it and never fall back to the inherited
+        // hosted agent path; if the daemon is offline we say so in-band.
         #[cfg(feature = "cast-agent")]
-        {
-            if self.send_via_coven_gateway_with_prompt(request.clone(), ctx) {
+        match self.send_via_coven_gateway_with_prompt(request, ctx) {
+            CovenDispatch::Dispatched => {
                 self.editor.update(ctx, |editor, ctx| {
                     editor.clear_buffer_and_reset_undo_stack(ctx);
                     editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
                 });
                 ctx.notify();
-                return;
             }
+            CovenDispatch::Offline => {
+                self.surface_coven_offline_notice(ctx);
+                self.editor.update(ctx, |editor, ctx| {
+                    editor.clear_buffer_and_reset_undo_stack(ctx);
+                    editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
+                });
+                ctx.notify();
+            }
+            CovenDispatch::Skipped => {}
         }
 
+        #[cfg(not(feature = "cast-agent"))]
         self.issue_request(request, ctx);
     }
 
+    #[cfg(not(feature = "cast-agent"))]
     fn issue_request(&mut self, request: String, ctx: &mut ViewContext<Self>) {
         self.requests_model.update(ctx, |requests_model, ctx| {
             requests_model.issue_request(request, ctx);
@@ -977,23 +1010,24 @@ impl AIAssistantPanelView {
     /// Logs each chunk too — useful for debugging when the rendered
     /// output looks wrong and you want raw protocol detail.
     ///
-    /// Returns `false` when the native runtime is unavailable so callers can
-    /// fall back to the legacy request path.
+    /// Returns [`CovenDispatch`] describing whether the prompt was sent,
+    /// skipped, or could not be sent because the Coven runtime/daemon is
+    /// offline. Callers never fall back to the inherited hosted path.
     #[cfg(feature = "cast-agent")]
     fn send_via_coven_gateway_with_prompt(
         &self,
         prompt: String,
         ctx: &mut ViewContext<Self>,
-    ) -> bool {
+    ) -> CovenDispatch {
         use futures::StreamExt;
 
         if prompt.trim().is_empty() {
             log::debug!("cast_agent: SendViaCovenGateway invoked with empty prompt; skipping");
-            return false;
+            return CovenDispatch::Skipped;
         }
         let Some(runtime) = ::ai::cast_agent::global() else {
             log::warn!("cast_agent: runtime unavailable, cannot stream");
-            return false;
+            return CovenDispatch::Offline;
         };
         let direct_socket_path = if runtime.is_available() {
             None
@@ -1003,7 +1037,7 @@ impl AIAssistantPanelView {
         };
         if direct_socket_path.is_none() && !runtime.is_available() {
             log::info!("cast_agent: gateway offline and Coven daemon socket unavailable");
-            return false;
+            return CovenDispatch::Offline;
         }
 
         let agent = runtime.agent().clone();
@@ -1181,17 +1215,59 @@ impl AIAssistantPanelView {
 
         // Kick off the UI drain loop.
         self.poll_coven_stream(ctx);
-        true
+        CovenDispatch::Dispatched
+    }
+
+    /// Surface an in-band notice that Coven Code is offline. Mirrors the
+    /// stream-reset path: any live text is archived into history first so
+    /// the notice replaces the live section without clobbering prior
+    /// output, then the notice is rendered as the current stream text.
+    #[cfg(feature = "cast-agent")]
+    fn surface_coven_offline_notice(&self, ctx: &mut ViewContext<Self>) {
+        {
+            let mut state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(previous) = state.active_task.take() {
+                previous.abort();
+            }
+            if !state.text.is_empty() {
+                let archived = CovenStreamHistoryEntry {
+                    conversation_id: state.conversation_id.clone(),
+                    text: std::mem::take(&mut state.text),
+                };
+                state.history.push_back(archived);
+                while state.history.len() > COVEN_STREAM_HISTORY_MAX {
+                    state.history.pop_front();
+                }
+                let snapshot: Vec<CovenStreamHistoryEntry> =
+                    state.history.iter().cloned().collect();
+                super::coven_stream_persist::save(&snapshot);
+            }
+            state.pending_chunks.clear();
+            state.in_flight = false;
+            state.conversation_id.clear();
+            state.text = COVEN_CODE_OFFLINE_NOTICE.to_string();
+        }
+        ctx.notify();
     }
 
     #[cfg(feature = "cast-agent")]
     fn send_via_coven_gateway(&self, ctx: &mut ViewContext<Self>) {
         let prompt = self.editor.as_ref(ctx).buffer_text(ctx).to_string();
-        if self.send_via_coven_gateway_with_prompt(prompt, ctx) {
-            self.editor.update(ctx, |editor, ctx| {
-                editor.clear_buffer_and_reset_undo_stack(ctx);
-                editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
-            });
+        match self.send_via_coven_gateway_with_prompt(prompt, ctx) {
+            CovenDispatch::Dispatched => {
+                self.editor.update(ctx, |editor, ctx| {
+                    editor.clear_buffer_and_reset_undo_stack(ctx);
+                    editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
+                });
+            }
+            CovenDispatch::Offline => {
+                self.surface_coven_offline_notice(ctx);
+                self.editor.update(ctx, |editor, ctx| {
+                    editor.clear_buffer_and_reset_undo_stack(ctx);
+                    editor.set_placeholder_text(FOLLOWUP_PLACEHOLDER_TEXT, ctx);
+                });
+            }
+            CovenDispatch::Skipped => {}
         }
     }
 
