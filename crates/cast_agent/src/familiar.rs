@@ -2,7 +2,10 @@
 //! the configured default) to the concrete `RequestTarget` sent on the
 //! daemon session request, plus a cached view of the daemon catalog.
 
+use std::sync::{Arc, RwLock};
+
 use crate::daemon_schema::DaemonFamiliar;
+use crate::gateway::GatewayClient;
 
 /// Backend harnesses offered when the daemon persona catalog is empty.
 /// Single source of truth for the fallback list; extend here.
@@ -34,6 +37,33 @@ pub fn resolve(
         Some(id) if catalog.iter().any(|f| f.id == id) => RequestTarget::Familiar(id.to_string()),
         Some(other) => RequestTarget::Harness(other.to_string()),
         None => RequestTarget::Harness(SUPPORTED_HARNESSES[0].to_string()),
+    }
+}
+
+/// Cached view of the daemon Familiar catalog. Mirrors `SessionStore`:
+/// `list()` refreshes from the gateway (never errors — the gateway call is
+/// already graceful), `snapshot()` is a cheap sync read for the UI thread.
+pub struct FamiliarStore {
+    gateway: Arc<GatewayClient>,
+    cache: RwLock<Vec<DaemonFamiliar>>,
+}
+
+impl FamiliarStore {
+    pub fn new(gateway: Arc<GatewayClient>) -> Self {
+        Self { gateway, cache: RwLock::new(Vec::new()) }
+    }
+
+    /// Refresh the cached catalog from the gateway and return it.
+    pub async fn list(&self) -> Vec<DaemonFamiliar> {
+        let fetched = self.gateway.list_familiars().await;
+        let mut guard = self.cache.write().unwrap_or_else(|p| p.into_inner());
+        *guard = fetched.clone();
+        fetched
+    }
+
+    /// Sync snapshot of the cached catalog. Safe from the UI thread.
+    pub fn snapshot(&self) -> Vec<DaemonFamiliar> {
+        self.cache.read().unwrap_or_else(|p| p.into_inner()).clone()
     }
 }
 
