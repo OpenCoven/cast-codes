@@ -833,7 +833,10 @@ pub type MessageStream = std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<Mess
 
 /// Parse a `/api/v1/familiars` response into a catalog. Returns an empty
 /// Vec for any non-2xx status or malformed body so the UI degrades to the
-/// harness fallback instead of surfacing an error.
+/// harness fallback instead of surfacing an error. Only used by the
+/// `#[cfg(unix)]` daemon transport, so gated to keep non-unix builds
+/// (Windows/wasm clippy) free of a dead-code warning.
+#[cfg(unix)]
 fn parse_familiars(status: u16, body: &[u8]) -> Vec<crate::daemon_schema::DaemonFamiliar> {
     if !(200..300).contains(&status) {
         log::debug!("cast_agent: /familiars returned HTTP {status}; treating as empty catalog");
@@ -913,7 +916,7 @@ async fn drain_output_deltas(
     Ok(deltas)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod familiars_tests {
     use super::*;
 
