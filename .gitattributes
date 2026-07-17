@@ -1,3 +1,14 @@
+# Line-ending normalization.
+#
+# Several guard tests (e.g. app/src/settings_view/mod_tests.rs,
+# app/src/castcodes_public_surface_tests.rs) `include_str!` Rust sources
+# and assert on multi-line substrings whose expected text embeds `\n`.
+# Without forcing LF, Windows checks these files out as CRLF (git's
+# `core.autocrlf` default on the hosted runners), so the embedded `\n`
+# no longer matches the file's `\r\n` and the tests fail on Windows only
+# (see #193). Check out Rust sources with LF on every platform.
+*.rs text eol=lf
+
 *.pdb filter=lfs diff=lfs merge=lfs -text
 input_classifier/models/* filter=lfs diff=lfs merge=lfs -text
 input_classifier/models/**/*tokenizer.json linguist-generated=true
