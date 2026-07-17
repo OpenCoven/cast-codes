@@ -15,6 +15,7 @@ pub mod agent;
 pub mod comux;
 pub mod config;
 pub mod daemon_schema;
+pub mod familiar;
 // The Unix-socket transport + daemon chat helpers are only compiled on
 // Unix-family targets — Windows has no `tokio::net::UnixStream`, and
 // wasm doesn't run the daemon at all. The TCP/bridge transport in
