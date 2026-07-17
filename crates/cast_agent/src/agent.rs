@@ -145,6 +145,18 @@ impl CastAgent {
     ) -> anyhow::Result<crate::gateway::MessageStream> {
         self.gateway.stream_messages(msg).await
     }
+
+    /// Open a structured-event stream for a coven-code turn, launched in the
+    /// daemon's `stream` mode. See
+    /// [`crate::gateway::GatewayClient::stream_agent_events`]. Only available
+    /// on the Unix daemon transport.
+    #[cfg(unix)]
+    pub async fn stream_agent_events(
+        &self,
+        msg: AgentMessage,
+    ) -> anyhow::Result<crate::gateway::AgentEventStream> {
+        self.gateway.stream_agent_events(msg).await
+    }
 }
 
 #[async_trait::async_trait]
