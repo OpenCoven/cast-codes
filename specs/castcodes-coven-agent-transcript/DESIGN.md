@@ -1,7 +1,7 @@
 # One Coven Agent Surface — Phase 1 Design
 
 - **Date:** 2026-07-17
-- **Status:** Design approved; ready for implementation planning
+- **Status:** Proposed — under review (PR #200)
 - **Scope:** Phase 1 of a phased roadmap (Phases 2–3 sketched for context only)
 
 ## Problem
@@ -11,13 +11,13 @@ CastCodes has **two fully-built, parallel AI-conversation surfaces**:
 | | Agent panel (`app/src/ai_assistant/`) | Chat panel (`app/src/cli_chat/`) |
 |---|---|---|
 | Backend | Coven daemon session — `coven-code` harness via `~/.coven/coven.sock` | AI CLI (claude/codex/gemini/opencode) running in a terminal pane, observed via OSC-777 events |
-| Rendering | Plain-text stream (`MessageChunk::Delta`) | Rich: message bubbles, tool-call cards, permission cards, info bars |
+| Rendering | Plain-text stream (`MessageChunk::Delta`) | Structured: user/assistant bubbles + tool/permission/info/stop entries, rendered today via `message_bubble` placeholders (`tool_placeholder`, `permission_placeholder`, `info_line`, `stop_marker`). Dedicated `tool_call_card`/`permission_card` components exist but are **currently unused** — upgrading the placeholders to those cards is a follow-up. |
 | Persistence | `~/.coven/stream-history.json` | sqlite (`ChatStore`) |
 | Composer | Editor → daemon `POST /api/v1/sessions` | rich-input → terminal PTY stdin |
 | Entry point | agent-panel toggle | `Cmd/Ctrl+Shift+H`, runtime `FeatureFlag::CastCodesChatPanel` |
 | Extras | — | conversation list, model picker |
 
-Two surfaces that both show "an AI conversation" with different backends, rendering, and persistence is incoherent for a product whose story is "Coven Code is the native agent." The concrete, user-visible gap: **coven-code renders as plain text** while the chat panel already has the rich rendering coven-code should have.
+Two surfaces that both show "an AI conversation" with different backends, rendering, and persistence is incoherent for a product whose story is "Coven Code is the native agent." The concrete, user-visible gap: **coven-code renders as undifferentiated plain text**, while the chat panel already renders a *structured* transcript (distinct user/assistant/tool/permission/info entries) — the rendering coven-code should share. (Phase 1 shares that structured rendering as-is; making the tool/permission entries visually richer than today's placeholders is a separate follow-up, and the unused `tool_call_card`/`permission_card` components are where that would land.)
 
 ## Roadmap (context — only Phase 1 is specified here)
 
@@ -29,7 +29,7 @@ The OSC-777 retirement question is **explicitly deferred**. Phase 1 is designed 
 
 ## Phase 1 goal
 
-`coven-code` sessions render with the same rich UI the chat panel already has — tool-call cards, permission cards, assistant/user bubbles, stop markers — by sharing one entry model and one set of views between the two backends. The change is **strictly additive**: if structured events are unavailable or malformed, coven-code still renders plain text exactly as today.
+`coven-code` sessions render with the same *structured* transcript the chat panel already has — distinct assistant/user bubbles, tool entries, permission entries, info lines, and stop markers (via the `message_bubble` renderers used today) — by sharing one entry model and one set of views between the two backends. The change is **strictly additive**: if structured events are unavailable or malformed, coven-code still renders plain text exactly as today.
 
 ## Non-goals (Phase 1)
 
@@ -55,7 +55,7 @@ CLI path (UNCHANGED behavior):
 
 **1. `app/src/agent_transcript/` — new neutral module (extracted from `cli_chat`)**
 - `ChatEntry` + `ChatEntryKind` (`UserPrompt`, `AssistantResponse`, `ToolCall`, `PermissionRequest`, `Info`, `Stop`, `PermissionReplied`, `Raw`) — moved from `cli_chat/entry.rs`.
-- Rich views moved from `cli_chat/view/`: `message_bubble`, `tool_call_card`, `permission_card`, `info_bar`, and the `transcript` renderer.
+- Views moved from `cli_chat/view/`: `message_bubble` (the **actual** entry renderer today — `user_bubble`, `assistant_bubble`, `tool_placeholder`, `permission_placeholder`, `info_line`, `stop_marker`) and the `transcript` dispatcher. The dedicated `tool_call_card`/`permission_card`/`info_bar` components (currently unused) move too so a later card upgrade lands in the neutral module.
 - A `TranscriptSource` trait: yields `ChatEntry`s + a coarse status for a conversation. No backend, persistence, or panel knowledge.
 - Depends on nothing in `cli_chat` or `cast_agent` (leaf module), so both consumers can depend on it without cycles.
 

@@ -43,6 +43,16 @@
 - [ ] **Step 1: Create the module and move the neutral types.**
   Create `app/src/agent_transcript/entry.rs` containing **exactly** the `ChatEntry`, `ChatEntryKind`, `InfoKind`, and `StopReason` definitions currently in `app/src/cli_chat/entry.rs` (the `struct ChatEntry`, the `enum ChatEntryKind`, `enum InfoKind`, `enum StopReason` — the derive attributes and serde tags verbatim). Do **not** move the `impl ChatEntry { fn from_event }` block or the `use crate::terminal::cli_agent_sessions::…` import — those stay in `cli_chat`. Drop the now-unused `use chrono::{DateTime, Utc};`? Keep it — `ChatEntry` uses `DateTime<Utc>`.
 
+- [ ] **Step 1b: Add a `ToolResult` variant to the moved `ChatEntryKind`.** The Coven daemon emits `tool_result` events, which the CLI path never modelled — a result is semantically distinct from a call, so add a dedicated variant (do not reuse `ToolCall`):
+
+```rust
+    ToolResult {
+        tool_name: String,
+        output_preview: Option<String>,
+    },
+```
+  Place it right after the `ToolCall` variant. It is serialized like the others (new tag, backward-compatible: old persisted transcripts never contain it). `cli_chat`'s `from_event` never produces it, so `cli_chat` behavior is unchanged; the render arm is added in Task 2 Step 2b.
+
 - [ ] **Step 2: Create `agent_transcript/mod.rs`.**
 
 ```rust
@@ -100,6 +110,18 @@ git mv app/src/cli_chat/view/info_bar.rs app/src/agent_transcript/view/info_bar.
 ```
 
 - [ ] **Step 2: Move the transcript renderer, but keep the `cli_chat`-specific binding wrapper in `cli_chat`.** `cli_chat/view/transcript.rs` has two parts: `render_transcript(conv, …)`/`render_entry(entry, …)` (neutral — renders a `ChatEntry` list) and the `ConversationBinding`-aware wrapper (`ConversationBinding::Live/Past/None` → pick conversation). Move the neutral `render_transcript`/`render_entry` functions to `app/src/agent_transcript/view/transcript.rs`; leave the `ConversationBinding` wrapper in `cli_chat/view/transcript.rs` calling `agent_transcript::view::transcript::render_transcript`.
+
+- [ ] **Step 2b: Add the `ToolResult` render arm** to the moved `render_entry` match (the variant added in Task 1 Step 1b). Reuse the existing tool renderer for now — a result renders like a resolved tool line; a distinct card is the follow-up noted in `DESIGN.md`:
+
+```rust
+        ChatEntryKind::ToolResult { tool_name, output_preview } => message_bubble::tool_placeholder(
+            tool_name,
+            output_preview.as_deref(),
+            font_family,
+            font_size,
+        ),
+```
+  (Adding this arm is required for the match to stay exhaustive after Task 1 Step 1b.)
 
 - [ ] **Step 3: Create `app/src/agent_transcript/view/mod.rs`.**
 
@@ -165,7 +187,7 @@ git commit -S -m "refactor(agent_transcript): move rich transcript views out of 
 
 ## Task 3: Define the `TranscriptSource` seam + the CLI impl
 
-**Files:** Create `app/src/agent_transcript/source.rs`; modify `app/src/cli_chat/model.rs`.
+**Files:** Create `app/src/agent_transcript/source.rs`; modify `app/src/cli_chat/conversation.rs` (add the `TranscriptSource` impl for `ChatConversation`) and `app/src/agent_transcript/mod.rs` (re-export).
 
 - [ ] **Step 1: Write the trait.**
 
@@ -556,13 +578,23 @@ mod tests {
     }
 
     #[test]
-    fn done_and_ignored_produce_no_entry() {
-        assert!(kind(CovenAgentEvent::Done).is_some_or_stop()); // Stop entry; see impl
+    fn done_becomes_stop_and_ignored_is_dropped() {
+        assert!(matches!(
+            kind(CovenAgentEvent::Done),
+            Some(ChatEntryKind::Stop { .. })
+        ));
         assert!(kind(CovenAgentEvent::Ignored).is_none());
+    }
+
+    #[test]
+    fn tool_result_becomes_tool_result_entry() {
+        assert!(matches!(
+            kind(CovenAgentEvent::ToolResult { name: "Read".into(), output: "ok".into() }),
+            Some(ChatEntryKind::ToolResult { tool_name, .. }) if tool_name == "Read"
+        ));
     }
 }
 ```
-  (Replace `is_some_or_stop()` with a concrete assertion once the impl decides `Done → ChatEntryKind::Stop`.)
 
 - [ ] **Step 2: Run — verify fail.** Run: `cargo test -p warp-app --features cast-agent --lib ai_assistant::coven_entry 2>&1 | head` → FAIL (function absent).
 
@@ -592,10 +624,12 @@ pub fn daemon_event_to_entry(
             tool_name: name,
             input_preview,
         },
-        CovenAgentEvent::ToolResult { name, output } => ChatEntryKind::ToolCall {
-            // Rendered as a resolved tool card; Phase 2 may split call/result.
+        CovenAgentEvent::ToolResult { name, output } => ChatEntryKind::ToolResult {
+            // A tool *result* is distinct from a tool *call* — do not relabel it
+            // as ToolCall. Uses the ToolResult variant added to the neutral model
+            // in Task 1 Step 1b.
             tool_name: name,
-            input_preview: Some(output.chars().take(200).collect()),
+            output_preview: Some(output.chars().take(200).collect()),
         },
         CovenAgentEvent::PermissionRequest { summary } => ChatEntryKind::PermissionRequest {
             summary,
