@@ -113,4 +113,15 @@ mod tests {
     fn non_catalog_selection_is_raw_harness() {
         assert_eq!(resolve(Some("codex"), None, &[]), RequestTarget::Harness("codex".into()));
     }
+
+    #[test]
+    fn empty_selected_falls_through_to_default() {
+        let cat = vec![fam("nova")];
+        assert_eq!(resolve(Some(""), Some("nova"), &cat), RequestTarget::Familiar("nova".into()));
+    }
+
+    #[test]
+    fn empty_default_is_ignored_when_selected_set() {
+        assert_eq!(resolve(Some("codex"), Some(""), &[]), RequestTarget::Harness("codex".into()));
+    }
 }
