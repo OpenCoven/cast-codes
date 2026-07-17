@@ -383,7 +383,7 @@ use warpui::event::ModifiersState;
 use warpui::keymap::Keystroke;
 use warpui::notification::{NotificationSendError, RequestPermissionsOutcome, UserNotification};
 use warpui::platform::{Cursor, OperatingSystem};
-use warpui::r#async::{SpawnedFutureHandle, Timer};
+use warpui::r#async::{FutureId, SpawnedFutureHandle, Timer};
 use warpui::windowing::WindowManager;
 
 use warpui::assets::asset_cache::{AssetCache, AssetCacheEvent};
@@ -2656,6 +2656,14 @@ pub struct TerminalView {
     /// State handle for the shimmering text animation in the remote server loading footer.
     /// Persisted across renders so the animation doesn't restart.
     remote_server_shimmer_handle: ShimmeringTextStateHandle,
+
+    /// The [`FutureId`] of the most recently spawned delayed carriage-return
+    /// timer from [`write_cli_agent_text_then_submit`]'s delayed-enter
+    /// strategies. Recorded so tests can deterministically await the timer via
+    /// `await_spawned_future` instead of polling on wall-clock time. Not read in
+    /// non-test builds.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pending_delayed_enter_future: Option<FutureId>,
 }
 
 /// Parameters stashed when a code review pane open is requested with
@@ -2689,6 +2697,15 @@ impl TerminalView {
     /// Returns the path to the current repository, if any.
     pub fn current_repo_path(&self) -> Option<&PathBuf> {
         self.current_repo_path.as_ref()
+    }
+
+    /// Takes the [`FutureId`] of the most recently spawned delayed
+    /// carriage-return timer, if any, clearing the stored value. Tests use this
+    /// to deterministically await the timer via `await_spawned_future` rather
+    /// than polling on wall-clock time.
+    #[cfg(test)]
+    pub(in crate::terminal) fn take_pending_delayed_enter_future(&mut self) -> Option<FutureId> {
+        self.pending_delayed_enter_future.take()
     }
 
     fn is_nested_cloud_mode(&self, app: &AppContext) -> bool {
@@ -3942,6 +3959,7 @@ impl TerminalView {
             focus_handle: None,
             sessions,
             remote_server_shimmer_handle: ShimmeringTextStateHandle::new(),
+            pending_delayed_enter_future: None,
             active_block_metadata: None,
             block_text_selection_start_position: None,
             inline_banners_state: Default::default(),

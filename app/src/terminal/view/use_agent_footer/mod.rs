@@ -884,13 +884,14 @@ impl TerminalView {
             }
             RichInputSubmitStrategy::DelayedEnter => {
                 self.write_user_bytes_to_pty(text_bytes, ctx);
-                ctx.spawn(
+                let handle = ctx.spawn(
                     Timer::after(CLI_AGENT_PTY_WRITE_DELAY),
                     move |me, _, ctx| {
                         me.write_user_bytes_to_pty(b"\r".to_vec(), ctx);
                         me.maybe_close_rich_input_after_submit(ctx);
                     },
                 );
+                self.pending_delayed_enter_future = Some(handle.future_id());
             }
             RichInputSubmitStrategy::BracketedPasteDelayedEnter => {
                 let mut bytes = Vec::with_capacity(
@@ -900,13 +901,14 @@ impl TerminalView {
                 bytes.extend_from_slice(&text_bytes);
                 bytes.extend_from_slice(BRACKETED_PASTE_END);
                 self.write_user_bytes_to_pty(bytes, ctx);
-                ctx.spawn(
+                let handle = ctx.spawn(
                     Timer::after(CLI_AGENT_BRACKETED_PASTE_ENTER_DELAY),
                     move |me, _, ctx| {
                         me.write_user_bytes_to_pty(b"\r".to_vec(), ctx);
                         me.maybe_close_rich_input_after_submit(ctx);
                     },
                 );
+                self.pending_delayed_enter_future = Some(handle.future_id());
             }
         }
     }

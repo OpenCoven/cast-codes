@@ -4271,7 +4271,7 @@ fn submit_cli_agent_rich_input_opencode_defers_enter_and_close() {
         let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cli_rich = FeatureFlag::CLIAgentRichInput.override_enabled(true);
 
-        let (_terminal, pty_writes) =
+        let (terminal, pty_writes) =
             submit_rich_input_and_collect_pty_writes(&mut app, CLIAgent::OpenCode, "hello");
 
         // Immediately after submit, only the text should have been written;
@@ -4279,11 +4279,18 @@ fn submit_cli_agent_rich_input_opencode_defers_enter_and_close() {
         assert_eq!(pty_writes.borrow().len(), 1);
         assert_eq!(pty_writes.borrow()[0], b"hello");
 
-        // Wait for the delayed \r to arrive.
-        assert_eventually!(
-            pty_writes.borrow().len() == 2,
-            "carriage return should be written after delay"
-        );
+        // Deterministically await the delayed carriage-return timer instead of
+        // polling on wall-clock time, so the test doesn't flake under load.
+        let delayed_enter_future = terminal
+            .update(&mut app, |view, _ctx| view.take_pending_delayed_enter_future())
+            .expect("delayed-enter submit should have spawned a timer");
+        terminal
+            .update(&mut app, |_view, ctx| {
+                ctx.await_spawned_future(delayed_enter_future)
+            })
+            .await;
+
+        assert_eq!(pty_writes.borrow().len(), 2);
         assert_eq!(pty_writes.borrow()[1], b"\r");
     })
 }
