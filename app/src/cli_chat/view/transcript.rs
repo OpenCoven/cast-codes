@@ -96,6 +96,15 @@ fn render_entry(
             font_family,
             font_size,
         ),
+        ChatEntryKind::ToolResult {
+            tool_name,
+            output_preview,
+        } => message_bubble::tool_placeholder(
+            tool_name,
+            output_preview.as_deref(),
+            font_family,
+            font_size,
+        ),
         ChatEntryKind::PermissionRequest { summary, .. } => {
             message_bubble::permission_placeholder(summary, font_family, font_size)
         }
