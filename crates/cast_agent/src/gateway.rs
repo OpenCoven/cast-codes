@@ -4,10 +4,11 @@
 //!
 //! - **Unix transport** (preferred): `tokio::net::UnixStream` to
 //!   `~/.coven/coven.sock`. Talks `/api/v1/*` to the live `coven` daemon.
-//!   This is what the npm-distributed daemon actually serves. Non-streamed
-//!   chat is driven through the daemon's session lifecycle. WebSocket
-//!   streaming is not supported by the daemon, so `stream_messages` returns
-//!   a clear error in this mode.
+//!   This is what the npm-distributed daemon actually serves. Both
+//!   non-streamed (`send_message`) and streamed (`stream_messages`) chat
+//!   are driven through the daemon's session lifecycle; since the daemon
+//!   serves no WebSocket, streaming polls its event log incrementally and
+//!   surfaces each new `output` event as a `MessageChunk::Delta`.
 //! - **TCP transport** (legacy): `reqwest` to `gateway_url`. Talks
 //!   `/v1/*` to a hypothetical Coven Gateway that mirrors the schema
 //!   CastCodes originally shipped against. Kept for back-compat with
@@ -251,6 +252,52 @@ impl GatewayClient {
         socket: &std::path::Path,
         msg: AgentMessage,
     ) -> anyhow::Result<AgentResponse> {
+        let launched = self.launch_daemon_session(socket, &msg).await?;
+        let session_id = launched.session_id.clone();
+
+        match self.collect_session_output(socket, &session_id).await {
+            Ok((output, final_status, exit_code)) => Ok(AgentResponse {
+                conversation_id: session_id,
+                body: serde_json::json!({
+                    "text": output,
+                    "status": final_status,
+                    "exit_code": exit_code,
+                    "harness": launched.harness,
+                    "project_root": launched.project_root,
+                }),
+            }),
+            Err(err) => {
+                // Intentionally do NOT log the daemon session id — the
+                // daemon already records it in its events and CodeQL
+                // flags session-uid cleartext logging.
+                log::warn!(
+                    "cast_agent: chat collect failed: {err}; \
+                     killing session to release the daemon slot"
+                );
+                let kill_path = format!("/api/v1/sessions/{session_id}/kill");
+                let _ = unix_http::request(
+                    socket,
+                    "POST",
+                    &kill_path,
+                    Some(b"{}"),
+                    self.config.request_timeout,
+                )
+                .await;
+                Err(err)
+            }
+        }
+    }
+
+    /// Extract the launch parameters from an [`AgentMessage`] and create a
+    /// non-interactive daemon session for it (`POST /api/v1/sessions`).
+    /// Shared by the non-streaming [`send_message_via_daemon`] and the
+    /// streaming [`stream_messages_via_daemon`] chat paths.
+    #[cfg(unix)]
+    async fn launch_daemon_session(
+        &self,
+        socket: &std::path::Path,
+        msg: &AgentMessage,
+    ) -> anyhow::Result<LaunchedDaemonSession> {
         let prompt = daemon_chat::extract_prompt(&msg.body).ok_or_else(|| {
             anyhow!(
                 "could not extract a prompt from AgentMessage.body; \
@@ -334,42 +381,138 @@ impl GatewayClient {
         .await
         .with_context(|| "POST /api/v1/sessions (unix)")?;
         let launched = launch_resp.into_json::<DaemonSessionRecord>()?;
-        let session_id = launched.id.clone();
 
-        match self
-            .collect_session_output(socket, &session_id, prompt.len())
-            .await
-        {
-            Ok((output, final_status, exit_code)) => Ok(AgentResponse {
-                conversation_id: session_id,
-                body: serde_json::json!({
-                    "text": output,
-                    "status": final_status,
-                    "exit_code": exit_code,
-                    "harness": harness,
-                    "project_root": project_root,
-                }),
-            }),
-            Err(err) => {
-                // Intentionally do NOT log the daemon session id — the
-                // daemon already records it in its events and CodeQL
-                // flags session-uid cleartext logging.
-                log::warn!(
-                    "cast_agent: chat collect failed: {err}; \
-                     killing session to release the daemon slot"
-                );
-                let kill_path = format!("/api/v1/sessions/{session_id}/kill");
-                let _ = unix_http::request(
-                    socket,
-                    "POST",
-                    &kill_path,
-                    Some(b"{}"),
-                    self.config.request_timeout,
-                )
-                .await;
-                Err(err)
+        Ok(LaunchedDaemonSession {
+            session_id: launched.id,
+            harness,
+            project_root,
+        })
+    }
+
+    /// Stream a chat turn through the daemon: launch a non-interactive
+    /// session, then poll `/api/v1/events` incrementally and surface each
+    /// new `output` event as a [`MessageChunk::Delta`] as it arrives —
+    /// real incremental streaming, unlike [`send_message_via_daemon`]
+    /// which accumulates and returns once at terminal status. Emits a
+    /// final [`MessageChunk::Done`] when the session reaches a terminal
+    /// status, or an `Err` on transport failure / timeout (the panel
+    /// renders a stream error in-band). On timeout the session is killed
+    /// to release the daemon slot.
+    #[cfg(unix)]
+    async fn stream_messages_via_daemon(
+        &self,
+        socket: &std::path::Path,
+        msg: AgentMessage,
+    ) -> anyhow::Result<MessageStream> {
+        let launched = self.launch_daemon_session(socket, &msg).await?;
+        let state = DaemonStreamState {
+            socket: socket.to_path_buf(),
+            conversation_id: launched.session_id.clone(),
+            session_id: launched.session_id,
+            after_seq: 0,
+            deadline: Instant::now() + DAEMON_SESSION_TIMEOUT,
+            request_timeout: self.config.request_timeout,
+            poll_interval: DAEMON_POLL_INTERVAL,
+            pending: std::collections::VecDeque::new(),
+            finished: false,
+        };
+
+        let stream = futures::stream::unfold(state, |mut st| async move {
+            // Emit any already-buffered chunk before doing more I/O.
+            if let Some(chunk) = st.pending.pop_front() {
+                return Some((Ok(chunk), st));
             }
-        }
+            if st.finished {
+                return None;
+            }
+
+            loop {
+                if Instant::now() > st.deadline {
+                    // Best-effort kill so the daemon slot is released.
+                    let kill_path = format!("/api/v1/sessions/{}/kill", st.session_id);
+                    let _ = unix_http::request(
+                        &st.socket,
+                        "POST",
+                        &kill_path,
+                        Some(b"{}"),
+                        st.request_timeout,
+                    )
+                    .await;
+                    st.finished = true;
+                    return Some((
+                        Err(anyhow!(
+                            "session did not reach a terminal status within {:?}",
+                            DAEMON_SESSION_TIMEOUT
+                        )),
+                        st,
+                    ));
+                }
+
+                // Drain new output events into pending Deltas.
+                match drain_output_deltas(
+                    &st.socket,
+                    &st.session_id,
+                    &st.conversation_id,
+                    &mut st.after_seq,
+                    st.request_timeout,
+                )
+                .await
+                {
+                    Ok(deltas) => st.pending.extend(deltas),
+                    Err(err) => {
+                        st.finished = true;
+                        return Some((Err(err), st));
+                    }
+                }
+
+                // Check for a terminal session status.
+                let status_path = format!("/api/v1/sessions/{}", st.session_id);
+                let rec = match unix_http::request(
+                    &st.socket,
+                    "GET",
+                    &status_path,
+                    None,
+                    st.request_timeout,
+                )
+                .await
+                .and_then(|r| r.into_json::<DaemonSessionRecord>())
+                {
+                    Ok(rec) => rec,
+                    Err(err) => {
+                        st.finished = true;
+                        return Some((Err(err.context("stream: GET session status")), st));
+                    }
+                };
+                if daemon_chat::is_terminal_status(&rec.status) {
+                    // Final drain for output emitted just before the flip.
+                    if let Ok(deltas) = drain_output_deltas(
+                        &st.socket,
+                        &st.session_id,
+                        &st.conversation_id,
+                        &mut st.after_seq,
+                        st.request_timeout,
+                    )
+                    .await
+                    {
+                        st.pending.extend(deltas);
+                    }
+                    st.pending.push_back(MessageChunk::Done {
+                        conversation_id: st.conversation_id.clone(),
+                    });
+                    st.finished = true;
+                    return st.pending.pop_front().map(|chunk| (Ok(chunk), st));
+                }
+
+                // Yield the first delta we buffered this round, if any;
+                // otherwise wait and poll again.
+                if let Some(chunk) = st.pending.pop_front() {
+                    return Some((Ok(chunk), st));
+                }
+                tokio::time::sleep(st.poll_interval).await;
+            }
+        });
+
+        Ok(Box::pin(stream))
     }
 
     /// Poll the daemon for events + status of the given session until it
@@ -381,7 +524,6 @@ impl GatewayClient {
         &self,
         socket: &std::path::Path,
         session_id: &str,
-        _prompt_len: usize,
     ) -> anyhow::Result<(String, String, Option<i32>)> {
         let deadline = Instant::now() + DAEMON_SESSION_TIMEOUT;
         let mut after_seq: u64 = 0;
@@ -628,17 +770,18 @@ impl GatewayClient {
         format!("{scheme_swapped}{path}")
     }
 
-    /// Open a streaming chat session against `/v1/messages/stream`. Only
-    /// supported on the TCP transport — the Unix-socket daemon does not
-    /// serve a WebSocket endpoint.
+    /// Open a streaming chat session. On the TCP transport this connects to
+    /// the gateway's `/v1/messages/stream` WebSocket; on the Unix transport
+    /// it launches a daemon session and streams its event log incrementally
+    /// (the daemon serves no WebSocket endpoint). Both yield the same
+    /// [`MessageChunk`] stream.
     pub async fn stream_messages(&self, msg: AgentMessage) -> anyhow::Result<MessageStream> {
+        // The daemon serves no WebSocket endpoint, so on the Unix transport
+        // we stream by incrementally polling its event log instead.
         #[cfg(unix)]
         {
-            if matches!(self.transport, Transport::Unix { .. }) {
-                return Err(anyhow!(
-                    "stream_messages is not supported on the Unix daemon transport \
-                     (daemon does not serve WebSocket endpoints)"
-                ));
+            if let Transport::Unix { socket } = &self.transport {
+                return self.stream_messages_via_daemon(socket, msg).await;
             }
         }
 
@@ -703,6 +846,71 @@ fn parse_familiars(status: u16, body: &[u8]) -> Vec<crate::daemon_schema::Daemon
             Vec::new()
         }
     }
+}
+
+/// A daemon session launched for a chat turn: its id plus the resolved
+/// launch parameters the caller echoes back in its response.
+#[cfg(unix)]
+struct LaunchedDaemonSession {
+    session_id: String,
+    harness: String,
+    project_root: String,
+}
+
+/// Owned state threaded through the daemon streaming `unfold`. Holds
+/// everything the poll loop needs so the returned stream borrows nothing
+/// from the `GatewayClient`.
+#[cfg(unix)]
+struct DaemonStreamState {
+    socket: std::path::PathBuf,
+    session_id: String,
+    conversation_id: String,
+    after_seq: u64,
+    deadline: Instant,
+    request_timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+    pending: std::collections::VecDeque<MessageChunk>,
+    finished: bool,
+}
+
+/// Fetch `output` events newer than `*after_seq` for a daemon session and
+/// convert each into a [`MessageChunk::Delta`], advancing `*after_seq`
+/// past every event seen. Empty output payloads are skipped so the stream
+/// never emits blank deltas. Shared by the streaming poll loop.
+#[cfg(unix)]
+async fn drain_output_deltas(
+    socket: &std::path::Path,
+    session_id: &str,
+    conversation_id: &str,
+    after_seq: &mut u64,
+    request_timeout: std::time::Duration,
+) -> anyhow::Result<Vec<MessageChunk>> {
+    let events_path = format!(
+        "/api/v1/events?sessionId={session_id}&afterSeq={}",
+        *after_seq
+    );
+    let page = unix_http::request(socket, "GET", &events_path, None, request_timeout)
+        .await
+        .and_then(|r| r.into_json::<daemon_chat::DaemonEventsPage>())
+        .with_context(|| "GET /api/v1/events (stream)")?;
+
+    let mut deltas = Vec::new();
+    for ev in &page.events {
+        if ev.kind == "output" {
+            if let Some(data) = daemon_chat::parse_output_data(&ev.payload_json) {
+                if !data.is_empty() {
+                    deltas.push(MessageChunk::Delta {
+                        conversation_id: conversation_id.to_string(),
+                        content: data,
+                    });
+                }
+            }
+        }
+        if ev.seq > *after_seq {
+            *after_seq = ev.seq;
+        }
+    }
+    Ok(deltas)
 }
 
 #[cfg(test)]
