@@ -289,6 +289,13 @@ impl GatewayClient {
             // don't specify a harness get it too, matching the agent panel.
             .unwrap_or_else(|| "coven-code".into());
 
+        let familiar_id = msg
+            .body
+            .get("familiarId")
+            .and_then(serde_json::Value::as_str)
+            .filter(|v| !v.trim().is_empty())
+            .map(String::from);
+
         let title = msg
             .body
             .get("title")
@@ -296,13 +303,19 @@ impl GatewayClient {
             .map(String::from)
             .unwrap_or_else(|| prompt.chars().take(60).collect::<String>());
 
-        let launch_body = serde_json::json!({
+        let mut launch_body = serde_json::json!({
             "projectRoot": project_root,
             "harness": harness,
             "prompt": prompt,
             "launchMode": "nonInteractive",
             "title": title,
         });
+        // No debug log of familiar_id: it flows from the request body and
+        // CodeQL's rust/cleartext-logging rule treats request-body fields as
+        // sensitive (mirrors the existing no-log comment below).
+        if let Some(fid) = &familiar_id {
+            launch_body["familiarId"] = serde_json::Value::String(fid.clone());
+        }
         let launch_bytes = serde_json::to_vec(&launch_body)?;
 
         // No debug log of the launch parameters: `harness` and

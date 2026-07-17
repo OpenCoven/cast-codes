@@ -122,12 +122,23 @@ const ASK_AI_BLOCK_INPUT_LIMIT: usize = 100;
 fn coven_code_agent_message_body(
     prompt: String,
     cwd: Option<&std::path::Path>,
+    target: &::ai::cast_agent::RequestTarget,
 ) -> serde_json::Value {
     let mut body = serde_json::json!({
         "text": prompt,
-        "harness": COVEN_CODE_HARNESS,
         "title": COVEN_CODE_OPERATION_TITLE,
     });
+    match target {
+        ::ai::cast_agent::RequestTarget::Familiar(id) => {
+            body["familiarId"] = serde_json::Value::String(id.clone());
+            // Also send coven-code as the harness so a daemon that doesn't
+            // yet route familiarId still spawns the native agent.
+            body["harness"] = serde_json::Value::String(COVEN_CODE_HARNESS.to_string());
+        }
+        ::ai::cast_agent::RequestTarget::Harness(h) => {
+            body["harness"] = serde_json::Value::String(h.clone());
+        }
+    }
     if let Some(cwd) = cwd {
         body["projectRoot"] = serde_json::Value::String(cwd.to_string_lossy().to_string());
     }
@@ -139,10 +150,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn coven_code_message_body_targets_coven_code_harness() {
+    fn coven_code_message_body_harness_target() {
+        let target =
+            ::ai::cast_agent::RequestTarget::Harness(COVEN_CODE_HARNESS.to_string());
         let body = coven_code_agent_message_body(
             "Inspect this project".to_string(),
             Some(std::path::Path::new("/tmp/castcodes-project")),
+            &target,
         );
 
         assert_eq!(
@@ -160,6 +174,27 @@ mod tests {
         assert_eq!(
             body.get("projectRoot").and_then(serde_json::Value::as_str),
             Some("/tmp/castcodes-project")
+        );
+        assert!(body.get("familiarId").is_none());
+    }
+
+    #[test]
+    fn coven_code_message_body_familiar_target() {
+        let target = ::ai::cast_agent::RequestTarget::Familiar("nova".to_string());
+        let body = coven_code_agent_message_body(
+            "Inspect this project".to_string(),
+            Some(std::path::Path::new("/tmp/castcodes-project")),
+            &target,
+        );
+
+        assert_eq!(
+            body.get("familiarId").and_then(serde_json::Value::as_str),
+            Some("nova")
+        );
+        // Fallback harness is also included so old daemons still launch.
+        assert_eq!(
+            body.get("harness").and_then(serde_json::Value::as_str),
+            Some("coven-code")
         );
     }
 }
@@ -1064,7 +1099,8 @@ impl AIAssistantPanelView {
                 None
             }
         };
-        let body = coven_code_agent_message_body(prompt, cwd.as_deref());
+        let target = ::ai::cast_agent::RequestTarget::Harness(COVEN_CODE_HARNESS.to_string());
+        let body = coven_code_agent_message_body(prompt, cwd.as_deref(), &target);
         let msg = ::ai::cast_agent::AgentMessage {
             conversation_id: conversation_id.clone(),
             body,

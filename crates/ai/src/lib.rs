@@ -16,6 +16,8 @@ pub mod cast_agent {
         AgentMessage, CastAgent, CastAgentConfig, CastAgentRuntime, CovenSession, DiagnosticEntry,
         DiagnosticSeverity, HostSubstrate, MessageChunk, PaneInfo, SessionStatus, Substrate,
     };
+    pub use ::cast_agent::daemon_schema::DaemonFamiliar;
+    pub use ::cast_agent::familiar::{resolve, FamiliarStore, RequestTarget, SUPPORTED_HARNESSES};
 }
 
 pub mod llm_id;
