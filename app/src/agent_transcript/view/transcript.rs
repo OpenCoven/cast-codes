@@ -10,7 +10,11 @@ use crate::agent_transcript::entry::{ChatEntry, ChatEntryKind};
 use crate::agent_transcript::view::message_bubble;
 
 /// Render an ordered slice of entries as a column of transcript rows.
-pub fn render_entries(entries: &[ChatEntry], font_family: FamilyId, font_size: f32) -> Box<dyn Element> {
+pub fn render_entries(
+    entries: &[ChatEntry],
+    font_family: FamilyId,
+    font_size: f32,
+) -> Box<dyn Element> {
     let mut col = Flex::column().with_main_axis_size(MainAxisSize::Min);
     for entry in entries {
         col = col.with_child(render_entry(entry, font_family, font_size));

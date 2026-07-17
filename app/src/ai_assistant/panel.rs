@@ -265,7 +265,15 @@ struct CovenStreamState {
     /// loop stops scheduling when this flips to `false`.
     in_flight: bool,
     /// Chunks the cast_agent task has emitted since the last UI drain.
+    /// Used by the plain-text fallback path (bridge / non-stream mode).
     pending_chunks: Vec<::ai::cast_agent::MessageChunk>,
+    /// Structured transcript entries for the current stream, rendered via the
+    /// shared `agent_transcript` views. Non-empty only when the daemon
+    /// `stream`-mode path is active (rich rendering); the plain-text `text`
+    /// field is the fallback.
+    entries: Vec<crate::agent_transcript::entry::ChatEntry>,
+    /// Entries the stream task has produced since the last UI drain.
+    pending_entries: Vec<crate::agent_transcript::entry::ChatEntry>,
     /// Conversation id of the active stream (for log correlation in
     /// the rendered output).
     conversation_id: String,
@@ -292,6 +300,43 @@ pub(super) struct CovenStreamHistoryEntry {
     pub conversation_id: String,
     /// Final rendered text for the completed stream.
     pub text: String,
+}
+
+/// Append an entry to a transcript, coalescing consecutive assistant text into
+/// one bubble so streamed `AssistantDelta`s render as a single growing message
+/// rather than one bubble per fragment.
+#[cfg(feature = "cast-agent")]
+fn append_entry_coalescing(
+    entries: &mut Vec<crate::agent_transcript::entry::ChatEntry>,
+    entry: crate::agent_transcript::entry::ChatEntry,
+) {
+    use crate::agent_transcript::entry::ChatEntryKind;
+    if let ChatEntryKind::AssistantResponse { text } = &entry.kind {
+        if let Some(crate::agent_transcript::entry::ChatEntry {
+            kind: ChatEntryKind::AssistantResponse { text: prev },
+            ..
+        }) = entries.last_mut()
+        {
+            prev.push_str(text);
+            return;
+        }
+    }
+    entries.push(entry);
+}
+
+/// Convert one structured `CovenAgentEvent` into a `ChatEntry` and buffer it for
+/// the UI drain. Only used on the Unix daemon `stream`-mode path.
+#[cfg(all(feature = "cast-agent", unix))]
+fn buffer_coven_agent_event(
+    state: &mut CovenStreamState,
+    event: ::ai::cast_agent::CovenAgentEvent,
+) {
+    let seq = (state.entries.len() + state.pending_entries.len()) as u64;
+    if let Some(entry) =
+        crate::ai_assistant::coven_entry::daemon_event_to_entry(event, seq, chrono::Utc::now())
+    {
+        state.pending_entries.push(entry);
+    }
 }
 
 #[cfg(feature = "cast-agent")]
@@ -900,6 +945,8 @@ impl AIAssistantPanelView {
         }
         state.text.clear();
         state.pending_chunks.clear();
+        state.entries.clear();
+        state.pending_entries.clear();
         state.in_flight = false;
         state.conversation_id.clear();
         state.history.clear();
@@ -940,7 +987,10 @@ impl AIAssistantPanelView {
     #[cfg(feature = "cast-agent")]
     fn has_coven_stream_content(&self) -> bool {
         let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
-        state.in_flight || !state.text.is_empty() || !state.history.is_empty()
+        state.in_flight
+            || !state.text.is_empty()
+            || !state.entries.is_empty()
+            || !state.history.is_empty()
     }
 
     #[cfg(not(feature = "cast-agent"))]
@@ -1163,6 +1213,10 @@ impl AIAssistantPanelView {
                 state.text.clear();
             }
             state.pending_chunks.clear();
+            // Structured entries are live-only in Phase 1 (not archived to the
+            // text history); a new stream starts with a fresh transcript.
+            state.entries.clear();
+            state.pending_entries.clear();
             state.in_flight = true;
             state.conversation_id = conversation_id.clone();
         }
@@ -1172,6 +1226,41 @@ impl AIAssistantPanelView {
         let buffer = self.coven_stream.clone();
         let conversation_id_for_task = conversation_id.clone();
         let join = runtime.handle().spawn(async move {
+            // Prefer the daemon `stream`-mode structured path (rich rendering)
+            // on Unix. Falls through to the plain-text `stream_messages` path
+            // below when unavailable (non-unix, TCP bridge, or open error), so
+            // the change is strictly additive.
+            #[cfg(unix)]
+            {
+                match agent.stream_agent_events(msg.clone()).await {
+                    Ok(mut ev_stream) => {
+                        while let Some(event) = ev_stream.next().await {
+                            let terminal = matches!(
+                                event,
+                                ::ai::cast_agent::CovenAgentEvent::Done
+                                    | ::ai::cast_agent::CovenAgentEvent::Error { .. }
+                            );
+                            {
+                                let mut state =
+                                    buffer.lock().unwrap_or_else(|p| p.into_inner());
+                                buffer_coven_agent_event(&mut state, event);
+                            }
+                            if terminal {
+                                break;
+                            }
+                        }
+                        let mut state = buffer.lock().unwrap_or_else(|p| p.into_inner());
+                        state.in_flight = false;
+                        return;
+                    }
+                    Err(err) => {
+                        log::info!(
+                            "cast_agent[{conversation_id_for_task}] stream_agent_events unavailable ({err}); using plain streaming"
+                        );
+                    }
+                }
+            }
+
             let fallback_msg = msg.clone();
             let stream = match agent.stream_messages(msg).await {
                 Ok(stream) => stream,
@@ -1299,6 +1388,8 @@ impl AIAssistantPanelView {
                 super::coven_stream_persist::save(&snapshot);
             }
             state.pending_chunks.clear();
+            state.entries.clear();
+            state.pending_entries.clear();
             state.in_flight = false;
             state.conversation_id.clear();
             state.text = COVEN_CODE_OFFLINE_NOTICE.to_string();
@@ -1354,6 +1445,12 @@ impl AIAssistantPanelView {
                             ::ai::cast_agent::MessageChunk::Done { .. } => {}
                         }
                     }
+                    // Drain structured entries (daemon stream-mode path),
+                    // coalescing consecutive assistant text into one bubble.
+                    let drained_entries: Vec<_> = state.pending_entries.drain(..).collect();
+                    for entry in drained_entries {
+                        append_entry_coalescing(&mut state.entries, entry);
+                    }
                     state.in_flight
                 };
                 ctx.notify();
@@ -1374,11 +1471,16 @@ impl AIAssistantPanelView {
         const SECTION_HEADER_FONT_SIZE: f32 = 10.;
         const BODY_FONT_SIZE: f32 = 13.;
 
-        let (text, in_flight, history) = {
+        let (text, in_flight, history, entries) = {
             let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
-            (state.text.clone(), state.in_flight, state.history.clone())
+            (
+                state.text.clone(),
+                state.in_flight,
+                state.history.clone(),
+                state.entries.clone(),
+            )
         };
-        if text.is_empty() && !in_flight && history.is_empty() {
+        if text.is_empty() && entries.is_empty() && !in_flight && history.is_empty() {
             return Empty::new().finish();
         }
 
@@ -1441,8 +1543,47 @@ impl AIAssistantPanelView {
             column.add_child(make_entry(label, entry.text.clone(), true));
         }
 
-        // Active stream (live or most recently completed).
-        if !text.is_empty() || in_flight {
+        // Active stream (live or most recently completed). When structured
+        // entries are present (daemon stream-mode), render them richly via the
+        // shared agent_transcript views; otherwise fall back to plain text.
+        if !entries.is_empty() {
+            let label = if in_flight {
+                "COVEN STREAM • LIVE".to_string()
+            } else {
+                "COVEN STREAM".to_string()
+            };
+            let header = Container::new(
+                ui_builder
+                    .wrappable_text(label, false)
+                    .with_style(UiComponentStyles {
+                        font_family_id: Some(ui_font),
+                        font_size: Some(SECTION_HEADER_FONT_SIZE),
+                        font_weight: Some(warpui::fonts::Weight::Semibold),
+                        font_color: Some(theme.muted_foreground()),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            )
+            .with_padding_bottom(4.)
+            .finish();
+            let body = crate::agent_transcript::view::transcript::render_entries(
+                &entries,
+                ui_font,
+                BODY_FONT_SIZE,
+            );
+            column.add_child(
+                Container::new(
+                    Flex::column()
+                        .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                        .with_child(header)
+                        .with_child(body)
+                        .finish(),
+                )
+                .with_padding_bottom(8.)
+                .finish(),
+            );
+        } else if !text.is_empty() || in_flight {
             let label = if in_flight {
                 "COVEN STREAM • LIVE".to_string()
             } else {
