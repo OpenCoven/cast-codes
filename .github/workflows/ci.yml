@@ -111,6 +111,17 @@ jobs:
       # The public CastCodes repo does not provision hosted SSH test fixtures.
       # Tests that need those fixtures include `_ssh_` in their name.
       EXCLUDE_SSH_TESTS_FILTER: " and not test(/_ssh_/)"
+      # sccache (macOS only). The macOS test job spends ~54 of its ~76 minutes
+      # compiling the workspace test binaries. Swatinem/rust-cache caches
+      # dependencies but not workspace crates, so those recompile every run.
+      # sccache (as RUSTC_WRAPPER, GitHub Actions cache backend) caches the
+      # rustc outputs across runs to cut that compile (#195). Requires
+      # CARGO_INCREMENTAL=0 (standard for CI anyway). On Linux/Windows
+      # RUSTC_WRAPPER is empty, which cargo treats as unset, so those jobs are
+      # unchanged; the sccache install + stats steps below are macOS-gated.
+      RUSTC_WRAPPER: ${{ matrix.os == 'macos' && 'sccache' || '' }}
+      CARGO_INCREMENTAL: "0"
+      SCCACHE_GHA_ENABLED: ${{ matrix.os == 'macos' && 'true' || 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -144,6 +155,12 @@ jobs:
           target_os: ${{ matrix.os }}
           is_self_hosted: ${{ matrix.is_self_hosted }}
           install_test_deps: true
+
+      # Install sccache and wire up its GitHub Actions cache backend. macOS
+      # only — see the RUSTC_WRAPPER note in this job's env (#195).
+      - name: Set up sccache
+        if: ${{ matrix.os == 'macos' }}
+        uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
 
       - name: Install Shells
         uses: ConorMacBride/install-package@3e7ad059e07782ee54fa35f827df52aae0626f30 # v1
@@ -241,6 +258,12 @@ jobs:
           # don't get rate limited during compilation (e.g.: retrieving
           # Sentry SDK binary releases).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Surface sccache's cache hit rate so the compile-time win from #195 is
+      # visible in the job log. macOS only.
+      - name: Show sccache stats
+        if: ${{ matrix.os == 'macos' && (success() || failure()) }}
+        run: sccache --show-stats
 
       - name: Run unit tests
         # Unlike later test steps, only run this if previous steps succeed (so
