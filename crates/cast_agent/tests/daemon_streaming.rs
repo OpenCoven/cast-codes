@@ -29,6 +29,7 @@ use cast_agent::{
     agent::AgentMessage,
     config::CastAgentConfig,
     gateway::{GatewayClient, MessageChunk},
+    CovenAgentEvent,
 };
 
 fn events_after_seq_zero() -> String {
@@ -46,7 +47,11 @@ fn empty_events() -> String {
     r#"{"events":[],"hasMore":false}"#.to_string()
 }
 
-async fn handle_conn(mut stream: UnixStream, status_polls: Arc<AtomicUsize>) {
+async fn handle_conn(
+    mut stream: UnixStream,
+    status_polls: Arc<AtomicUsize>,
+    events_after0: fn() -> String,
+) {
     // Read the request headers, then drain the Content-Length body. The
     // client sends `Connection: close` and then reads to EOF, so it never
     // half-closes its write side — we must not `read_to_end` (deadlock).
@@ -96,7 +101,7 @@ async fn handle_conn(mut stream: UnixStream, status_polls: Arc<AtomicUsize>) {
         r#"{"id":"sess-1","status":"running","exit_code":null}"#.to_string()
     } else if path.starts_with("/api/v1/events") {
         if path.contains("afterSeq=0") {
-            events_after_seq_zero()
+            events_after0()
         } else {
             empty_events()
         }
@@ -136,7 +141,7 @@ async fn streams_daemon_output_incrementally_until_done() {
     let server = tokio::spawn(async move {
         while let Ok((conn, _)) = listener.accept().await {
             let polls = accept_polls.clone();
-            tokio::spawn(handle_conn(conn, polls));
+            tokio::spawn(handle_conn(conn, polls, events_after_seq_zero));
         }
     });
 
@@ -182,4 +187,91 @@ async fn streams_daemon_output_incrementally_until_done() {
         "each output event should arrive as its own delta"
     );
     assert!(done, "stream should terminate with a Done chunk");
+}
+
+/// One `output` event whose `data` carries the five newline-delimited
+/// stream-json lines a `launchMode: "stream"` coven-code turn emits.
+fn sj_events_after_seq_zero() -> String {
+    let lines = [
+        r#"{"type":"system","subtype":"init"}"#,
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hi "}]}}"#,
+        r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"f":"a"}}]}}"#,
+        r#"{"type":"tool_result","name":"Read","output":"ok"}"#,
+        r#"{"type":"result","subtype":"success"}"#,
+    ];
+    // `payload_json` is itself a JSON-encoded string: {"data":"<jsonl>"}.
+    let payload = serde_json::json!({ "data": lines.join("\n") }).to_string();
+    serde_json::json!({
+        "events": [ { "seq": 1, "kind": "output", "payload_json": payload } ],
+        "hasMore": false
+    })
+    .to_string()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn streams_structured_coven_agent_events() {
+    let socket_path =
+        std::env::temp_dir().join(format!("cast_agent_sj_stub_{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket_path);
+    let listener = UnixListener::bind(&socket_path).expect("bind stub daemon socket");
+
+    let status_polls = Arc::new(AtomicUsize::new(0));
+    let accept_polls = status_polls.clone();
+    let server = tokio::spawn(async move {
+        while let Ok((conn, _)) = listener.accept().await {
+            let polls = accept_polls.clone();
+            tokio::spawn(handle_conn(conn, polls, sj_events_after_seq_zero));
+        }
+    });
+
+    let cfg = CastAgentConfig {
+        socket_path: Some(socket_path.clone()),
+        ..CastAgentConfig::default()
+    };
+    let client = GatewayClient::new(Arc::new(cfg));
+
+    let msg = AgentMessage {
+        conversation_id: "conv-ignored".to_string(),
+        body: serde_json::json!({ "prompt": "hi", "harness": "coven-code" }),
+    };
+
+    let mut stream = client
+        .stream_agent_events(msg)
+        .await
+        .expect("stream_agent_events should launch the stream-mode session");
+
+    let mut events = Vec::new();
+    while let Some(ev) = stream.next().await {
+        let terminal = matches!(ev, CovenAgentEvent::Done | CovenAgentEvent::Error { .. });
+        events.push(ev);
+        if terminal {
+            break;
+        }
+    }
+
+    server.abort();
+    let _ = std::fs::remove_file(&socket_path);
+
+    // system.init dropped; then text delta, tool call, tool result, done.
+    assert!(
+        matches!(events.first(), Some(CovenAgentEvent::AssistantDelta { text }) if text == "Hi "),
+        "first event should be the assistant text delta, got: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, CovenAgentEvent::ToolCall { name, .. } if name == "Read")),
+        "expected a Read ToolCall, got: {events:?}"
+    );
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            CovenAgentEvent::ToolResult { name, output } if name == "Read" && output == "ok"
+        )),
+        "expected a Read ToolResult, got: {events:?}"
+    );
+    assert!(
+        matches!(events.last(), Some(CovenAgentEvent::Done)),
+        "stream should end with Done, got: {events:?}"
+    );
 }
