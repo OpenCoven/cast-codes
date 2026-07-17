@@ -5,3 +5,4 @@
 //! it is a leaf render module (enforced by `script/check_cli_chat_boundary`).
 
 pub mod entry;
+pub mod view;
