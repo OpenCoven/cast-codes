@@ -204,6 +204,8 @@ struct MouseStateHandles {
     close_panel_state: MouseStateHandle,
     reset_context_button: MouseStateHandle,
     copy_transcript_button: MouseStateHandle,
+    #[cfg(feature = "cast-agent")]
+    familiar_pill: MouseStateHandle,
 
     script_zero_state_prompt: MouseStateHandle,
     git_zero_state_prompt: MouseStateHandle,
@@ -279,6 +281,9 @@ struct CovenStreamState {
     /// [`COVEN_STREAM_HISTORY_MAX`] so the panel doesn't grow
     /// unbounded over a long session.
     history: std::collections::VecDeque<CovenStreamHistoryEntry>,
+    /// Familiar id selected for this conversation. `None` = use the global
+    /// default (config `default_familiar`), else the first supported harness.
+    selected_familiar: Option<String>,
 }
 
 #[cfg(feature = "cast-agent")]
@@ -312,6 +317,11 @@ pub enum AIAssistantAction {
     /// the GPUI render loop.
     #[cfg(feature = "cast-agent")]
     SendViaCovenGateway,
+    /// Advance the per-conversation Familiar selection to the next entry in
+    /// the runtime catalog (or the supported-harness fallback list) and
+    /// re-render the picker chip.
+    #[cfg(feature = "cast-agent")]
+    CycleFamiliar,
 }
 
 pub fn init(app: &mut AppContext) {
@@ -992,6 +1002,7 @@ impl AIAssistantPanelView {
                 .finish(),
             )
             .with_child(self.render_gateway_status_pill())
+            .with_child(self.render_familiar_pill(appearance))
             .with_child(Shrinkable::new(1., Empty::new().finish()).finish());
 
         // Add the copy and restart buttons iff the transcript is non-empty or there's a request in flight;
@@ -1099,7 +1110,17 @@ impl AIAssistantPanelView {
                 None
             }
         };
-        let target = ::ai::cast_agent::RequestTarget::Harness(COVEN_CODE_HARNESS.to_string());
+        let selected_familiar = {
+            let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+            state.selected_familiar.clone()
+        };
+        let catalog = runtime.familiars();
+        let default_familiar = runtime.agent().config().default_familiar.clone();
+        let target = ::ai::cast_agent::resolve(
+            selected_familiar.as_deref(),
+            default_familiar.as_deref(),
+            &catalog,
+        );
         let body = coven_code_agent_message_body(prompt, cwd.as_deref(), &target);
         let msg = ::ai::cast_agent::AgentMessage {
             conversation_id: conversation_id.clone(),
@@ -1478,6 +1499,120 @@ impl AIAssistantPanelView {
         .with_margin_left(8.)
         .with_margin_right(4.)
         .finish()
+    }
+
+    /// Advance this conversation's Familiar selection to the next entry in
+    /// the runtime catalog (or the supported-harness fallback list when the
+    /// daemon has no catalog). Wraps around; a `None` (default) selection
+    /// jumps to the first option.
+    #[cfg(feature = "cast-agent")]
+    fn cycle_familiar(&mut self, _ctx: &mut ViewContext<Self>) {
+        let catalog = ::ai::cast_agent::global()
+            .map(|r| r.familiars())
+            .unwrap_or_default();
+        let options: Vec<String> = if catalog.is_empty() {
+            ::ai::cast_agent::SUPPORTED_HARNESSES
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        } else {
+            catalog.iter().map(|f| f.id.clone()).collect()
+        };
+        if options.is_empty() {
+            return;
+        }
+        let mut state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+        let current = state.selected_familiar.clone();
+        let next_idx = current
+            .as_ref()
+            .and_then(|c| options.iter().position(|o| o == c))
+            .map(|i| (i + 1) % options.len())
+            .unwrap_or(0);
+        state.selected_familiar = Some(options[next_idx].clone());
+    }
+
+    /// Human-readable label for this conversation's resolved Familiar/harness,
+    /// used on the picker chip. Prefers the catalog `emoji + label` when the
+    /// resolved target is a catalog Familiar; otherwise shows the raw harness.
+    #[cfg(feature = "cast-agent")]
+    fn current_familiar_label(&self) -> String {
+        let runtime = ::ai::cast_agent::global();
+        let catalog = runtime.as_ref().map(|r| r.familiars()).unwrap_or_default();
+        let default_familiar = runtime
+            .as_ref()
+            .map(|r| r.agent().config().default_familiar.clone())
+            .unwrap_or_default();
+        let selected = {
+            let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
+            state.selected_familiar.clone()
+        };
+        match ::ai::cast_agent::resolve(
+            selected.as_deref(),
+            default_familiar.as_deref(),
+            &catalog,
+        ) {
+            ::ai::cast_agent::RequestTarget::Familiar(id) => catalog
+                .iter()
+                .find(|f| f.id == id)
+                .map(|f| {
+                    if f.emoji.is_empty() {
+                        f.label().to_string()
+                    } else {
+                        format!("{} {}", f.emoji, f.label())
+                    }
+                })
+                .unwrap_or(id),
+            ::ai::cast_agent::RequestTarget::Harness(h) => h,
+        }
+    }
+
+    /// Clickable text chip next to the gateway status pill. Shows the
+    /// current conversation's Familiar/harness and cycles to the next
+    /// option on click via [`AIAssistantAction::CycleFamiliar`].
+    #[cfg(feature = "cast-agent")]
+    fn render_familiar_pill(&self, appearance: &Appearance) -> Box<dyn Element> {
+        let default_styles = UiComponentStyles {
+            border_width: None,
+            font_color: Some(appearance.theme().muted_foreground()),
+            font_size: Some(11.),
+            font_family_id: Some(appearance.ui_font_family()),
+            padding: Some(Coords {
+                top: 2.,
+                bottom: 2.,
+                left: 6.,
+                right: 6.,
+            }),
+            border_radius: Some(CornerRadius::with_all(Radius::Pixels(4.))),
+            ..Default::default()
+        };
+
+        let hover_style = UiComponentStyles {
+            background: Some(appearance.theme().surface_3().into()),
+            ..default_styles
+        };
+
+        appearance
+            .ui_builder()
+            .button_with_custom_styles(
+                ButtonVariant::Text,
+                self.mouse_state_handles.familiar_pill.clone(),
+                default_styles,
+                Some(hover_style),
+                Some(hover_style),
+                Some(hover_style),
+            )
+            .with_text_label(self.current_familiar_label())
+            .build()
+            .on_click(move |ctx, _, _| ctx.dispatch_typed_action(AIAssistantAction::CycleFamiliar))
+            .with_cursor(Cursor::PointingHand)
+            .finish()
+    }
+
+    /// Empty fallback when the cast-agent backend is compiled out so
+    /// `render_title_bar` stays a single code path.
+    #[cfg(not(feature = "cast-agent"))]
+    fn render_familiar_pill(&self, _appearance: &Appearance) -> Box<dyn Element> {
+        Empty::new().finish()
     }
 
     /// Render the "Coven Sessions" section between the transcript and the
@@ -1901,6 +2036,11 @@ impl TypedActionView for AIAssistantPanelView {
             }
             #[cfg(feature = "cast-agent")]
             SendViaCovenGateway => self.send_via_coven_gateway(ctx),
+            #[cfg(feature = "cast-agent")]
+            CycleFamiliar => {
+                self.cycle_familiar(ctx);
+                ctx.notify();
+            }
             FocusTerminalInput => ctx.emit(AIAssistantPanelEvent::FocusTerminalInput),
             FocusEditor => {
                 self.focus_state = PanelFocusState::Editor;

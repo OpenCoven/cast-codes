@@ -88,9 +88,11 @@ impl CastAgentRuntime {
         let session_agent = agent.clone();
         handle.spawn(async move {
             session_agent.refresh_sessions().await;
+            session_agent.refresh_familiars().await;
             loop {
                 tokio::time::sleep(SESSION_REFRESH_INTERVAL).await;
                 session_agent.refresh_sessions().await;
+                session_agent.refresh_familiars().await;
             }
         });
 
@@ -113,6 +115,14 @@ impl CastAgentRuntime {
     /// the background refresh loop.
     pub fn sessions(&self) -> Vec<CovenSession> {
         self.agent.sessions_snapshot()
+    }
+
+    /// Sync snapshot of the cached Familiar catalog. Safe to call from the
+    /// UI render thread — reads a cache populated by the background refresh
+    /// loop. Empty until the first refresh lands (or the daemon has no
+    /// catalog).
+    pub fn familiars(&self) -> Vec<crate::daemon_schema::DaemonFamiliar> {
+        self.agent.familiars_snapshot()
     }
 
     /// Display name ("Familiar").

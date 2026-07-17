@@ -61,6 +61,7 @@ pub struct CastAgent {
     gateway: Arc<GatewayClient>,
     substrate: Arc<SubstrateCollector>,
     sessions: Arc<SessionStore>,
+    familiars: Arc<crate::familiar::FamiliarStore>,
     comux: Arc<ComuxBridge>,
 }
 
@@ -76,12 +77,14 @@ impl CastAgent {
         tokio::spawn(async move { probe_gateway.health_probe().await });
         let substrate = Arc::new(SubstrateCollector::new());
         let sessions = Arc::new(SessionStore::new(gateway.clone()));
+        let familiars = Arc::new(crate::familiar::FamiliarStore::new(gateway.clone()));
         let comux = Arc::new(ComuxBridge::new());
         Self {
             config,
             gateway,
             substrate,
             sessions,
+            familiars,
             comux,
         }
     }
@@ -117,6 +120,17 @@ impl CastAgent {
     /// produced, or an empty `Vec` before the first refresh completes.
     pub fn sessions_snapshot(&self) -> Vec<CovenSession> {
         self.sessions.snapshot()
+    }
+
+    /// Refresh + return the Familiar catalog (never errors; empty when the
+    /// daemon has no catalog).
+    pub async fn refresh_familiars(&self) -> Vec<crate::daemon_schema::DaemonFamiliar> {
+        self.familiars.list().await
+    }
+
+    /// Sync snapshot of the cached Familiar catalog for the UI thread.
+    pub fn familiars_snapshot(&self) -> Vec<crate::daemon_schema::DaemonFamiliar> {
+        self.familiars.snapshot()
     }
 
     /// Open a streaming chat session against the Coven Gateway's
