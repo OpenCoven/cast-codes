@@ -80,6 +80,7 @@ async fn stream_messages_yields_chunks_in_order() {
         token: None,
         request_timeout: std::time::Duration::from_secs(5),
         socket_path: None,
+        default_familiar: None,
     });
     let client = GatewayClient::new(config);
 

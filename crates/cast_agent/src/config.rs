@@ -36,6 +36,9 @@ pub struct CastAgentConfig {
     /// `~/.coven/coven.sock`). When `Some`, the gateway client uses this
     /// instead of `gateway_url` and talks `/api/v1/*` to the daemon.
     pub socket_path: Option<PathBuf>,
+    /// Global default Familiar id used for new conversations when the user
+    /// has not picked one. `None` falls back to the first supported harness.
+    pub default_familiar: Option<String>,
 }
 
 impl Default for CastAgentConfig {
@@ -45,6 +48,7 @@ impl Default for CastAgentConfig {
             token: None,
             request_timeout: std::time::Duration::from_secs(10),
             socket_path: None,
+            default_familiar: None,
         }
     }
 }
@@ -93,6 +97,12 @@ impl CastAgentConfig {
         cfg.socket_path =
             resolve_socket_path(explicit_socket, gateway_was_explicit, detected_socket);
 
+        // Default Familiar — env > file. Absent leaves `None` (harness fallback).
+        cfg.default_familiar = std::env::var("COVEN_DEFAULT_FAMILIAR")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| file_cfg.default_familiar.filter(|v| !v.trim().is_empty()));
+
         cfg
     }
 
@@ -140,6 +150,8 @@ struct FileConfig {
     token: Option<String>,
     #[serde(default)]
     socket_path: Option<PathBuf>,
+    #[serde(default)]
+    default_familiar: Option<String>,
 }
 
 /// Decide the effective Unix-socket path from the three inputs, keeping
@@ -211,5 +223,16 @@ mod tests {
     fn no_socket_when_nothing_available() {
         assert_eq!(resolve_socket_path(None, false, None), None);
         assert_eq!(resolve_socket_path(None, true, None), None);
+    }
+
+    #[test]
+    fn file_config_parses_default_familiar() {
+        let parsed: FileConfig = toml::from_str(r#"default_familiar = "nova""#).unwrap();
+        assert_eq!(parsed.default_familiar.as_deref(), Some("nova"));
+    }
+
+    #[test]
+    fn default_config_has_no_default_familiar() {
+        assert_eq!(CastAgentConfig::default().default_familiar, None);
     }
 }
