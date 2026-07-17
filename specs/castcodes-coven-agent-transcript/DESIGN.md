@@ -72,13 +72,8 @@ CLI path (UNCHANGED behavior):
 - New `daemon_event_to_entry(CovenAgentEvent) -> Option<ChatEntry>` adapter. It lives on the **backend side** (`ai_assistant` or `cast_agent`), never in `agent_transcript` — the neutral module must not know about `CovenAgentEvent`, exactly as it must not know about `CLIAgentEvent`. Both adapters (`from_event`, `daemon_event_to_entry`) depend on `agent_transcript`, not the reverse.
 - The plain-text "COVEN STREAM" block is replaced by an `agent_transcript` transcript view fed by the mapped entries. The offline notice and Phase-1 gating (`CovenDispatch`, `COVEN_CODE_OFFLINE_NOTICE`) are unchanged.
 
-**5. Spike — resolve the structured-event source (plan task 0, blocking)**
-Determine how cast_agent obtains structured events from a `coven-code` daemon session:
-- (a) launch the session with `--stream-json` and parse the JSONL out of the daemon's `output` events, or
-- (b) a dedicated daemon structured-event `kind`, or
-- (c) a distinct `coven run --stream-json` consumption path.
-
-**If none is available, Phase 1's rich rendering blocks on a Coven-daemon change.** In that case, ship the extraction + CLI-path refactor (still valuable groundwork) and track the daemon dependency separately.
+**5. Structured-event source — ✅ RESOLVED by spike (see `SPIKE-daemon-structured-events.md`)**
+The daemon supports **`launchMode: "stream"`**: it runs the harness with its adapter `stream_args` and forwards the harness's JSONL (`system.init / user / assistant / tool_result / result`). `coven-code` declares `"stream": true` + `stream_args` (`--print --input-format stream-json --output-format stream-json`), as do `codex`/`claude`/`copilot`. **No upstream Coven change is needed** — `cast_agent` changes the launch from `nonInteractive` to `stream` and parses the JSONL `output` events into `CovenAgentEvent`s. One wire detail to confirm early in the plan: how the prompt is delivered in stream mode (positional prompt is ignored; the harness expects a stream-json user frame on stdin — long-lived, one turn per frame).
 
 ## Data flow details
 
@@ -102,7 +97,7 @@ Determine how cast_agent obtains structured events from a `coven-code` daemon se
 
 ## Risks & open questions
 
-1. **(Top risk) Structured events from the daemon** — the spike. Everything rich depends on it. Mitigation: the extraction + fallback make Phase 1 partially shippable even if the daemon can't yet emit structured events.
+1. **~~(Top risk) Structured events from the daemon~~ — ✅ RESOLVED** (`SPIKE-daemon-structured-events.md`). The daemon's `launchMode: "stream"` forwards harness stream-json; `coven-code` supports it natively; no upstream change needed. Residual: confirm the stream-mode prompt-delivery wire detail early in the plan.
 2. **`agent_transcript` extraction churn** — moving types/views out of `cli_chat` touches many imports. Mitigation: pure move + re-export shim initially; behavior-preserving; gated by `cli_chat`'s unchanged tests.
 3. **Fork-local boundary** — `agent_transcript` must not pull Warp-owned infra (`cli_chat` has `script/check_cli_chat_boundary`). Mitigation: keep `agent_transcript` a leaf render module; extend the boundary guard to cover it.
 4. **Feature gating** — coven-code rich rendering should ride the `cast-agent` build feature (already used by the panel); optionally a runtime flag for staged rollout.
