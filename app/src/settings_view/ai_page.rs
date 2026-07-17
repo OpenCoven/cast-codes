@@ -1556,6 +1556,8 @@ impl AISettingsPageView {
                 if cloud_services_available && FeatureFlag::AgentModeComputerUse.is_enabled() {
                     widgets.push(Box::new(CloudAgentComputerUseWidget::default()));
                 }
+                #[cfg(feature = "cast-agent")]
+                widgets.push(Box::new(FamiliarsWidget));
             }
             Some(AISubpage::Profiles) => {
                 if cloud_services_available && !FeatureFlag::UsageBasedPricing.is_enabled() {
@@ -3239,6 +3241,73 @@ impl SettingsWidget for GlobalAIWidget {
         Container::new(row.finish())
             .with_padding_bottom(15.)
             .finish()
+    }
+}
+
+#[cfg(feature = "cast-agent")]
+struct FamiliarsWidget;
+
+#[cfg(feature = "cast-agent")]
+impl FamiliarsWidget {
+    fn render_familiars_section(&self, app: &AppContext) -> Box<dyn Element> {
+        let catalog = ::ai::cast_agent::global()
+            .map(|r| r.familiars())
+            .unwrap_or_default();
+        let mut col = Flex::column();
+        col = col.with_child(render_ai_setting_description(
+            "Familiars are personas served by the Coven daemon. Selection happens per conversation in the agent panel.",
+            true,
+            app,
+        ));
+        if catalog.is_empty() {
+            col = col.with_child(render_ai_setting_description(
+                "No Familiars available. Start the Coven daemon to load the persona catalog.",
+                true,
+                app,
+            ));
+        } else {
+            for f in &catalog {
+                col = col.with_child(render_ai_setting_description(
+                    format!("{} {} — {} ({})", f.emoji, f.label(), f.role, f.status),
+                    true,
+                    app,
+                ));
+            }
+        }
+        col.finish()
+    }
+}
+
+#[cfg(feature = "cast-agent")]
+impl SettingsWidget for FamiliarsWidget {
+    type View = AISettingsPageView;
+
+    fn search_terms(&self) -> &str {
+        "familiars coven daemon personas cast agent"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let mut column = Flex::column();
+        column.add_child(render_separator(appearance));
+        column.add_child(
+            Container::new(
+                build_sub_header(
+                    appearance,
+                    "Familiars",
+                    Some(styles::header_font_color(true, app)),
+                )
+                .finish(),
+            )
+            .with_padding_bottom(HEADER_PADDING)
+            .finish(),
+        );
+        column.add_child(self.render_familiars_section(app));
+        column.finish()
     }
 }
 

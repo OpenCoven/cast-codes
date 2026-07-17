@@ -11,6 +11,8 @@ pub mod cast_agent {
     //! of truth. Today this is a pass-through; if more host-side wiring
     //! lands (e.g. wrapping `is_available` with telemetry), it goes here.
 
+    pub use ::cast_agent::daemon_schema::DaemonFamiliar;
+    pub use ::cast_agent::familiar::{resolve, FamiliarStore, RequestTarget, SUPPORTED_HARNESSES};
     pub use ::cast_agent::{
         global, is_available, sessions, set_host_substrate, update_host_substrate, AgentBackend,
         AgentMessage, CastAgent, CastAgentConfig, CastAgentRuntime, CovenSession, DiagnosticEntry,
