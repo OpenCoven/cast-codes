@@ -47,3 +47,14 @@ path = "junit.xml"
 filter = 'test(update_manager)'
 platform = { host = 'cfg(target_os = "windows")' }
 retries = 2
+
+[[profile.ci.overrides]]
+# The `terminal::view::tests` are app-heavy (`App::test`) and several assert on
+# delayed PTY writes via `assert_eventually!`. Under full-suite parallelism the
+# timing windows can be missed on a saturated runner, so individual tests in this
+# module flake intermittently — a different test each run, or none (reproduced
+# locally: 3 distinct tests seen flaking across full-suite runs, each passing
+# 12/12 in isolation). Retry to de-flake until the timing assertions are made
+# load-independent. See https://github.com/OpenCoven/cast-codes/issues/198.
+filter = 'test(terminal::view::tests::)'
+retries = 2
