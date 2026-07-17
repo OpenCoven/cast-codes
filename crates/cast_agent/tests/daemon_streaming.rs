@@ -47,20 +47,41 @@ fn empty_events() -> String {
 }
 
 async fn handle_conn(mut stream: UnixStream, status_polls: Arc<AtomicUsize>) {
-    // Read until the end of the request headers. The client sends
-    // `Connection: close` and then reads to EOF, so it never half-closes
-    // its write side — we must not `read_to_end` here or we'd deadlock.
+    // Read the request headers, then drain the Content-Length body. The
+    // client sends `Connection: close` and then reads to EOF, so it never
+    // half-closes its write side — we must not `read_to_end` (deadlock).
+    // But we MUST consume the POST body before responding + closing: if we
+    // close while the client is still writing its body, the client's write
+    // fails with ECONNRESET. That raced favourably locally but reset under
+    // CI's heavy parallelism.
     let mut buf = Vec::new();
     let mut tmp = [0u8; 1024];
-    loop {
+    let header_end = loop {
+        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            break pos + 4;
+        }
+        match stream.read(&mut tmp).await {
+            Ok(0) => break buf.len(),
+            Ok(n) => buf.extend_from_slice(&tmp[..n]),
+            Err(_) => break buf.len(),
+        }
+    };
+
+    // Parse Content-Length (case-insensitive) and read the remaining body
+    // so the client's `write_all(body)` completes before we close.
+    let content_length: usize = String::from_utf8_lossy(&buf[..header_end.min(buf.len())])
+        .lines()
+        .find_map(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower
+                .strip_prefix("content-length:")
+                .and_then(|v| v.trim().parse().ok())
+        })
+        .unwrap_or(0);
+    while buf.len() < header_end + content_length {
         match stream.read(&mut tmp).await {
             Ok(0) => break,
-            Ok(n) => {
-                buf.extend_from_slice(&tmp[..n]);
-                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
-                    break;
-                }
-            }
+            Ok(n) => buf.extend_from_slice(&tmp[..n]),
             Err(_) => break,
         }
     }
