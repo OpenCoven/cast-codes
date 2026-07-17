@@ -453,6 +453,34 @@ impl GatewayClient {
         }
     }
 
+    /// GET the Familiar persona catalog. Never errors: returns an empty
+    /// catalog when the daemon does not implement the endpoint (404), is
+    /// unreachable, or returns a malformed body. The TCP/bridge transport
+    /// has no familiars endpoint, so it always yields an empty catalog.
+    pub async fn list_familiars(&self) -> Vec<crate::daemon_schema::DaemonFamiliar> {
+        match &self.transport {
+            #[cfg(unix)]
+            Transport::Unix { socket } => {
+                match unix_http::request(
+                    socket,
+                    "GET",
+                    "/api/v1/familiars",
+                    None,
+                    self.config.request_timeout,
+                )
+                .await
+                {
+                    Ok(resp) => parse_familiars(resp.status, &resp.body),
+                    Err(err) => {
+                        log::debug!("cast_agent: GET /api/v1/familiars failed: {err}; empty catalog");
+                        Vec::new()
+                    }
+                }
+            }
+            Transport::Tcp { .. } => Vec::new(),
+        }
+    }
+
     pub async fn list_sessions(&self) -> anyhow::Result<Vec<CovenSession>> {
         match &self.transport {
             #[cfg(unix)]
@@ -644,3 +672,42 @@ impl GatewayClient {
 /// Boxing makes the stream `Unpin`, so callers can drive it with
 /// `.next().await` without manual `pin_mut!`.
 pub type MessageStream = std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<MessageChunk>> + Send>>;
+
+/// Parse a `/api/v1/familiars` response into a catalog. Returns an empty
+/// Vec for any non-2xx status or malformed body so the UI degrades to the
+/// harness fallback instead of surfacing an error.
+fn parse_familiars(status: u16, body: &[u8]) -> Vec<crate::daemon_schema::DaemonFamiliar> {
+    if !(200..300).contains(&status) {
+        log::debug!("cast_agent: /familiars returned HTTP {status}; treating as empty catalog");
+        return Vec::new();
+    }
+    match serde_json::from_slice::<Vec<crate::daemon_schema::DaemonFamiliar>>(body) {
+        Ok(list) => list,
+        Err(err) => {
+            log::debug!("cast_agent: /familiars body did not parse ({err}); empty catalog");
+            Vec::new()
+        }
+    }
+}
+
+#[cfg(test)]
+mod familiars_tests {
+    use super::*;
+
+    #[test]
+    fn parses_2xx_catalog() {
+        let body = br#"[{"id":"nova"},{"id":"sage"}]"#;
+        let out = parse_familiars(200, body);
+        assert_eq!(out.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(), ["nova", "sage"]);
+    }
+
+    #[test]
+    fn empty_on_404() {
+        assert!(parse_familiars(404, b"not found").is_empty());
+    }
+
+    #[test]
+    fn empty_on_malformed_2xx_body() {
+        assert!(parse_familiars(200, b"{not json}").is_empty());
+    }
+}
