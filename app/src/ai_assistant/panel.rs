@@ -151,8 +151,7 @@ mod tests {
 
     #[test]
     fn coven_code_message_body_harness_target() {
-        let target =
-            ::ai::cast_agent::RequestTarget::Harness(COVEN_CODE_HARNESS.to_string());
+        let target = ::ai::cast_agent::RequestTarget::Harness(COVEN_CODE_HARNESS.to_string());
         let body = coven_code_agent_message_body(
             "Inspect this project".to_string(),
             Some(std::path::Path::new("/tmp/castcodes-project")),
@@ -1546,11 +1545,8 @@ impl AIAssistantPanelView {
             let state = self.coven_stream.lock().unwrap_or_else(|p| p.into_inner());
             state.selected_familiar.clone()
         };
-        match ::ai::cast_agent::resolve(
-            selected.as_deref(),
-            default_familiar.as_deref(),
-            &catalog,
-        ) {
+        match ::ai::cast_agent::resolve(selected.as_deref(), default_familiar.as_deref(), &catalog)
+        {
             ::ai::cast_agent::RequestTarget::Familiar(id) => catalog
                 .iter()
                 .find(|f| f.id == id)

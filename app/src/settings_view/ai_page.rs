@@ -3296,8 +3296,12 @@ impl SettingsWidget for FamiliarsWidget {
         column.add_child(render_separator(appearance));
         column.add_child(
             Container::new(
-                build_sub_header(appearance, "Familiars", Some(styles::header_font_color(true, app)))
-                    .finish(),
+                build_sub_header(
+                    appearance,
+                    "Familiars",
+                    Some(styles::header_font_color(true, app)),
+                )
+                .finish(),
             )
             .with_padding_bottom(HEADER_PADDING)
             .finish(),

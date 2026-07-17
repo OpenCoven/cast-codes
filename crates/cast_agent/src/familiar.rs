@@ -50,7 +50,10 @@ pub struct FamiliarStore {
 
 impl FamiliarStore {
     pub fn new(gateway: Arc<GatewayClient>) -> Self {
-        Self { gateway, cache: RwLock::new(Vec::new()) }
+        Self {
+            gateway,
+            cache: RwLock::new(Vec::new()),
+        }
     }
 
     /// Refresh the cached catalog from the gateway and return it.
@@ -89,39 +92,60 @@ mod tests {
     #[test]
     fn selected_catalog_id_resolves_to_familiar() {
         let cat = vec![fam("nova")];
-        assert_eq!(resolve(Some("nova"), None, &cat), RequestTarget::Familiar("nova".into()));
+        assert_eq!(
+            resolve(Some("nova"), None, &cat),
+            RequestTarget::Familiar("nova".into())
+        );
     }
 
     #[test]
     fn selected_wins_over_default() {
         let cat = vec![fam("nova"), fam("sage")];
-        assert_eq!(resolve(Some("sage"), Some("nova"), &cat), RequestTarget::Familiar("sage".into()));
+        assert_eq!(
+            resolve(Some("sage"), Some("nova"), &cat),
+            RequestTarget::Familiar("sage".into())
+        );
     }
 
     #[test]
     fn default_used_when_no_selection() {
         let cat = vec![fam("nova")];
-        assert_eq!(resolve(None, Some("nova"), &cat), RequestTarget::Familiar("nova".into()));
+        assert_eq!(
+            resolve(None, Some("nova"), &cat),
+            RequestTarget::Familiar("nova".into())
+        );
     }
 
     #[test]
     fn empty_catalog_falls_back_to_harness() {
-        assert_eq!(resolve(None, None, &[]), RequestTarget::Harness("coven-code".into()));
+        assert_eq!(
+            resolve(None, None, &[]),
+            RequestTarget::Harness("coven-code".into())
+        );
     }
 
     #[test]
     fn non_catalog_selection_is_raw_harness() {
-        assert_eq!(resolve(Some("codex"), None, &[]), RequestTarget::Harness("codex".into()));
+        assert_eq!(
+            resolve(Some("codex"), None, &[]),
+            RequestTarget::Harness("codex".into())
+        );
     }
 
     #[test]
     fn empty_selected_falls_through_to_default() {
         let cat = vec![fam("nova")];
-        assert_eq!(resolve(Some(""), Some("nova"), &cat), RequestTarget::Familiar("nova".into()));
+        assert_eq!(
+            resolve(Some(""), Some("nova"), &cat),
+            RequestTarget::Familiar("nova".into())
+        );
     }
 
     #[test]
     fn empty_default_is_ignored_when_selected_set() {
-        assert_eq!(resolve(Some("codex"), Some(""), &[]), RequestTarget::Harness("codex".into()));
+        assert_eq!(
+            resolve(Some("codex"), Some(""), &[]),
+            RequestTarget::Harness("codex".into())
+        );
     }
 }

@@ -485,7 +485,9 @@ impl GatewayClient {
                 {
                     Ok(resp) => parse_familiars(resp.status, &resp.body),
                     Err(err) => {
-                        log::debug!("cast_agent: GET /api/v1/familiars failed: {err}; empty catalog");
+                        log::debug!(
+                            "cast_agent: GET /api/v1/familiars failed: {err}; empty catalog"
+                        );
                         Vec::new()
                     }
                 }
@@ -711,7 +713,10 @@ mod familiars_tests {
     fn parses_2xx_catalog() {
         let body = br#"[{"id":"nova"},{"id":"sage"}]"#;
         let out = parse_familiars(200, body);
-        assert_eq!(out.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(), ["nova", "sage"]);
+        assert_eq!(
+            out.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
+            ["nova", "sage"]
+        );
     }
 
     #[test]
