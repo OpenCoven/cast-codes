@@ -4364,21 +4364,33 @@ fn drag_drop_image_in_cli_agent_long_running_command_pastes_via_clipboard() {
         });
 
         // The paste flow is async (off-thread file read, then hop back to
-        // the view to write the clipboard + paste keystroke). Wait for the
+        // the view to write the clipboard + paste keystroke). Deterministically
+        // await the spawned paste future instead of polling on wall-clock time,
+        // so the test doesn't flake under load. After it resolves we expect the
         // single PTY write of the platform-appropriate paste byte: 0x16
-        // (Ctrl+V) on macOS/Linux, or `ESC v` on Windows. Without the fix
-        // a shell-escaped path string is written here instead.
+        // (Ctrl+V) on macOS/Linux, or `ESC v` on Windows. Without the fix a
+        // shell-escaped path string is written here instead.
+        let paste_future = terminal
+            .update(&mut app, |view, _ctx| {
+                view.take_pending_cli_agent_paste_future()
+            })
+            .expect("CLI-agent image drop should have spawned a clipboard-paste future");
+        terminal
+            .update(&mut app, |_view, ctx| ctx.await_spawned_future(paste_future))
+            .await;
+
         let expected_paste_bytes: Vec<u8> = if cfg!(windows) {
             vec![0x1b, b'v']
         } else {
             vec![0x16]
         };
-        assert_eventually!(
-            pty_writes.borrow().len() == 1 && pty_writes.borrow()[0] == expected_paste_bytes,
-            "expected single paste-keystroke PTY write {:?}; got {:?}",
-            expected_paste_bytes,
+        assert_eq!(
+            pty_writes.borrow().len(),
+            1,
+            "expected single paste-keystroke PTY write; got {:?}",
             pty_writes.borrow()
         );
+        assert_eq!(pty_writes.borrow()[0], expected_paste_bytes);
 
         std::fs::remove_file(&image_path).ok();
     })
@@ -4536,9 +4548,20 @@ fn submit_with_plugin_but_auto_toggle_off_respects_auto_dismiss() {
             view.submit_cli_agent_rich_input("hello".to_owned(), ctx);
         });
 
-        // auto_toggle is off, so auto_dismiss closes rich input.
-        // Claude uses DelayedEnter, so the close happens after a timer.
-        assert_eventually!(
+        // auto_toggle is off, so auto_dismiss closes rich input. Claude uses
+        // DelayedEnter, so the close runs inside the delayed carriage-return
+        // timer callback. Deterministically await that timer instead of polling
+        // on wall-clock time, so the test doesn't flake under load.
+        let delayed_enter_future = terminal
+            .update(&mut app, |view, _ctx| view.take_pending_delayed_enter_future())
+            .expect("DelayedEnter submit should have spawned a timer");
+        terminal
+            .update(&mut app, |_view, ctx| {
+                ctx.await_spawned_future(delayed_enter_future)
+            })
+            .await;
+
+        assert!(
             terminal.read(&app, |view, ctx| !view
                 .has_active_cli_agent_input_session(ctx)),
             "Rich input should be closed after submit with auto_dismiss"

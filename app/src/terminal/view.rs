@@ -2664,6 +2664,14 @@ pub struct TerminalView {
     /// non-test builds.
     #[cfg_attr(not(test), allow(dead_code))]
     pending_delayed_enter_future: Option<FutureId>,
+
+    /// The [`FutureId`] of the most recently spawned CLI-agent clipboard-paste
+    /// future from [`paste_dropped_images_to_cli_agent`]. Recorded so tests can
+    /// deterministically await the off-thread file read + clipboard write +
+    /// PTY paste-keystroke hop via `await_spawned_future` instead of polling on
+    /// wall-clock time. Not read in non-test builds.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pending_cli_agent_paste_future: Option<FutureId>,
 }
 
 /// Parameters stashed when a code review pane open is requested with
@@ -2706,6 +2714,15 @@ impl TerminalView {
     #[cfg(test)]
     pub(in crate::terminal) fn take_pending_delayed_enter_future(&mut self) -> Option<FutureId> {
         self.pending_delayed_enter_future.take()
+    }
+
+    /// Takes the [`FutureId`] of the most recently spawned CLI-agent
+    /// clipboard-paste future, if any, clearing the stored value. Tests use
+    /// this to deterministically await the paste via `await_spawned_future`
+    /// rather than polling on wall-clock time.
+    #[cfg(test)]
+    pub(in crate::terminal) fn take_pending_cli_agent_paste_future(&mut self) -> Option<FutureId> {
+        self.pending_cli_agent_paste_future.take()
     }
 
     fn is_nested_cloud_mode(&self, app: &AppContext) -> bool {
@@ -3960,6 +3977,7 @@ impl TerminalView {
             sessions,
             remote_server_shimmer_handle: ShimmeringTextStateHandle::new(),
             pending_delayed_enter_future: None,
+            pending_cli_agent_paste_future: None,
             active_block_metadata: None,
             block_text_selection_start_position: None,
             inline_banners_state: Default::default(),

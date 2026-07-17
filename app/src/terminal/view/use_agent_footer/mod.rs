@@ -764,7 +764,7 @@ impl TerminalView {
             return;
         }
         let spawner = ctx.spawner();
-        ctx.spawn(
+        let handle = ctx.spawn(
             async move {
                 for path_str in image_filepaths {
                     // Stat first so a multi-GB drop doesn't load into memory
@@ -851,6 +851,7 @@ impl TerminalView {
             },
             |_, _, _| {},
         );
+        self.pending_cli_agent_paste_future = Some(handle.future_id());
     }
 
     /// Writes the input text to the PTY and then sends a carriage return to
