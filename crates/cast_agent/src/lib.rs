@@ -25,6 +25,7 @@ mod daemon_chat;
 pub mod gateway;
 pub mod runtime;
 pub mod session;
+pub mod stream_json;
 pub mod substrate;
 #[cfg(unix)]
 mod unix_http;
@@ -37,4 +38,5 @@ pub use runtime::{
     global, is_available, sessions, set_host_substrate, update_host_substrate, CastAgentRuntime,
 };
 pub use session::{CovenSession, SessionStatus};
+pub use stream_json::{parse_stream_json_line, CovenAgentEvent};
 pub use substrate::{DiagnosticEntry, DiagnosticSeverity, HostSubstrate, PaneInfo, Substrate};

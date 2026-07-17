@@ -252,7 +252,9 @@ impl GatewayClient {
         socket: &std::path::Path,
         msg: AgentMessage,
     ) -> anyhow::Result<AgentResponse> {
-        let launched = self.launch_daemon_session(socket, &msg).await?;
+        let launched = self
+            .launch_daemon_session(socket, &msg, "nonInteractive")
+            .await?;
         let session_id = launched.session_id.clone();
 
         match self.collect_session_output(socket, &session_id).await {
@@ -297,6 +299,7 @@ impl GatewayClient {
         &self,
         socket: &std::path::Path,
         msg: &AgentMessage,
+        launch_mode: &str,
     ) -> anyhow::Result<LaunchedDaemonSession> {
         let prompt = daemon_chat::extract_prompt(&msg.body).ok_or_else(|| {
             anyhow!(
@@ -354,7 +357,7 @@ impl GatewayClient {
             "projectRoot": project_root,
             "harness": harness,
             "prompt": prompt,
-            "launchMode": "nonInteractive",
+            "launchMode": launch_mode,
             "title": title,
         });
         // No debug log of familiar_id: it flows from the request body and
@@ -404,7 +407,9 @@ impl GatewayClient {
         socket: &std::path::Path,
         msg: AgentMessage,
     ) -> anyhow::Result<MessageStream> {
-        let launched = self.launch_daemon_session(socket, &msg).await?;
+        let launched = self
+            .launch_daemon_session(socket, &msg, "nonInteractive")
+            .await?;
         let state = DaemonStreamState {
             socket: socket.to_path_buf(),
             conversation_id: launched.session_id.clone(),
@@ -507,6 +512,120 @@ impl GatewayClient {
                 // otherwise wait and poll again.
                 if let Some(chunk) = st.pending.pop_front() {
                     return Some((Ok(chunk), st));
+                }
+                tokio::time::sleep(st.poll_interval).await;
+            }
+        });
+
+        Ok(Box::pin(stream))
+    }
+
+    /// Stream structured [`CovenAgentEvent`]s from a stream-mode session.
+    ///
+    /// Launches the session with `launchMode: "stream"` so the harness emits
+    /// stream-json, then parses each new `output` line into a
+    /// `CovenAgentEvent`. Ends when the daemon session reaches a terminal
+    /// status (a `Done`/`Error` is always emitted before the stream closes);
+    /// on timeout the session is killed to release the daemon slot.
+    #[cfg(unix)]
+    pub async fn stream_agent_events(&self, msg: AgentMessage) -> anyhow::Result<AgentEventStream> {
+        use crate::stream_json::CovenAgentEvent;
+
+        let socket = match &self.transport {
+            Transport::Unix { socket } => socket.clone(),
+            _ => anyhow::bail!("stream_agent_events requires the Unix daemon transport"),
+        };
+        let launched = self.launch_daemon_session(&socket, &msg, "stream").await?;
+        let state = DaemonAgentStreamState {
+            socket,
+            session_id: launched.session_id,
+            after_seq: 0,
+            deadline: Instant::now() + DAEMON_SESSION_TIMEOUT,
+            request_timeout: self.config.request_timeout,
+            poll_interval: DAEMON_POLL_INTERVAL,
+            pending: std::collections::VecDeque::new(),
+            finished: false,
+        };
+
+        let stream = futures::stream::unfold(state, |mut st| async move {
+            if let Some(ev) = st.pending.pop_front() {
+                return Some((ev, st));
+            }
+            if st.finished {
+                return None;
+            }
+            loop {
+                if Instant::now() > st.deadline {
+                    let kill_path = format!("/api/v1/sessions/{}/kill", st.session_id);
+                    let _ = unix_http::request(
+                        &st.socket,
+                        "POST",
+                        &kill_path,
+                        Some(b"{}"),
+                        st.request_timeout,
+                    )
+                    .await;
+                    st.finished = true;
+                    return Some((
+                        CovenAgentEvent::Error {
+                            message: "session did not reach a terminal status in time".into(),
+                        },
+                        st,
+                    ));
+                }
+
+                match drain_agent_events(
+                    &st.socket,
+                    &st.session_id,
+                    &mut st.after_seq,
+                    st.request_timeout,
+                )
+                .await
+                {
+                    Ok(events) => st.pending.extend(events),
+                    Err(err) => {
+                        st.finished = true;
+                        return Some((
+                            CovenAgentEvent::Error {
+                                message: err.to_string(),
+                            },
+                            st,
+                        ));
+                    }
+                }
+
+                // A terminal daemon status ends the stream even if the harness
+                // never emitted a stream-json `result` line.
+                let status_path = format!("/api/v1/sessions/{}", st.session_id);
+                if let Ok(rec) =
+                    unix_http::request(&st.socket, "GET", &status_path, None, st.request_timeout)
+                        .await
+                        .and_then(|r| r.into_json::<DaemonSessionRecord>())
+                {
+                    if daemon_chat::is_terminal_status(&rec.status) {
+                        if let Ok(events) = drain_agent_events(
+                            &st.socket,
+                            &st.session_id,
+                            &mut st.after_seq,
+                            st.request_timeout,
+                        )
+                        .await
+                        {
+                            st.pending.extend(events);
+                        }
+                        let has_terminal = st.pending.iter().any(|e| {
+                            matches!(e, CovenAgentEvent::Done | CovenAgentEvent::Error { .. })
+                        });
+                        if !has_terminal {
+                            st.pending.push_back(CovenAgentEvent::Done);
+                        }
+                        st.finished = true;
+                        return st.pending.pop_front().map(|ev| (ev, st));
+                    }
+                }
+
+                if let Some(ev) = st.pending.pop_front() {
+                    return Some((ev, st));
                 }
                 tokio::time::sleep(st.poll_interval).await;
             }
@@ -831,6 +950,13 @@ impl GatewayClient {
 /// `.next().await` without manual `pin_mut!`.
 pub type MessageStream = std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<MessageChunk>> + Send>>;
 
+/// Boxed structured-event stream returned by
+/// [`GatewayClient::stream_agent_events`]. Errors are carried in-band as
+/// [`CovenAgentEvent::Error`], so the item type is not a `Result`.
+#[cfg(unix)]
+pub type AgentEventStream =
+    std::pin::Pin<Box<dyn Stream<Item = crate::stream_json::CovenAgentEvent> + Send>>;
+
 /// Parse a `/api/v1/familiars` response into a catalog. Returns an empty
 /// Vec for any non-2xx status or malformed body so the UI degrades to the
 /// harness fallback instead of surfacing an error. Only used by the
@@ -914,6 +1040,60 @@ async fn drain_output_deltas(
         }
     }
     Ok(deltas)
+}
+
+/// Owned state threaded through the structured-event streaming `unfold`.
+#[cfg(unix)]
+struct DaemonAgentStreamState {
+    socket: std::path::PathBuf,
+    session_id: String,
+    after_seq: u64,
+    deadline: Instant,
+    request_timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+    pending: std::collections::VecDeque<crate::stream_json::CovenAgentEvent>,
+    finished: bool,
+}
+
+/// Fetch new `output` events for a stream-mode session and parse each line as
+/// stream-json into [`CovenAgentEvent`]s, advancing `*after_seq`. Lines that
+/// parse to `Ignored` (session banner / echoed user input) are dropped. A
+/// single `output` event may carry multiple newline-delimited JSONL lines.
+#[cfg(unix)]
+async fn drain_agent_events(
+    socket: &std::path::Path,
+    session_id: &str,
+    after_seq: &mut u64,
+    request_timeout: std::time::Duration,
+) -> anyhow::Result<Vec<crate::stream_json::CovenAgentEvent>> {
+    use crate::stream_json::{parse_stream_json_line, CovenAgentEvent};
+
+    let events_path = format!(
+        "/api/v1/events?sessionId={session_id}&afterSeq={}",
+        *after_seq
+    );
+    let page = unix_http::request(socket, "GET", &events_path, None, request_timeout)
+        .await
+        .and_then(|r| r.into_json::<daemon_chat::DaemonEventsPage>())
+        .with_context(|| "GET /api/v1/events (agent stream)")?;
+
+    let mut out = Vec::new();
+    for ev in &page.events {
+        if ev.kind == "output" {
+            if let Some(data) = daemon_chat::parse_output_data(&ev.payload_json) {
+                for line in data.split('\n') {
+                    let parsed = parse_stream_json_line(line);
+                    if parsed != CovenAgentEvent::Ignored {
+                        out.push(parsed);
+                    }
+                }
+            }
+        }
+        if ev.seq > *after_seq {
+            *after_seq = ev.seq;
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(all(test, unix))]

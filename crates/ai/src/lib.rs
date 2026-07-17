@@ -15,8 +15,9 @@ pub mod cast_agent {
     pub use ::cast_agent::familiar::{resolve, FamiliarStore, RequestTarget, SUPPORTED_HARNESSES};
     pub use ::cast_agent::{
         global, is_available, sessions, set_host_substrate, update_host_substrate, AgentBackend,
-        AgentMessage, CastAgent, CastAgentConfig, CastAgentRuntime, CovenSession, DiagnosticEntry,
-        DiagnosticSeverity, HostSubstrate, MessageChunk, PaneInfo, SessionStatus, Substrate,
+        AgentMessage, CastAgent, CastAgentConfig, CastAgentRuntime, CovenAgentEvent, CovenSession,
+        DiagnosticEntry, DiagnosticSeverity, HostSubstrate, MessageChunk, PaneInfo, SessionStatus,
+        Substrate,
     };
 }
 

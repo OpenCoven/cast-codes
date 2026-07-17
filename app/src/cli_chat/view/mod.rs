@@ -13,7 +13,6 @@ pub mod conversation_list;
 pub mod empty_state; // stub for now; Phase 7
 pub mod error_banner; // stub for now; Phase 7
 pub mod info_bar; // stub for now
-pub mod message_bubble;
 pub mod model_picker; // stub for now; Phase 6
 pub mod permission_card; // stub for now
 pub mod settings_section; // stub for now; Phase 8

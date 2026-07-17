@@ -57,10 +57,10 @@ pub fn info_line(text: Option<&str>, family: FamilyId, font_size: f32) -> Box<dy
     text_row(label, family, font_size, 4.0)
 }
 
+/// Shown at the end of a completed turn. Kept local so this neutral render
+/// module carries no `cli_chat` dependency.
+const TURN_COMPLETE: &str = "Turn complete";
+
 pub fn stop_marker(family: FamilyId, font_size: f32) -> Box<dyn Element> {
-    info_line(
-        Some(crate::cli_chat::strings::TRANSCRIPT_TURN_COMPLETE),
-        family,
-        font_size,
-    )
+    info_line(Some(TURN_COMPLETE), family, font_size)
 }

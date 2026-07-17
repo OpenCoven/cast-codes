@@ -1,6 +1,8 @@
 // Suppress warnings about rustdoc style.
 #![allow(clippy::doc_lazy_continuation)]
 
+#[cfg(not(target_family = "wasm"))]
+mod agent_transcript;
 mod ai;
 mod alloc;
 mod antivirus;

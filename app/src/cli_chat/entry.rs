@@ -1,76 +1,15 @@
+//! CLI adapter: builds the neutral [`ChatEntry`] render model (defined in
+//! `crate::agent_transcript::entry`) from OSC-777 `CLIAgentEvent`s. The types
+//! themselves live in `agent_transcript`; only this backend-specific
+//! conversion lives here.
+
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+
+// Re-export the moved types so existing `crate::cli_chat::entry::*` paths keep
+// resolving after the extraction into `agent_transcript`.
+pub use crate::agent_transcript::entry::{ChatEntry, ChatEntryKind, InfoKind, StopReason};
 
 use crate::terminal::cli_agent_sessions::event::{CLIAgentEvent, CLIAgentEventType};
-
-/// A single transcript entry rendered in the CastCodes chat panel.
-///
-/// One `ChatEntry` is produced per actionable `CLIAgentEvent` via
-/// [`ChatEntry::from_event`]. The `sequence` is the monotonically
-/// increasing index assigned by the caller (the `ChatModel`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatEntry {
-    pub sequence: u64,
-    pub created_at: DateTime<Utc>,
-    pub kind: ChatEntryKind,
-}
-
-/// Typed transcript entry kinds derived from `CLIAgentEvent` variants.
-///
-/// `kind` is serialized as a discriminator tag so persisted transcripts
-/// round-trip without leaking on-the-wire event names.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ChatEntryKind {
-    UserPrompt {
-        text: String,
-    },
-    AssistantResponse {
-        text: String,
-    },
-    ToolCall {
-        tool_name: String,
-        input_preview: Option<String>,
-    },
-    PermissionRequest {
-        summary: String,
-        tool_name: Option<String>,
-        tool_input_preview: Option<String>,
-    },
-    PermissionReplied {
-        approved: bool,
-        summary: Option<String>,
-    },
-    Info {
-        info_kind: InfoKind,
-        summary: Option<String>,
-    },
-    Stop {
-        reason: StopReason,
-        response: Option<String>,
-    },
-    Raw {
-        event_type: String,
-        payload_json: String,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum InfoKind {
-    IdlePrompt,
-    QuestionAsked,
-    SessionStart,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum StopReason {
-    Normal,
-    Cancelled,
-    Errored,
-    Unknown,
-}
 
 impl ChatEntry {
     /// Build a `ChatEntry` from a parsed `CLIAgentEvent`.
@@ -114,8 +53,7 @@ impl ChatEntry {
             CLIAgentEventType::Stop => {
                 let response = event.payload.response.clone().filter(|s| !s.is_empty());
                 // The synthetic `AssistantResponse` entry that mirrors a
-                // non-empty `response` is produced by `ChatModel`, not here —
-                // see Task 2.2 for the second insert.
+                // non-empty `response` is produced by `ChatModel`, not here.
                 ChatEntryKind::Stop {
                     reason: StopReason::Normal,
                     response,
