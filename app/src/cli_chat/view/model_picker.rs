@@ -85,11 +85,11 @@ fn current_agent_model_label(
     };
 
     if let Some(conv) = conv {
-        let agent_name = conv.agent.display_name();
+        let agent_name = conv.backend.display_name();
         let model_name = conv
             .last_model
             .as_deref()
-            .unwrap_or(conv.agent.curated_models()[0].display_name);
+            .unwrap_or(conv.backend.agent_kind().curated_models()[0].display_name);
         format!("{} \u{2014} {}", agent_name, model_name)
     } else {
         let (agent, _) = AgentKind::default_agent_and_model();

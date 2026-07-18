@@ -39,6 +39,17 @@ impl AgentKind {
         }
     }
 
+    /// Inverse of [`AgentKind::as_protocol_str`]. `None` for unrecognized names.
+    pub fn from_protocol_str(s: &str) -> Option<Self> {
+        Some(match s {
+            "claude" => AgentKind::Claude,
+            "codex" => AgentKind::Codex,
+            "gemini" => AgentKind::Gemini,
+            "opencode" => AgentKind::OpenCode,
+            _ => return None,
+        })
+    }
+
     pub fn display_name(&self) -> &'static str {
         match self {
             AgentKind::Claude => "Claude",
@@ -104,10 +115,73 @@ impl AgentKind {
     }
 }
 
+/// The backend a conversation is driven by. Generalizes the panel over the
+/// OSC-777 CLIs (which run in a terminal pane) and the Coven daemon (headless).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConversationBackend {
+    /// An OSC-777 CLI agent running in a terminal pane.
+    Cli(AgentKind),
+    /// A Coven daemon lane (e.g. `coven-code`), driven headless via cast_agent.
+    Daemon { harness: String },
+}
+
+impl ConversationBackend {
+    /// Harness/kind name persisted in the `agent` column (`claude`, `codex`,
+    /// `coven-code`, …).
+    pub fn name(&self) -> String {
+        match self {
+            ConversationBackend::Cli(k) => k.as_protocol_str().to_string(),
+            ConversationBackend::Daemon { harness } => harness.clone(),
+        }
+    }
+
+    /// Discriminator persisted in the `backend` column.
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            ConversationBackend::Cli(_) => "cli",
+            ConversationBackend::Daemon { .. } => "daemon",
+        }
+    }
+
+    /// Human-facing label for lists and headers. CLI agents use their curated
+    /// display name; daemon lanes show the harness name verbatim.
+    pub fn display_name(&self) -> String {
+        match self {
+            ConversationBackend::Cli(k) => k.display_name().to_string(),
+            ConversationBackend::Daemon { harness } => harness.clone(),
+        }
+    }
+
+    /// The CLI [`AgentKind`] backing this conversation, for CLI-only affordances
+    /// like the model picker. Daemon lanes have no CLI kind, so they fall back
+    /// to the default agent (`Claude`) — such lanes never surface the picker.
+    pub fn agent_kind(&self) -> AgentKind {
+        match self {
+            ConversationBackend::Cli(k) => *k,
+            ConversationBackend::Daemon { .. } => AgentKind::Claude,
+        }
+    }
+
+    /// Reconstruct from the two persisted columns. Unknown `cli` agent names
+    /// fall back to `Claude` (forward-compatible); any non-`cli` kind is a
+    /// daemon lane carrying the name verbatim.
+    pub fn from_persisted(name: &str, kind: &str) -> Self {
+        if kind == "cli" {
+            ConversationBackend::Cli(
+                AgentKind::from_protocol_str(name).unwrap_or(AgentKind::Claude),
+            )
+        } else {
+            ConversationBackend::Daemon {
+                harness: name.to_string(),
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatConversation {
     pub session_id: String,
-    pub agent: AgentKind,
+    pub backend: ConversationBackend,
     pub title: String,
     pub cwd: Option<String>,
     pub project: Option<String>,
@@ -119,10 +193,10 @@ pub struct ChatConversation {
 }
 
 impl ChatConversation {
-    pub fn new(session_id: String, agent: AgentKind, now: DateTime<Utc>) -> Self {
+    pub fn new(session_id: String, backend: ConversationBackend, now: DateTime<Utc>) -> Self {
         Self {
             session_id,
-            agent,
+            backend,
             title: String::new(),
             cwd: None,
             project: None,

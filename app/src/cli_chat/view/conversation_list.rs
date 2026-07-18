@@ -74,12 +74,12 @@ fn render_conversation_item(
     font_size: f32,
 ) -> Box<dyn Element> {
     let title = if conv.title.is_empty() {
-        format!("(untitled) \u{2014} {}", conv.agent.display_name())
+        format!("(untitled) \u{2014} {}", conv.backend.display_name())
     } else {
         conv.title.clone()
     };
 
-    let subtitle = conv.agent.display_name().to_string();
+    let subtitle = conv.backend.display_name();
 
     let session_id = conv.session_id.clone();
     let mouse_state = Arc::new(Mutex::new(MouseState::default()));

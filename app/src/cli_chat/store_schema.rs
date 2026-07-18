@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: i32 = 1;
+pub const CURRENT_VERSION: i32 = 2;
 
 const MIGRATIONS: &[&[&str]] = &[
     // Version 1
@@ -30,6 +30,10 @@ const MIGRATIONS: &[&[&str]] = &[
         "CREATE TABLE IF NOT EXISTS chat_schema_version (version INTEGER PRIMARY KEY)",
         "INSERT OR IGNORE INTO chat_schema_version (version) VALUES (1)",
     ],
+    // Version 2 — generalize conversations over a backend discriminator.
+    // Existing rows are all OSC-777 CLI agents, so they default to 'cli';
+    // the `agent` column already carries their protocol name.
+    &["ALTER TABLE chat_conversation ADD COLUMN backend TEXT NOT NULL DEFAULT 'cli'"],
 ];
 
 pub fn migrate(conn: &Connection) -> Result<()> {

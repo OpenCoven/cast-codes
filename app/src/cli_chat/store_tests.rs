@@ -2,7 +2,7 @@ use chrono::{TimeZone, Utc};
 
 use crate::terminal::cli_agent_sessions::CLIAgentSessionStatus;
 
-use super::conversation::{AgentKind, ChatConversation};
+use super::conversation::{AgentKind, ChatConversation, ConversationBackend};
 use super::entry::{ChatEntry, ChatEntryKind};
 use super::store::ChatStore;
 
@@ -11,7 +11,11 @@ fn round_trip_conversation_and_entries() {
     let store = ChatStore::open_in_memory().unwrap();
 
     let now = Utc::now();
-    let mut conv = ChatConversation::new("sess-1".into(), AgentKind::Claude, now);
+    let mut conv = ChatConversation::new(
+        "sess-1".into(),
+        ConversationBackend::Cli(AgentKind::Claude),
+        now,
+    );
     conv.title = "Fix the tests".into();
     conv.cwd = Some("/home/user/project".into());
     conv.last_model = Some("claude-4".into());
@@ -30,7 +34,7 @@ fn round_trip_conversation_and_entries() {
     let loaded = store.load_conversation("sess-1").unwrap().unwrap();
     assert_eq!(loaded.title, "Fix the tests");
     assert_eq!(loaded.session_id, "sess-1");
-    assert_eq!(loaded.agent.as_protocol_str(), "claude");
+    assert_eq!(loaded.backend, ConversationBackend::Cli(AgentKind::Claude));
     assert_eq!(loaded.cwd.as_deref(), Some("/home/user/project"));
     assert_eq!(loaded.last_model.as_deref(), Some("claude-4"));
     assert_eq!(loaded.entries.len(), 1);
@@ -48,10 +52,18 @@ fn list_conversations_returns_in_recency_order() {
     let older = Utc.timestamp_millis_opt(1_000_000).unwrap();
     let newer = Utc.timestamp_millis_opt(2_000_000).unwrap();
 
-    let mut conv_old = ChatConversation::new("old".into(), AgentKind::Gemini, older);
+    let mut conv_old = ChatConversation::new(
+        "old".into(),
+        ConversationBackend::Cli(AgentKind::Gemini),
+        older,
+    );
     conv_old.title = "Old conversation".into();
 
-    let mut conv_new = ChatConversation::new("new".into(), AgentKind::Codex, newer);
+    let mut conv_new = ChatConversation::new(
+        "new".into(),
+        ConversationBackend::Cli(AgentKind::Codex),
+        newer,
+    );
     conv_new.title = "New conversation".into();
 
     // Insert older first, then newer
@@ -71,7 +83,11 @@ fn upsert_updates_mutable_fields() {
     let t1 = Utc.timestamp_millis_opt(1_000_000).unwrap();
     let t2 = Utc.timestamp_millis_opt(2_000_000).unwrap();
 
-    let conv = ChatConversation::new("sess-u".into(), AgentKind::OpenCode, t1);
+    let conv = ChatConversation::new(
+        "sess-u".into(),
+        ConversationBackend::Cli(AgentKind::OpenCode),
+        t1,
+    );
     store.upsert_conversation(&conv).unwrap();
 
     // Update title, status, and updated_at
@@ -94,7 +110,11 @@ fn insert_entry_is_idempotent() {
     let store = ChatStore::open_in_memory().unwrap();
 
     let now = Utc::now();
-    let conv = ChatConversation::new("sess-idem".into(), AgentKind::Claude, now);
+    let conv = ChatConversation::new(
+        "sess-idem".into(),
+        ConversationBackend::Cli(AgentKind::Claude),
+        now,
+    );
     store.upsert_conversation(&conv).unwrap();
 
     let entry = ChatEntry {
@@ -121,7 +141,11 @@ fn blocked_status_round_trips() {
     let store = ChatStore::open_in_memory().unwrap();
 
     let now = Utc::now();
-    let mut conv = ChatConversation::new("sess-blk".into(), AgentKind::Claude, now);
+    let mut conv = ChatConversation::new(
+        "sess-blk".into(),
+        ConversationBackend::Cli(AgentKind::Claude),
+        now,
+    );
     conv.status = CLIAgentSessionStatus::Blocked {
         message: Some("needs approval".into()),
     };

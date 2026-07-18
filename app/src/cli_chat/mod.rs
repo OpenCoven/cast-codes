@@ -18,6 +18,8 @@ pub mod entry;
 #[allow(dead_code)]
 pub mod feature_flag;
 #[allow(dead_code)]
+pub mod history_migration;
+#[allow(dead_code)]
 pub mod model;
 #[allow(dead_code)]
 pub mod paths;
