@@ -23,6 +23,7 @@ use warp_graphql::{
 pub mod coven_entry;
 #[cfg(feature = "cast-agent")]
 pub mod coven_stream_persist;
+pub mod dialogue_types;
 pub mod execution_context;
 pub mod panel;
 pub mod requests;

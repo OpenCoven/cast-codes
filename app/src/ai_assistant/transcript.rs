@@ -28,12 +28,16 @@ use crate::{appearance::Appearance, ui_components::blended_colors};
 
 use super::panel::HEADER_HEIGHT;
 use super::{
+    dialogue_types::{
+        markdown_segments_from_text, AssistantTranscriptPart, CodeBlockIndex,
+        CodeBlockMouseStateHandles, FormattedTranscriptMessage, MarkdownSegment,
+        TranscriptPartSubType,
+    },
     panel::HEXAGON_ALERT_SVG_PATH,
     requests::{RequestStatus, Requests},
     utils::{
-        code_block_position_id, markdown_segments_from_text, render_prepared_response_button,
-        render_request_limit_info, save_as_workflow_position_id, AssistantTranscriptPart,
-        CodeBlockIndex, FormattedTranscriptMessage, MarkdownSegment, TranscriptPartSubType,
+        code_block_position_id, render_prepared_response_button, render_request_limit_info,
+        save_as_workflow_position_id,
     },
     AI_ASSISTANT_SVG_PATH,
 };
@@ -65,16 +69,6 @@ const MISSING_CONTEXT_NOTICE_TEXT: &str =
 
 lazy_static::lazy_static! {
     static ref SCROLL_BUFFER_OFFSET_PX: Pixels = (10.).into_pixels();
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CodeBlockMouseStateHandles {
-    pub play_button: MouseStateHandle,
-    pub play_button_tooltip: MouseStateHandle,
-    pub copy_button: MouseStateHandle,
-    pub copy_button_tooltip: MouseStateHandle,
-    pub save_as_workflow_button: MouseStateHandle,
-    pub save_as_workflow_button_tooltip: MouseStateHandle,
 }
 
 #[derive(Default)]

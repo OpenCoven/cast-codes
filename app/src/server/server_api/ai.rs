@@ -49,8 +49,9 @@ use crate::{
         RequestUsageInfo,
     },
     ai_assistant::{
-        execution_context::WarpAiExecutionContext, requests::GenerateDialogueResult,
-        utils::TranscriptPart, AIGeneratedCommand, GenerateCommandsFromNaturalLanguageError,
+        dialogue_types::TranscriptPart, execution_context::WarpAiExecutionContext,
+        requests::GenerateDialogueResult, AIGeneratedCommand,
+        GenerateCommandsFromNaturalLanguageError,
     },
     drive::workflows::ai_assist::{GeneratedCommandMetadata, GeneratedCommandMetadataError},
     server::graphql::{

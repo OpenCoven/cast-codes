@@ -3,9 +3,7 @@ use crate::ai_assistant::test_util::{
     default_other_segment,
 };
 
-use super::{FormattedTranscriptMessage, TranscriptPart, TranscriptPartSubType};
-
-use crate::ai_assistant::utils::CodeBlockIndex;
+use super::{CodeBlockIndex, FormattedTranscriptMessage, TranscriptPart, TranscriptPartSubType};
 
 // Mocked data to make it easy to test.
 lazy_static::lazy_static! {
