@@ -311,6 +311,7 @@ use crate::{report_if_error, AgentNotificationsModel};
 use ::settings::{Setting, ToggleableSetting};
 use warp_core::features::FeatureFlag;
 
+use crate::ai_assistant::AskAIType;
 use crate::search::{self, QueryFilter};
 use crate::settings_view::import_theme_modal::{ImportThemeModal, ImportThemeModalEvent};
 use crate::terminal::view::{
@@ -322,6 +323,8 @@ use crate::themes::theme_chooser::{ThemeChooser, ThemeChooserEvent, ThemeChooser
 use crate::themes::theme_creator_modal::{ThemeCreatorModal, ThemeCreatorModalEvent};
 use crate::themes::theme_deletion_modal::{ThemeDeletionModal, ThemeDeletionModalEvent};
 use crate::tips::{TipsEvent, TipsView};
+#[cfg(target_family = "wasm")]
+use crate::ui_components::blended_colors;
 use crate::ui_components::buttons::{combo_inner_button, icon_button_with_color};
 use crate::undo_close::UndoCloseStack;
 #[cfg(feature = "local_fs")]
@@ -357,9 +360,6 @@ use crate::workspace::toast_stack::{
     ToastStack as WorkspaceToastStack, ToastStackEvent as WorkspaceToastStackEvent,
 };
 use crate::GlobalResourceHandles;
-use crate::ai_assistant::AskAIType;
-#[cfg(target_family = "wasm")]
-use crate::ui_components::blended_colors;
 
 use futures::Future;
 use itertools::Itertools;
@@ -550,7 +550,6 @@ const TAB_CONTENT_POSITION_ID: &str = "workspace_view:tab_content";
 
 const WELCOME_TIPS_POSITION_ID: &str = "welcome_tips_pill";
 const ELLIPSE_SVG_PATH: &str = "bundled/svg/ellipse.svg";
-
 
 const VERSION_DEPRECATION_BANNER_TEXT: &str = "Your app is out of date and some features may not work as expected. Please update immediately.";
 
@@ -2782,7 +2781,6 @@ impl Workspace {
         } else {
             None
         };
-
 
         ctx.observe(&tips_completed, Workspace::on_tips_model_changed);
 
@@ -18909,7 +18907,9 @@ impl Workspace {
             let right_panel_content = if self.current_workspace_state.is_resource_center_open {
                 Some(self.render_panel(app, self.render_resource_center(), &PanelPosition::Right))
             } else {
-                log::warn!("is_right_panel_open() returned true, but the resource center is not open");
+                log::warn!(
+                    "is_right_panel_open() returned true, but the resource center is not open"
+                );
                 None
             };
 
@@ -22874,7 +22874,6 @@ impl View for Workspace {
                 );
             }
         }
-
 
         // Cross-window ghost drag: floating chip that follows the cursor in the target window.
         // Added last so it renders on top of all other content.
