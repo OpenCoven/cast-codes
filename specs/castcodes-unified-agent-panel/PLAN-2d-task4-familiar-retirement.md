@@ -1,225 +1,105 @@
-# Retire the Familiar Agent Panel — Revised 2d Task 4 Implementation Plan
+# Retire the Familiar Agent Panel — Implementation Plan (v2, corrected)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove the `ai_assistant` "Familiar" agent panel (`AIAssistantPanelView`) and its dead hosted-AI backend, now that the unified `agent_panel` owns agent conversations. Keep everything else in `ai_assistant/` that the rest of the app depends on.
+**Goal:** Remove the `ai_assistant` "Familiar" agent panel (`AIAssistantPanelView`) now that the unified `agent_panel` is the default agent surface — *without* breaking the AI server-API data layer that shares code with the panel.
 
-**Why this supersedes PLAN-2d Task 4:** the original Task 4 assumed the coven-stream was a removable *section* of a still-functional Familiar panel. It isn't. Under `#[cfg(feature = "cast-agent")]`, `AIAssistantPanelView::issue_primary_request` (`panel.rs:872-898`) routes **every** prompt through `send_via_coven_gateway` — the coven-stream *is* the panel's agent path. The non-coven parts (`requests_model`, `transcript_view`) are the old Warp-hosted path, dead in this fork (`requests.rs:1`: *"TODO: Delete all of this once agent mode fully replaces the AI assistant panel"*). So this is a **whole-panel retirement**, not a section trim.
-
-**Architecture:** Delete `panel.rs` + the dead `requests.rs`/`transcript.rs` + the orphaned `coven_stream_persist.rs`, and unwire the panel from the workspace (field, construct, toggle, handler, render, state, action, keybinding, tests). **Preserve** the shared `ai_assistant` surface that the wider app uses (`AskAIType`, `execution_context::WarpAiExecutionContext`, the `AI_ASSISTANT_*` constants, `coven_entry::daemon_event_to_entry`).
-
-**Tech Stack:** Rust, warpui, `warp_features::FeatureFlag`, the `cast-agent` + `unified_agent_panel` Cargo features.
-
----
-
-## ⛔ Prerequisites & the gating decision (read first)
-
-This plan must **not** start until all of these hold:
-
-1. **#214 (cli_chat panel retirement) is merged.** This plan is the second half of the deprecation.
-2. **`PARITY-2d.md` is dogfooded and ticked** — the unified panel must demonstrably cover the daemon flow the Familiar panel provided.
-3. **The default-surface decision is made (load-bearing).** The Familiar panel's toggle is gated `.with_enabled(|| !FeatureFlag::AgentMode.is_enabled())` (`workspace/mod.rs:1247`). Retiring it removes the agent surface for users who have **neither** Agent Mode **nor** `unified_agent_panel` enabled. So one of these must be true *before* this lands:
-   - **(Recommended)** `unified_agent_panel` is promoted to a **default-on** feature (flip 2d stage-1's opt-in feature into the default/preview set), so every build that had the Familiar panel now gets the unified panel; **or**
-   - the Familiar retirement is itself gated so the panel only disappears where the unified panel (or Agent Mode) is present.
-
-   **Do not delete the panel while the default build would be left with no agent surface.** Resolve this with the maintainer and record the choice at the top of the retirement PR.
-
-If any prerequisite is unmet, stop and surface it.
+> ## ⚠️ v2 correction — read this first
+> An execution attempt (2026-07-18) found the v1 delete-set (`panel.rs` + `requests.rs` + `transcript.rs` + `utils.rs` + `coven_stream_persist.rs`) is **wrong**. The Familiar panel is **not** a cleanly-separable cluster:
+>
+> 1. **It's a circular UI knot.** `panel.rs ↔ transcript.rs ↔ utils.rs` are mutually dependent:
+>    - `transcript.rs` imports `panel::{HEADER_HEIGHT, HEXAGON_ALERT_SVG_PATH}`
+>    - `panel.rs` holds `transcript_view: ViewHandle<Transcript>` and builds it (`panel.rs:470 Transcript::new`)
+>    - `utils.rs` imports `panel::AIAssistantAction` and dispatches it (`utils.rs:308`)
+>    - `render_prepared_response_button` / `render_request_limit_info` live in `utils.rs` but are called by **both** `panel.rs` **and** `transcript.rs`
+> 2. **The UI knot is fused to the AI server-API data layer (must survive):**
+>    - `app/src/server/server_api/ai.rs` imports `ai_assistant::utils::TranscriptPart` (6 sites) and `ai_assistant::requests::GenerateDialogueResult`
+>    - `app/src/auth/mod.rs` imports `ai_assistant::requests::REQUEST_LIMIT_INFO_CACHE_KEY`
+>
+> So retiring the panel is a **data-vs-UI extraction refactor**, not a deletion. And it **touches the `server_api` compile** — a critical layer.
+>
+> **This is NOT release-blocking.** The unified panel is already the default agent surface (#216) and the Familiar coven-stream is suppressed by default (the 2d stage-1 gate, #213). Physically deleting the panel is cosmetic cleanup. Do it as its own dogfood-backed effort — ideally alongside retiring the legacy hosted-AI `server_api` dialogue path, since they're entangled.
 
 ---
 
-## File Structure
+## Prerequisites
 
-| File | Action | Notes |
-|---|---|---|
-| `app/src/ai_assistant/panel.rs` | **Delete** | The whole `AIAssistantPanelView` (~2300 lines) |
-| `app/src/ai_assistant/requests.rs` | **Delete** | Dead hosted-AI backend (verify no external users) |
-| `app/src/ai_assistant/transcript.rs` | **Delete** | Renders `requests_model`; dead in cast-agent (verify) |
-| `app/src/ai_assistant/coven_stream_persist.rs` | **Delete** | Orphaned once `panel.rs` goes (no external callers) |
-| `app/src/ai_assistant/mod.rs` | **Modify** | Drop `panel`/`requests`/`transcript`/`coven_stream_persist` mods + panel-only constants; **keep** `AskAIType`, `execution_context`, `coven_entry`, `utils`(verify), and app-wide constants |
-| `app/src/ai_assistant/coven_entry.rs` | **Keep** | `daemon_event_to_entry` — used by `agent_panel::daemon_turn` |
-| `app/src/ai_assistant/execution_context.rs` | **Keep** | `WarpAiExecutionContext` used across terminal/ai/pane_group |
-| `app/src/workspace/view.rs` | **Modify** | Remove field (`:969`), `build_ai_assistant_panel_view` (`:1523`), `handle_ai_assistant_panel_event` (`:1528`), `toggle_ai_assistant_panel` (`:4214`), render branch (`:19247`), `is_ai_assistant_panel_open` state, `ASK_AI_ASSISTANT_KEYBINDING_NAME` (`:569`) |
-| `app/src/workspace/action.rs` | **Modify** | Remove `ToggleAIAssistant` variant (`:228`) + its exhaustiveness arm (`:882`) |
-| `app/src/workspace/mod.rs` | **Modify** | Remove the `!AgentMode` Familiar keybinding (`:1242-1253`); keep the `AgentMode` `NewPaneInAgentMode` binding on the same ID |
-| `app/src/integration_testing/view_getters.rs` | **Modify** | Remove `ai_assistant_panel_view()` fixture (`:11,:217`) |
-| `app/src/workspace/view_tests.rs` | **Modify** | Remove/refactor Familiar focus tests (`:1175-1203`) |
-| `app/src/lib.rs` | **Modify** | Remove `ai_assistant::panel` re-export if present |
-
-**Reference (do not delete): `AskAIType`, `AI_ASSISTANT_FEATURE_NAME`, `AI_ASSISTANT_LOGO_COLOR`, `ASK_AI_ASSISTANT_TEXT` are consumed by `terminal/view.rs`, `pane_group/mod.rs`, `workspace/view.rs`; `execution_context::WarpAiExecutionContext` by `ai/agent`, `ai/predict`, `terminal`, `active_session`.**
+1. **Dogfood the unified panel** (`PARITY-2d.md`) — confirm it fully covers the daemon flow before removing the fallback UI.
+2. **Decide the scope of the legacy hosted-AI path.** `requests.rs`/`transcript.rs`/`utils.rs` exist to serve the old Warp-hosted AI dialogue (stubbed `501` in this fork; `requests.rs` header: *"TODO: Delete all of this once agent mode fully replaces the AI assistant panel"*). Two viable scopes:
+   - **(A) Panel-only retirement** — delete the panel UI, extract the data types that `server_api`/`auth` need into a surviving module, keep `requests.rs` (data). Leaves the hosted-AI *server-API* types in place.
+   - **(B) Full hosted-AI retirement** — also remove the `server_api` dialogue path (`GenerateDialogueResult`, the `generate_dialogue_answer` endpoint, the `TranscriptPart` graphql conversion) so the whole legacy AI-dialogue subsystem goes. Larger; verify no other consumer.
+   Pick one and record it at the top of the retirement PR. **This plan details (A);** (B) additionally deletes the `server_api` dialogue surface.
 
 ---
 
-## Task 1: Confirm the dead/shared boundary (no code changes)
+## Dependency map (ground truth for the extraction)
 
-**Files:** none — this is a verification gate that pins the delete-vs-keep set for the compiler-driven tasks.
+**KEEP (used app-wide, unrelated to the panel):**
+- `ai_assistant::execution_context::WarpAiExecutionContext` — 11 files (terminal, ai/agent, ai/predict, active_session, pane_group).
+- `ai_assistant::AskAIType` + `AI_ASSISTANT_FEATURE_NAME`/`AI_ASSISTANT_LOGO_COLOR`/`ASK_AI_ASSISTANT_TEXT` — terminal/view.rs, pane_group/mod.rs, workspace/view.rs.
+- `ai_assistant::coven_entry::daemon_event_to_entry` — `agent_panel::daemon_turn` (the unified panel).
 
-- [ ] **Step 1: Confirm `requests.rs` / `transcript.rs` have no external users.**
+**KEEP as data (server-API / auth consumers), EXTRACT out of the UI knot:**
+- `utils::TranscriptPart` (+ `FormattedTranscriptMessage`, `MarkdownSegment`, `CodeBlockIndex`, `TranscriptPartSubType`, `AssistantTranscriptPart`, `markdown_segments_from_text`) → move into a new UI-free module, e.g. `ai_assistant/dialogue_types.rs`. Verify each moved item does **not** transitively pull `panel`/`transcript` UI types (`CodeBlockMouseStateHandles` etc. must NOT come along).
+- `requests::GenerateDialogueResult` + `requests::REQUEST_LIMIT_INFO_CACHE_KEY` → keep in `requests.rs` **iff** `requests.rs` compiles without the panel; otherwise split its data types out too.
 
-Run:
-```bash
-grep -rn "ai_assistant::requests\|ai_assistant::transcript\|Requests\b\|Transcript::new" app/src \
-  | grep -v "app/src/ai_assistant/"
-```
-Expected: only `panel.rs`-internal usage (which is being deleted). If anything outside `ai_assistant/` uses them, note it — those call sites must be handled before deletion.
-
-- [ ] **Step 2: Confirm `coven_stream_persist` is orphaned.**
-
-Run:
-```bash
-grep -rn "coven_stream_persist" app/src | grep -v "coven_stream_persist.rs\|panel.rs\|mod.rs"
-```
-Expected: **none** (only `panel.rs` calls `save`/`load`). `CovenStreamHistoryEntry` lives in `panel.rs`; the 2a migration (`cli_chat/history_migration.rs`) has its **own** reader (`HistoryRecord`) and only references the wire format in a comment — so deleting `coven_stream_persist` does not break the migration. If a non-`panel.rs` caller exists, keep `coven_stream_persist` (moving `CovenStreamHistoryEntry` into it) instead of deleting.
-
-- [ ] **Step 3: Confirm the keep-set is used app-wide.**
-
-Run:
-```bash
-grep -rn "AskAIType\|WarpAiExecutionContext\|AI_ASSISTANT_FEATURE_NAME" app/src | grep -v "app/src/ai_assistant/" | wc -l
-```
-Expected: many (terminal, pane_group, ai/*). These stay in `ai_assistant/mod.rs` + `execution_context.rs`.
-
-- [ ] **Step 4: Record the delete-set vs keep-set** in the PR description from the results above. No commit.
+**DELETE (the UI knot):**
+- `panel.rs` (the `AIAssistantPanelView`) + `coven_stream_persist.rs` (orphaned once `panel.rs` goes — verified no external caller).
+- `transcript.rs` (the `Transcript` view — only `panel.rs` + `transcript_tests.rs` construct it).
+- The **UI half** of `utils.rs`: `render_prepared_response_button`, `render_request_limit_info`, `AIAssistantAction` (relocate/delete), and anything importing `panel`/`transcript` UI types.
 
 ---
 
-## Task 2: Remove the workspace wiring (compiler-driven)
+## Tasks (scope A)
 
-**Files:** `app/src/workspace/{view.rs, action.rs, mod.rs}`, `app/src/lib.rs`
+### Task 1: Prove the data/UI split compiles in isolation
+- [ ] Create `ai_assistant/dialogue_types.rs`; move `TranscriptPart` + its supporting types + `markdown_segments_from_text` there. Update `server_api/ai.rs` + any `ai_assistant`-internal users to the new path.
+- [ ] Confirm the moved types do **not** reference `panel`/`transcript`/`AIAssistantAction`/mouse-handle UI types. If they do, extract those leaf types too or stop and reassess.
+- [ ] `cargo check -p warp-app --features gui,cast-agent` — `server_api` should now depend only on `dialogue_types`, not the UI knot (the panel/transcript UI still compiles for now).
+- [ ] Commit.
 
-Do the *wiring* removal first so the panel becomes unreferenced before the files are deleted — the compiler then confirms `panel.rs` has no remaining consumers.
+### Task 2: Unwire the panel from the workspace (compiler-driven)
+- [ ] `workspace/action.rs`: remove `ToggleAIAssistant` (`:228`) + `ClickedAIAssistantIcon` (`:229`) + their exhaustiveness arms (`:868-869`).
+- [ ] `workspace/mod.rs`: remove the Familiar keybinding (the `ToggleAIAssistant` `EditableBinding` gated `!AgentMode`, ~`:1225`); **keep** the `NewPaneInAgentMode` binding on the shared `workspace:toggle_ai_assistant` id.
+- [ ] `lib.rs`: remove `ai_assistant::panel::init(ctx)` (`:1638`).
+- [ ] `workspace/view.rs`: remove the field (`:967`), type import (`:365`), `build_ai_assistant_panel_view` (`:1515`), the construct + struct-init (`:2816`, `:3104`), `handle_ai_assistant_panel_event` + the `AIAssistantPanelEvent` import (`:365`, `:15969`), `toggle_ai_assistant_panel` (`:4201`), the `ClickedAIAssistantIcon` dispatch + handler (`:18313`, `:21093`), `ASK_AI_ASSISTANT_KEYBINDING_NAME` (`:569`,`:619`), and **all ~25 `self.ai_assistant_panel` / `is_ai_assistant_panel_open` focus/state sites** (treat the panel as permanently closed — drop those branches). Keep `AskAIType`/`AI_ASSISTANT_FEATURE_NAME` imports still used elsewhere.
+- [ ] `workspace/util.rs`: remove `is_ai_assistant_panel_open`.
+- [ ] Build iteratively until the only remaining errors are the to-be-deleted files.
+- [ ] Commit.
 
-- [ ] **Step 1: Remove the action + keybinding.** In `workspace/action.rs` delete the `ToggleAIAssistant` variant (`:228`) and its arm in the "needs save" match (`:882-883`). In `workspace/mod.rs` delete the Familiar `EditableBinding` gated on `!AgentMode` (`:1242-1253`) — **keep** the sibling `NewPaneInAgentMode` binding on the same `workspace:toggle_ai_assistant` id (it's Agent Mode's, gated on `AgentMode.is_enabled()`).
+### Task 3: Delete the UI knot
+- [ ] Relocate/delete `AIAssistantAction` (only `utils.rs` uses `PreparedPrompt`; if the prepared-prompt button is deleted, the enum goes entirely).
+- [ ] `git rm app/src/ai_assistant/{panel.rs, transcript.rs, coven_stream_persist.rs}` and delete the UI fns from `utils.rs` (`render_prepared_response_button`, `render_request_limit_info`, the `panel`/`transcript` imports). Update `ai_assistant/mod.rs` (`pub mod` list + panel-only constants — grep each before dropping).
+- [ ] Delete `transcript_tests.rs`; port any still-relevant coverage.
+- [ ] Build until clean.
+- [ ] Commit.
 
-- [ ] **Step 2: Remove the panel field, construction, event handler, toggle, render, state.** In `workspace/view.rs` remove: the `ai_assistant_panel` field (`:969`), the struct-literal init, `build_ai_assistant_panel_view()` (`:1523-1525`) + its `subscribe_to_view` (`:1527-1529`), `handle_ai_assistant_panel_event()` (`:1528`), `toggle_ai_assistant_panel()` (`:4214-4257`), the `is_ai_assistant_panel_open` render branch (`:19247-19252`) and the state field, and `ASK_AI_ASSISTANT_KEYBINDING_NAME` (`:569`) if now unused. Keep the `use crate::ai_assistant::{AskAIType, AI_ASSISTANT_FEATURE_NAME, ...}` imports that other workspace code still uses (the compiler says which).
+### Task 4: Tests + fixtures
+- [ ] `integration_testing/view_getters.rs`: remove `ai_assistant_panel_view()` (`:11`,`:217`).
+- [ ] `workspace/view_tests.rs`: remove the Familiar focus tests (`:1175-1203`).
+- [ ] Run `cargo nextest run -p warp-app --features cast-agent -E 'test(workspace) or test(ai_assistant) or test(agent_panel) or test(server)'`.
+- [ ] Commit.
 
-- [ ] **Step 3: Remove any `pub use ai_assistant::panel;`** from `lib.rs` (grep to confirm).
-
-- [ ] **Step 4: Build.**
-
-Run: `cargo check -p warp-app --bin cast-codes --features gui,cast-agent`
-Expected: fails only with unresolved `AIAssistantPanelView`/`ToggleAIAssistant`/`ai_assistant::panel` references — fix each until it reports only that `panel`/`requests`/`transcript`/`coven_stream_persist` modules are now unused (Task 3 deletes them). Iterate until the only remaining errors are the module deletions.
-
-- [ ] **Step 5: Commit.**
-
-```bash
-git add -A
-git commit -S -m "refactor(ai_assistant): unwire the Familiar panel from the workspace"
-```
-
----
-
-## Task 3: Delete the panel + dead backend + orphaned persist
-
-**Files:** delete `app/src/ai_assistant/{panel.rs, requests.rs, transcript.rs, coven_stream_persist.rs}`; modify `app/src/ai_assistant/mod.rs`
-
-- [ ] **Step 1: Delete the files.**
-
-```bash
-git rm app/src/ai_assistant/panel.rs \
-       app/src/ai_assistant/requests.rs \
-       app/src/ai_assistant/transcript.rs \
-       app/src/ai_assistant/coven_stream_persist.rs
-```
-(If Task 1 Step 2 found an external `coven_stream_persist` user, keep that file — move `CovenStreamHistoryEntry` into it from `panel.rs` — and drop it from this `git rm`.)
-
-- [ ] **Step 2: Update `ai_assistant/mod.rs`.** Remove the `mod`/`pub mod` lines for `panel`, `requests`, `transcript`, `coven_stream_persist`, and any panel-only constants (`AI_ASSISTANT_SVG_PATH`, `AI_ASSISTANT_LOGO_COLOR`, `ASK_AI_ASSISTANT_TEXT`, `PROMPT_CHARACTER_LIMIT`) **only if** a repo-wide grep shows no non-deleted user. **Keep** `coven_entry` (cast-agent), `execution_context`, `utils` (verify), `AskAIType`, and `AI_ASSISTANT_FEATURE_NAME` (still used by `terminal`/`pane_group`/`workspace`).
-
-- [ ] **Step 3: Verify `utils` + `AI_ASSISTANT_*` keep/drop.** For each symbol you consider dropping:
-```bash
-grep -rn "<symbol>" app/src | grep -v "app/src/ai_assistant/"
-```
-Keep anything with an external user; delete only the truly panel-local ones.
-
-- [ ] **Step 4: Build.**
-
-Run: `cargo check -p warp-app --bin cast-codes --features gui,cast-agent`
-Expected: PASS. Fix any straggler `mod.rs` re-export or dead constant the compiler flags.
-
-- [ ] **Step 5: Commit.**
-
-```bash
-git add -A
-git commit -S -m "refactor(ai_assistant): delete the Familiar panel + dead hosted-AI backend"
-```
+### Task 5: Gates (both flag configs)
+- [ ] `./script/check_cli_chat_boundary`, `check_ai_attribution`, `check_rebrand`.
+- [ ] `cargo fmt`; `cargo clippy … --features cast-agent` and `…,unified_agent_panel` (all-targets, `-D warnings`) — clean, **including `server_api`**.
+- [ ] `cargo nextest run -p warp-app --features cast-agent,unified_agent_panel`.
+- [ ] Commit.
 
 ---
 
-## Task 4: Fix tests + integration fixtures
+## Done criteria (scope A)
+- The Familiar panel UI (`panel.rs` + `transcript.rs` + the UI half of `utils.rs` + `coven_stream_persist.rs`) is deleted and unwired from the workspace (~25 focus sites, actions, keybinding, init, event handler, state, field, fixtures).
+- The AI-dialogue **data types** (`TranscriptPart` & friends, `GenerateDialogueResult`, the cache key) survive in a UI-free module; **`server_api` and `auth` still compile**.
+- App-wide `ai_assistant` surface (`AskAIType`, `execution_context`, `coven_entry`) untouched; Agent Mode unaffected.
+- Both flag configs clippy `-D warnings` clean; full suite passes; every commit signed.
 
-**Files:** `app/src/integration_testing/view_getters.rs`, `app/src/workspace/view_tests.rs`
-
-- [ ] **Step 1: Remove the panel test fixture.** Delete `ai_assistant_panel_view()` (`view_getters.rs:11,:217`) and any imports it needed.
-
-- [ ] **Step 2: Remove/refactor the Familiar focus tests.** In `workspace/view_tests.rs` delete the assertions referencing `ai_assistant_panel` (`:1175-1203`). If a test's *intent* (panel focus behavior) still matters for the unified panel, port it to `agent_panel`; otherwise delete it and note the removal in the PR.
-
-- [ ] **Step 3: Run the touched suites.**
-
-```bash
-cargo nextest run -p warp-app --features cast-agent -E 'test(workspace) or test(ai_assistant) or test(agent_panel)'
-```
-Expected: PASS (no references to the deleted panel).
-
-- [ ] **Step 4: Commit.**
-
-```bash
-git add -A
-git commit -S -m "test: drop Familiar-panel fixtures + focus tests"
-```
+## Risks
+1. **`server_api` compile** — the extraction (Task 1) is the crux; if `TranscriptPart` transitively needs UI types, the split is harder. Task 1 stops-and-reassesses in that case.
+2. **~25 workspace focus sites** — behavior-preserving only if the panel is truly always-closed; **needs dogfood verification** of workspace focus after the change (an agent cannot verify this).
+3. **Scope creep to (B)** — if the surviving data module drags in most of the hosted-AI path, consider doing (B) instead (retire the whole hosted-AI dialogue subsystem) as a cleaner cut.
 
 ---
 
-## Task 5: Full gates (both flag configs)
-
-- [ ] **Step 1: Guards.**
-
-```bash
-./script/check_cli_chat_boundary
-./script/check_ai_attribution
-./script/check_rebrand
-```
-
-- [ ] **Step 2: Lint + fmt in both configs.**
-
-```bash
-cargo fmt -p warp-app
-cargo clippy -p warp-app --features cast-agent --all-targets -- -D warnings
-cargo clippy -p warp-app --features cast-agent,unified_agent_panel --all-targets -- -D warnings
-```
-Expected: clean in both — no dead code left behind by the deletion.
-
-- [ ] **Step 3: Full regression.**
-
-```bash
-cargo nextest run -p warp-app --features cast-agent,unified_agent_panel
-```
-Expected: PASS.
-
-- [ ] **Step 4: Commit fmt-only changes.**
-
-```bash
-git add -A
-git commit -S -m "chore(ai_assistant): Familiar-retirement gates + fmt"
-```
-
----
-
-## Done criteria
-
-- `AIAssistantPanelView` and its dead hosted-AI backend (`requests.rs`, `transcript.rs`) and orphaned `coven_stream_persist.rs` are deleted; the panel is fully unwired from the workspace (field/construct/toggle/handler/render/state/action/keybinding/tests).
-- The shared `ai_assistant` surface the rest of the app uses (`AskAIType`, `execution_context::WarpAiExecutionContext`, `coven_entry::daemon_event_to_entry`, `AI_ASSISTANT_FEATURE_NAME`) is preserved and still builds.
-- The default-surface decision (prerequisite 3) is resolved and recorded — no build is left without an agent surface.
-- Both flag configs clippy `-D warnings` clean; guards pass; full suite passes; every commit signed.
-- Agent Mode is unaffected (separate system; its `NewPaneInAgentMode` binding on the shared id remains).
-
----
-
-## Self-Review
-
-**Spec coverage:** whole-panel retirement (Tasks 2-3) ✓; dead-backend cleanup `requests`/`transcript` (Task 3) ✓; orphaned `coven_stream_persist` (Task 1 §2 + Task 3) ✓; preserve app-wide `ai_assistant` surface (Task 1 §3, Task 3 §2-3) ✓; tests/fixtures (Task 4) ✓; the **gating decision** that the original plan missed (prerequisite 3) ✓; Agent Mode non-impact (Done criteria) ✓.
-
-**Placeholder scan:** the delete/keep boundary is pinned by grep gates (Task 1) rather than assumed; `<symbol>`/`<external user>` in Task 3 §2-3 are explicit per-symbol verification steps, not vague TODOs.
-
-**Consistency:** `coven_entry` + `execution_context` + `AskAIType` are in the keep-set everywhere they appear; `panel`/`requests`/`transcript`/`coven_stream_persist` in the delete-set everywhere. The compiler-driven ordering (unwire → delete) means every task ends in a build that proves the boundary.
-
-**Risks flagged:** (1) **prerequisite 3 is the real risk** — retiring the Familiar panel without defaulting the unified panel strands non-AgentMode users; the plan blocks on resolving it. (2) `coven_stream_persist`/`CovenStreamHistoryEntry` ordering — verified orphaned, but Task 1 §2 keeps the fallback (move the struct, keep the file) if a caller is found. (3) Panel-local constants in `mod.rs` — Task 3 §3 greps each before dropping, since several `AI_ASSISTANT_*`/`AskAIType` names are used far outside the panel.
+## History
+- **v1** (superseded): assumed `panel`+`requests`+`transcript`+`utils` were a cleanly-deletable cluster with a functional Familiar panel minus a "coven-stream section." Both premises were wrong — see the v2 correction above.
