@@ -4282,7 +4282,9 @@ fn submit_cli_agent_rich_input_opencode_defers_enter_and_close() {
         // Deterministically await the delayed carriage-return timer instead of
         // polling on wall-clock time, so the test doesn't flake under load.
         let delayed_enter_future = terminal
-            .update(&mut app, |view, _ctx| view.take_pending_delayed_enter_future())
+            .update(&mut app, |view, _ctx| {
+                view.take_pending_delayed_enter_future()
+            })
             .expect("delayed-enter submit should have spawned a timer");
         terminal
             .update(&mut app, |_view, ctx| {
@@ -4376,7 +4378,9 @@ fn drag_drop_image_in_cli_agent_long_running_command_pastes_via_clipboard() {
             })
             .expect("CLI-agent image drop should have spawned a clipboard-paste future");
         terminal
-            .update(&mut app, |_view, ctx| ctx.await_spawned_future(paste_future))
+            .update(&mut app, |_view, ctx| {
+                ctx.await_spawned_future(paste_future)
+            })
             .await;
 
         let expected_paste_bytes: Vec<u8> = if cfg!(windows) {
@@ -4553,7 +4557,9 @@ fn submit_with_plugin_but_auto_toggle_off_respects_auto_dismiss() {
         // timer callback. Deterministically await that timer instead of polling
         // on wall-clock time, so the test doesn't flake under load.
         let delayed_enter_future = terminal
-            .update(&mut app, |view, _ctx| view.take_pending_delayed_enter_future())
+            .update(&mut app, |view, _ctx| {
+                view.take_pending_delayed_enter_future()
+            })
             .expect("DelayedEnter submit should have spawned a timer");
         terminal
             .update(&mut app, |_view, ctx| {
