@@ -78,10 +78,9 @@ fn current_agent_model_label(
     _app: &AppContext,
 ) -> String {
     let conv = match binding {
-        ConversationBinding::Live { session_id, .. } | ConversationBinding::Past { session_id }
-        | ConversationBinding::LiveDaemon { session_id } => {
-            chat.conversation(session_id)
-        }
+        ConversationBinding::Live { session_id, .. }
+        | ConversationBinding::Past { session_id }
+        | ConversationBinding::LiveDaemon { session_id } => chat.conversation(session_id),
         ConversationBinding::None => None,
     };
 

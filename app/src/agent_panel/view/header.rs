@@ -54,10 +54,9 @@ fn current_label(
     chat: &crate::cli_chat::model::ChatModel,
 ) -> String {
     let conv = match binding {
-        ConversationBinding::Live { session_id, .. } | ConversationBinding::Past { session_id }
-        | ConversationBinding::LiveDaemon { session_id } => {
-            chat.conversation(session_id)
-        }
+        ConversationBinding::Live { session_id, .. }
+        | ConversationBinding::Past { session_id }
+        | ConversationBinding::LiveDaemon { session_id } => chat.conversation(session_id),
         ConversationBinding::None => None,
     };
 

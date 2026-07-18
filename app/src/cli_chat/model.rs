@@ -559,7 +559,11 @@ impl ChatModel {
 
     /// Insert a bare daemon conversation for tests that need one present.
     #[cfg(test)]
-    pub(crate) fn upsert_daemon_conversation_for_testing(&mut self, session_id: &str, harness: &str) {
+    pub(crate) fn upsert_daemon_conversation_for_testing(
+        &mut self,
+        session_id: &str,
+        harness: &str,
+    ) {
         use crate::cli_chat::conversation::{ChatConversation, ConversationBackend};
         let conv = ChatConversation::new(
             session_id.to_string(),
