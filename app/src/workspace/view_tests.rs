@@ -1170,41 +1170,6 @@ fn test_switch_focus_panels() {
             );
         });
 
-        // Shift focus from WD to left panel when AI panel is open
-        workspace.update(&mut app, |view, ctx| {
-            view.current_workspace_state.is_ai_assistant_panel_open = true;
-            view.focus_left_panel(ctx);
-        });
-        workspace.update(&mut app, |view, ctx| {
-            assert!(
-                view.ai_assistant_panel.is_self_or_child_focused(ctx),
-                "Expected AI panel to be focused"
-            );
-        });
-
-        // Shift focus from AI panel to left panel (terminal)
-        workspace.update(&mut app, |view, ctx| {
-            view.focus_left_panel(ctx);
-        });
-        workspace.update(&mut app, |_view, ctx| {
-            assert!(
-                workspace.is_self_or_child_focused(ctx),
-                "Expected terminal to be focused"
-            );
-        });
-
-        // Shift focus from workspace to right panel when AI assistant is open
-        workspace.update(&mut app, |view, ctx| {
-            view.current_workspace_state.is_ai_assistant_panel_open = true;
-            view.focus_right_panel(ctx);
-        });
-        workspace.update(&mut app, |view, ctx| {
-            assert!(
-                view.ai_assistant_panel.is_self_or_child_focused(ctx),
-                "Expected AI panel to be focused"
-            );
-        });
-
         // Shift focus from WD to right panel (terminal)
         workspace.update(&mut app, |view, ctx| {
             view.focus_right_panel(ctx);
@@ -2260,7 +2225,6 @@ fn test_vertical_tabs_context_menu_does_not_show_hover_only_tab_bar() {
                     .set_value(WorkspaceDecorationVisibility::OnHover, ctx));
                 report_if_error!(settings.use_vertical_tabs.set_value(true, ctx));
             });
-            workspace.should_show_ai_assistant_warm_welcome = false;
             workspace.vertical_tabs_panel_open = true;
 
             workspace.show_tab_right_click_menu =
@@ -2286,8 +2250,6 @@ fn test_standard_tab_context_menu_shows_hover_only_tab_bar() {
                     .workspace_decoration_visibility
                     .set_value(WorkspaceDecorationVisibility::OnHover, ctx));
             });
-            workspace.should_show_ai_assistant_warm_welcome = false;
-
             workspace.show_tab_right_click_menu =
                 Some((0, TabContextMenuAnchor::Pointer(Vector2F::zero())));
 
