@@ -618,6 +618,11 @@ gui = ["voice_input"]
 # `#[cfg(feature = "cast-agent")]` without inspecting the dep graph.
 # Native bundle scripts pass this explicitly; web and standalone CLI builds leave it off.
 cast-agent = ["ai/cast-agent"]
+# Default-enables the unified agent panel (`FeatureFlag::UnifiedAgentPanel`) so
+# it becomes the reachable agent surface. Off by default — dogfood/preview
+# builds opt in with `--features unified_agent_panel` until the two old panels
+# are retired (staged; see specs/castcodes-unified-agent-panel/PARITY-2d.md).
+unified_agent_panel = []
 msys2_shells = []
 file_retrieval_tools = []
 welcome_tab = []

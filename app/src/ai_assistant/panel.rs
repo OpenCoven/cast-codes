@@ -2222,8 +2222,14 @@ impl View for AIAssistantPanelView {
         panel.add_child(Shrinkable::new(1., body).finish());
 
         panel.add_child(self.render_sessions_section(appearance));
+        // When the unified agent panel is enabled it owns daemon conversations,
+        // so the Familiar panel's coven-stream section is suppressed to avoid a
+        // duplicate surface. Reversible via the flag; removed outright once the
+        // unified panel reaches parity (staged 2d deletion).
         #[cfg(feature = "cast-agent")]
-        panel.add_child(self.render_coven_stream_section(appearance));
+        if !warp_core::features::FeatureFlag::UnifiedAgentPanel.is_enabled() {
+            panel.add_child(self.render_coven_stream_section(appearance));
+        }
 
         if matches!(self.request_status(app), RequestStatus::NotInFlight) {
             let buffer_text = self.editor.as_ref(app).buffer_text(app);
