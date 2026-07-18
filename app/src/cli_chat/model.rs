@@ -218,10 +218,116 @@ impl ChatModel {
         ctx.emit(ChatModelEvent::BindingChanged);
     }
 
+    /// Bind a Coven-daemon conversation for input. Unlike [`Self::bind_live`]
+    /// there is no terminal — submits route through cast_agent. Emits
+    /// `BindingChanged`.
+    pub fn bind_daemon(&mut self, session_id: String, ctx: &mut ModelContext<Self>) {
+        self.binding = ConversationBinding::LiveDaemon { session_id };
+        ctx.emit(ChatModelEvent::BindingChanged);
+    }
+
     /// Clear the panel binding.
     pub fn unbind(&mut self, ctx: &mut ModelContext<Self>) {
         self.binding = ConversationBinding::None;
         ctx.emit(ChatModelEvent::BindingChanged);
+    }
+
+    /// Append a ready-made entry to `session_id`, assigning the next sequence,
+    /// persisting, and emitting update events. Used by the daemon source, whose
+    /// events are not `CLIAgentEvent`s (so they can't go through `apply_event`).
+    /// No-op if the conversation is unknown.
+    pub fn append_entry(
+        &mut self,
+        session_id: &str,
+        entry: ChatEntry,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.do_append_entry(session_id, entry) {
+            ctx.emit(ChatModelEvent::ConversationUpdated {
+                session_id: session_id.to_string(),
+            });
+            ctx.emit(ChatModelEvent::ConversationListChanged);
+        }
+    }
+
+    /// Core append (no event emission) so unit tests can drive it without a
+    /// warpui harness. Returns `true` if the conversation existed and the entry
+    /// was appended.
+    pub(crate) fn do_append_entry(&mut self, session_id: &str, mut entry: ChatEntry) -> bool {
+        if !self.conversations.contains_key(session_id) {
+            return false;
+        }
+        let seq = *self
+            .next_sequence
+            .entry(session_id.to_string())
+            .or_insert(0);
+        entry.sequence = seq;
+        *self.next_sequence.get_mut(session_id).unwrap() += 1;
+
+        if let Some(conv) = self.conversations.get_mut(session_id) {
+            conv.updated_at = entry.created_at;
+            conv.entries.push(entry.clone());
+        }
+        if let Some(store) = self.store.as_ref() {
+            if let Some(conv) = self.conversations.get(session_id) {
+                if let Err(e) = store.upsert_conversation(conv) {
+                    warn!("cli_chat: failed to persist daemon conversation {session_id}: {e}");
+                }
+            }
+            if let Err(e) = store.insert_entry(session_id, &entry) {
+                warn!("cli_chat: failed to persist daemon entry for {session_id}: {e}");
+            }
+        }
+        true
+    }
+
+    /// Upsert a `Daemon` conversation for each live daemon session
+    /// (`(session_id, title)` pairs). Preserves existing entries; only refreshes
+    /// list membership + title. Idempotent. Emits `ConversationListChanged` when
+    /// anything changed.
+    pub fn refresh_daemon_conversations<I>(
+        &mut self,
+        sessions: I,
+        harness: &str,
+        now: DateTime<Utc>,
+        ctx: &mut ModelContext<Self>,
+    ) where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        if self.do_refresh_daemon_conversations(sessions, harness, now) {
+            ctx.emit(ChatModelEvent::ConversationListChanged);
+        }
+    }
+
+    /// Core refresh (no event emission) for unit tests. Returns `true` if the
+    /// conversation set changed.
+    pub(crate) fn do_refresh_daemon_conversations<I>(
+        &mut self,
+        sessions: I,
+        harness: &str,
+        now: DateTime<Utc>,
+    ) -> bool
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        let mut changed = false;
+        for (id, title) in sessions {
+            let conv = self.conversations.entry(id.clone()).or_insert_with(|| {
+                changed = true;
+                ChatConversation::new(
+                    id.clone(),
+                    ConversationBackend::Daemon {
+                        harness: harness.to_string(),
+                    },
+                    now,
+                )
+            });
+            if conv.title != title {
+                conv.title = title;
+                changed = true;
+            }
+        }
+        changed
     }
 
     fn handle_sessions_event(
@@ -444,6 +550,25 @@ impl ChatModel {
     #[cfg(test)]
     pub(crate) fn close_live_binding_for_testing(&mut self, terminal_view_id: EntityId) -> bool {
         self.close_live_binding_for_terminal(terminal_view_id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn bind_daemon_for_testing(&mut self, session_id: String) {
+        self.binding = ConversationBinding::LiveDaemon { session_id };
+    }
+
+    /// Insert a bare daemon conversation for tests that need one present.
+    #[cfg(test)]
+    pub(crate) fn upsert_daemon_conversation_for_testing(&mut self, session_id: &str, harness: &str) {
+        use crate::cli_chat::conversation::{ChatConversation, ConversationBackend};
+        let conv = ChatConversation::new(
+            session_id.to_string(),
+            ConversationBackend::Daemon {
+                harness: harness.to_string(),
+            },
+            chrono::Utc::now(),
+        );
+        self.conversations.insert(session_id.to_string(), conv);
     }
 }
 

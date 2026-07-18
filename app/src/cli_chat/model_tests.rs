@@ -18,7 +18,7 @@ use chrono::Utc;
 use warpui::EntityId;
 
 use super::conversation::ConversationBinding;
-use super::entry::{ChatEntryKind, StopReason};
+use super::entry::{ChatEntry, ChatEntryKind, StopReason};
 use super::model::ChatModel;
 use super::store::ChatStore;
 use crate::terminal::cli_agent_sessions::{
@@ -439,6 +439,87 @@ fn bootstrap_surfaces_migrated_daemon_conversations() {
             .conversations_sorted_by_recency()
             .iter()
             .filter(|c| c.session_id == "d1")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn bind_daemon_sets_live_daemon_binding() {
+    let mut model = ChatModel::new_unwired();
+    model.upsert_daemon_conversation_for_testing("d1", "coven-code");
+    model.bind_daemon_for_testing("d1".into());
+    assert!(matches!(
+        model.binding(),
+        ConversationBinding::LiveDaemon { session_id } if session_id == "d1"
+    ));
+}
+
+#[test]
+fn append_entry_adds_and_sequences() {
+    let mut model = ChatModel::new_unwired();
+    model.upsert_daemon_conversation_for_testing("d1", "coven-code");
+
+    let user = ChatEntry {
+        sequence: 99, // overwritten by the model's next sequence
+        created_at: Utc::now(),
+        kind: ChatEntryKind::UserPrompt {
+            text: "hello".into(),
+        },
+    };
+    assert!(model.do_append_entry("d1", user));
+
+    let reply = ChatEntry {
+        sequence: 99,
+        created_at: Utc::now(),
+        kind: ChatEntryKind::AssistantResponse { text: "hi".into() },
+    };
+    assert!(model.do_append_entry("d1", reply));
+
+    let conv = model.conversation("d1").unwrap();
+    assert_eq!(conv.entries.len(), 2);
+    assert_eq!(conv.entries[0].sequence, 0);
+    assert_eq!(conv.entries[1].sequence, 1, "sequence auto-assigned");
+
+    // Unknown conversation is a no-op.
+    let orphan = ChatEntry {
+        sequence: 0,
+        created_at: Utc::now(),
+        kind: ChatEntryKind::AssistantResponse { text: "x".into() },
+    };
+    assert!(!model.do_append_entry("ghost", orphan));
+}
+
+#[test]
+fn refresh_daemon_conversations_upserts_sessions() {
+    use super::conversation::ConversationBackend;
+
+    let mut model = ChatModel::new_unwired();
+    let now = Utc::now();
+
+    let changed = model.do_refresh_daemon_conversations(
+        [("s1".to_string(), "Fix auth".to_string())],
+        "coven-code",
+        now,
+    );
+    assert!(changed);
+
+    let conv = model.conversation("s1").expect("session upserted");
+    assert!(matches!(conv.backend, ConversationBackend::Daemon { .. }));
+    assert_eq!(conv.title, "Fix auth");
+
+    // Idempotent: same id + title → no change, single conversation.
+    let changed_again = model.do_refresh_daemon_conversations(
+        [("s1".to_string(), "Fix auth".to_string())],
+        "coven-code",
+        now,
+    );
+    assert!(!changed_again);
+    assert_eq!(
+        model
+            .conversations_sorted_by_recency()
+            .iter()
+            .filter(|c| c.session_id == "s1")
             .count(),
         1
     );
