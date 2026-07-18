@@ -587,6 +587,10 @@ default = [
     "settings_file",
     "directory_tab_colors",
     "configurable_context_window",
+    # The unified agent panel is the default agent surface, replacing the
+    # feature-flagged cli_chat panel and (pending retirement) the Familiar
+    # coven-stream panel. See specs/castcodes-unified-agent-panel/.
+    "unified_agent_panel",
 ]
 # Enable this feature to automatically perform heap profiling.  NOTE: This will
 # substantially slow down program execution.
