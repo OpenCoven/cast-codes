@@ -2499,6 +2499,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::SelectablePrompt,
         #[cfg(feature = "agent_mode")]
         FeatureFlag::AgentMode,
+        #[cfg(feature = "unified_agent_panel")]
+        FeatureFlag::UnifiedAgentPanel,
         #[cfg(feature = "resize_fix")]
         FeatureFlag::ResizeFix,
         #[cfg(feature = "richtext_multiselect")]
