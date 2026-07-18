@@ -219,4 +219,9 @@ pub enum ConversationBinding {
     Past {
         session_id: String,
     },
+    /// A Coven-daemon conversation selected for input. No terminal — sends go
+    /// through cast_agent. Sendable whenever the daemon runtime is available.
+    LiveDaemon {
+        session_id: String,
+    },
 }

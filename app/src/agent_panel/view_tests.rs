@@ -40,3 +40,22 @@ fn agent_panel_view_lays_out_without_panicking() {
         });
     })
 }
+
+#[test]
+fn composer_active_for_live_daemon_only_when_runtime_up() {
+    use crate::agent_panel::view::composer::composer_is_active_for;
+    use crate::cli_chat::conversation::ConversationBinding;
+
+    let daemon = ConversationBinding::LiveDaemon {
+        session_id: "d1".into(),
+    };
+    assert!(composer_is_active_for(&daemon, true));
+    assert!(!composer_is_active_for(&daemon, false));
+
+    // A live CLI conversation is always sendable; past/none never.
+    let past = ConversationBinding::Past {
+        session_id: "p1".into(),
+    };
+    assert!(!composer_is_active_for(&past, true));
+    assert!(!composer_is_active_for(&ConversationBinding::None, true));
+}

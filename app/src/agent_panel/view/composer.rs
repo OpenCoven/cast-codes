@@ -17,13 +17,25 @@ use crate::cli_chat::conversation::ConversationBinding;
 /// Padding around the composer area.
 const COMPOSER_PADDING: f32 = 8.0;
 
+/// Whether the composer accepts input for this binding. A live CLI conversation
+/// always can (its terminal is present); a daemon conversation can when the
+/// cast_agent runtime is reachable.
+pub fn composer_is_active_for(binding: &ConversationBinding, daemon_available: bool) -> bool {
+    match binding {
+        ConversationBinding::Live { .. } => true,
+        ConversationBinding::LiveDaemon { .. } => daemon_available,
+        ConversationBinding::Past { .. } | ConversationBinding::None => false,
+    }
+}
+
 pub fn render_composer(view: &AgentPanelView, app: &AppContext) -> Box<dyn Element> {
     let chat = view.chat_model.as_ref(app);
-    // In 2b, a `Live` binding is always a live CLI session (daemon conversations
-    // use the `LiveDaemon` binding introduced in 2c). So `Live` == sendable CLI.
-    let is_live_cli = matches!(chat.binding(), ConversationBinding::Live { .. });
+    #[cfg(feature = "cast-agent")]
+    let daemon_available = ::ai::cast_agent::is_available();
+    #[cfg(not(feature = "cast-agent"))]
+    let daemon_available = false;
 
-    if is_live_cli {
+    if composer_is_active_for(chat.binding(), daemon_available) {
         render_active_composer(view)
     } else {
         render_inactive_placeholder(app)
