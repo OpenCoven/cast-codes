@@ -7,8 +7,7 @@
 //! 2b builds the view shell (merged list + transcript + composer shell). It
 //! reuses the `cli_chat` model layer and the shared `agent_transcript`
 //! renderer; per-backend composer routing + the live daemon source arrive in
-//! 2c. The composer submits via the shared `WorkspaceAction::SubmitChatPrompt`
-//! (live CLI only in 2b).
+//! 2c. The composer submits via `WorkspaceAction::SubmitAgentPrompt`, routed by backend.
 
 #[cfg(feature = "cast-agent")]
 pub mod daemon_turn;

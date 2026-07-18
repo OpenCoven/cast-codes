@@ -594,8 +594,6 @@ pub(crate) const TOGGLE_PROJECT_EXPLORER_BINDING_NAME: &str = "workspace:toggle_
 pub(crate) const TOGGLE_WARP_DRIVE_BINDING_NAME: &str = "workspace:toggle_warp_drive";
 pub(crate) const TOGGLE_RIGHT_PANEL_BINDING_NAME: &str = "workspace:toggle_right_panel";
 #[cfg(not(target_family = "wasm"))]
-pub(crate) const TOGGLE_CLI_CHAT_PANEL_BINDING_NAME: &str = "workspace:toggle_cli_chat_panel";
-#[cfg(not(target_family = "wasm"))]
 pub(crate) const TOGGLE_BROWSER_PANE_BINDING_NAME: &str = "workspace:toggle_browser_pane";
 pub(crate) const TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME: &str =
     "workspace:toggle_vertical_tabs_panel";
@@ -1023,11 +1021,9 @@ pub struct Workspace {
     left_panel_view: ViewHandle<LeftPanelView>,
     left_panel_views: Vec<ToolPanelView>,
     right_panel_view: ViewHandle<RightPanelView>,
-    /// CastCodes chat panel view. Only constructed when
-    /// `FeatureFlag::CastCodesChatPanel` is enabled at workspace init
-    /// time; otherwise stays `None` and the toggle action is a no-op.
-    #[cfg(not(target_family = "wasm"))]
-    cli_chat_panel_view: Option<ViewHandle<crate::cli_chat::ChatPanelView>>,
+    /// Unified agent panel view. Only constructed when
+    /// `FeatureFlag::UnifiedAgentPanel` is enabled at workspace init time;
+    /// otherwise stays `None` and the toggle action is a no-op.
     #[cfg(not(target_family = "wasm"))]
     agent_panel_view: Option<ViewHandle<crate::agent_panel::AgentPanelView>>,
     working_directories_model: ModelHandle<pane_group::WorkingDirectoriesModel>,
@@ -2752,15 +2748,8 @@ impl Workspace {
             me.handle_right_panel_event(event.clone(), ctx);
         });
 
-        // CastCodes chat panel view — gated by the feature flag at
-        // construction time so the disabled build path costs nothing.
-        #[cfg(not(target_family = "wasm"))]
-        let cli_chat_panel_view = if crate::cli_chat::feature_flag::is_enabled() {
-            Some(ctx.add_view(crate::cli_chat::ChatPanelView::new))
-        } else {
-            None
-        };
-
+        // Unified agent panel view — gated by the feature flag at construction
+        // time so the disabled build path costs nothing.
         #[cfg(not(target_family = "wasm"))]
         let agent_panel_view = if crate::agent_panel::feature_flag::is_enabled() {
             Some(ctx.add_view(crate::agent_panel::AgentPanelView::new))
@@ -3147,8 +3136,6 @@ impl Workspace {
             left_panel_view,
             left_panel_views,
             right_panel_view,
-            #[cfg(not(target_family = "wasm"))]
-            cli_chat_panel_view,
             #[cfg(not(target_family = "wasm"))]
             agent_panel_view,
             working_directories_model,
@@ -19270,24 +19257,6 @@ impl Workspace {
         // up resizing and richer chrome.
         #[cfg(not(target_family = "wasm"))]
         {
-            if self.current_workspace_state.is_cli_chat_panel_open {
-                if let Some(chat_panel_view) = &self.cli_chat_panel_view {
-                    let chat_panel_content = self.render_panel(
-                        app,
-                        ChildView::new(chat_panel_view).finish(),
-                        &PanelPosition::Right,
-                    );
-                    panels_view = panels_view.with_child(
-                        ConstrainedBox::new(chat_panel_content)
-                            .with_width(360.0)
-                            .finish(),
-                    );
-                }
-            }
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
             if self.current_workspace_state.is_agent_panel_open {
                 if let Some(agent_panel_view) = &self.agent_panel_view {
                     let agent_panel_content = self.render_panel(
@@ -20763,35 +20732,6 @@ impl TypedActionView for Workspace {
                 self.toggle_right_panel(&pane_group_handle, ctx);
             }
             #[cfg(not(target_family = "wasm"))]
-            ToggleCliChatPanel => {
-                // Phase 2: toggle the panel visibility flag. The actual
-                // panel content (transcript, composer, etc.) renders
-                // inside `render_panels` when the flag is set.
-                //
-                // The action and its menu/keybinding are gated by
-                // `FeatureFlag::CastCodesChatPanel` at registration time
-                // (see `app/src/workspace/mod.rs` and `app/src/app_menus.rs`),
-                // so this handler is only reachable when the feature is on.
-                if self.cli_chat_panel_view.is_none() {
-                    log::debug!(
-                        "WorkspaceAction::ToggleCliChatPanel dispatched but \
-                         no ChatPanelView exists (feature flag was disabled \
-                         at workspace init); ignoring"
-                    );
-                } else {
-                    self.current_workspace_state.is_cli_chat_panel_open =
-                        !self.current_workspace_state.is_cli_chat_panel_open;
-                    if let Some(view) = &self.cli_chat_panel_view {
-                        if self.current_workspace_state.is_cli_chat_panel_open {
-                            ctx.focus(view);
-                        } else {
-                            self.focus_active_tab(ctx);
-                        }
-                    }
-                    ctx.notify();
-                }
-            }
-            #[cfg(not(target_family = "wasm"))]
             ToggleUnifiedAgentPanel => {
                 // Gated by `FeatureFlag::UnifiedAgentPanel` at registration, so
                 // this is only reachable when the panel was constructed.
@@ -20831,43 +20771,14 @@ impl TypedActionView for Workspace {
                         model.bind_past(sid, ctx);
                     }
                 });
-                // Ensure the chat panel is visible.
-                if !self.current_workspace_state.is_cli_chat_panel_open {
-                    self.current_workspace_state.is_cli_chat_panel_open = true;
-                    if let Some(view) = &self.cli_chat_panel_view {
+                // Ensure the agent panel is visible.
+                if !self.current_workspace_state.is_agent_panel_open {
+                    self.current_workspace_state.is_agent_panel_open = true;
+                    if let Some(view) = &self.agent_panel_view {
                         ctx.focus(view);
                     }
                 }
                 ctx.notify();
-            }
-            #[cfg(not(target_family = "wasm"))]
-            SubmitChatPrompt { text } => {
-                // Phase 5: route user text from the chat panel composer to the
-                // bound live CLI agent's terminal PTY.
-                #[cfg(feature = "local_tty")]
-                {
-                    use crate::cli_chat::conversation::ConversationBinding;
-                    let binding = crate::cli_chat::model::ChatModel::handle(ctx)
-                        .read(ctx, |model, _| model.binding().clone());
-                    if let ConversationBinding::Live {
-                        terminal_view_id, ..
-                    } = binding
-                    {
-                        let text = text.clone();
-                        // Search across all tabs / pane groups for the matching
-                        // terminal view and submit the prompt to its PTY.
-                        let found = self.tabs.iter().find_map(|tab| {
-                            let views = tab.pane_group.read(ctx, |pg, ctx| pg.terminal_views(ctx));
-                            views.into_iter().find(|tv| tv.id() == terminal_view_id)
-                        });
-                        if let Some(tv) = found {
-                            tv.update(ctx, |view, ctx| {
-                                view.submit_text_to_cli_agent_pty(text, ctx);
-                            });
-                        }
-                    }
-                }
-                let _ = text; // Suppress unused warning when local_tty is absent.
             }
             #[cfg(not(target_family = "wasm"))]
             SubmitAgentPrompt { text } => {

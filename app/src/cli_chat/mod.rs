@@ -16,8 +16,6 @@ pub mod conversation;
 #[allow(dead_code)]
 pub mod entry;
 #[allow(dead_code)]
-pub mod feature_flag;
-#[allow(dead_code)]
 pub mod history_migration;
 #[allow(dead_code)]
 pub mod model;
@@ -27,13 +25,8 @@ pub mod paths;
 pub mod store;
 #[allow(dead_code)]
 pub mod store_schema;
-#[allow(dead_code)]
-pub mod strings;
-#[allow(dead_code)]
-pub mod view;
 
 pub use model::ChatModel;
-pub use view::ChatPanelView;
 
 #[cfg(test)]
 mod conversation_tests;

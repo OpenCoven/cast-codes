@@ -1741,12 +1741,13 @@ pub(crate) fn initialize_app(
     }
     ctx.add_singleton_model(move |_| RestoredAgentConversations::new(multi_agent_conversations));
     ctx.add_singleton_model(|_| CLIAgentSessionsModel::new());
-    // The CastCodes chat panel observes and persists CLI agent events.
-    // Keep the model behind the same feature flag as the UI so a disabled
+    // The unified agent panel's `ChatModel` observes and persists CLI agent
+    // events. Register it behind the same flag as the panel UI so (a) the
+    // panel's singleton lookup never fails when enabled, and (b) a disabled
     // feature cannot create local chat history in the background.
     #[cfg(not(target_family = "wasm"))]
     {
-        if crate::cli_chat::feature_flag::is_enabled() {
+        if crate::agent_panel::feature_flag::is_enabled() {
             ctx.add_singleton_model(crate::cli_chat::ChatModel::new);
         }
     }

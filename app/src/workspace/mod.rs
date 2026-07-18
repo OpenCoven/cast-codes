@@ -69,8 +69,6 @@ pub fn panel_header_corner_radius() -> warpui::elements::CornerRadius {
 
 #[cfg(not(target_family = "wasm"))]
 use crate::workspace::view::TOGGLE_BROWSER_PANE_BINDING_NAME;
-#[cfg(not(target_family = "wasm"))]
-use crate::workspace::view::TOGGLE_CLI_CHAT_PANEL_BINDING_NAME;
 use crate::workspace::view::{
     LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME, LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME,
     LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME, LEFT_PANEL_WARP_DRIVE_BINDING_NAME,
@@ -732,22 +730,6 @@ pub fn init(app: &mut AppContext) {
         .with_group(bindings::BindingGroup::Navigation.as_str())
         .with_enabled(|| FeatureFlag::VerticalTabs.is_enabled())
         .with_key_binding(cmd_or_ctrl_shift("b")),
-        #[cfg(not(target_family = "wasm"))]
-        EditableBinding::new(
-            TOGGLE_CLI_CHAT_PANEL_BINDING_NAME,
-            BindingDescription::new(crate::cli_chat::strings::TOGGLE_MENU_ITEM)
-                .with_custom_description(
-                    bindings::MAC_MENUS_CONTEXT,
-                    crate::cli_chat::strings::TOGGLE_MENU_ITEM,
-                ),
-            WorkspaceAction::ToggleCliChatPanel,
-        )
-        .with_context_predicate(id!("Workspace"))
-        .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_enabled(crate::cli_chat::feature_flag::is_enabled)
-        .with_custom_action(CustomAction::ToggleCliChatPanel)
-        .with_mac_key_binding("cmd-shift-H")
-        .with_linux_or_windows_key_binding("ctrl-shift-H"),
         #[cfg(not(target_family = "wasm"))]
         EditableBinding::new(
             "workspace:toggle_unified_agent_panel",

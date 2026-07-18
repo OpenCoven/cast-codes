@@ -261,27 +261,15 @@ pub enum WorkspaceAction {
     OpenWarpDrive,
     /// Toggles the right panel. This happens as an explicit action from the user.
     ToggleRightPanel,
-    /// Toggles the CastCodes Chat Panel. Gated by `FeatureFlag::CastCodesChatPanel`.
-    /// The actual panel rendering is wired up in a later task; this variant exists
-    /// so the menu item and keybinding can be registered now.
-    #[cfg(not(target_family = "wasm"))]
-    ToggleCliChatPanel,
     /// Toggles the unified CastCodes agent panel. Gated by
     /// `FeatureFlag::UnifiedAgentPanel` at registration time.
     #[cfg(not(target_family = "wasm"))]
     ToggleUnifiedAgentPanel,
-    /// Opens a past CLI chat session in the chat panel transcript.
-    /// Dispatched from the conversation-list sidebar when a user clicks a row.
+    /// Opens a past conversation in the agent panel transcript. Dispatched from
+    /// the conversation-list sidebar when a user clicks a row.
     #[cfg(not(target_family = "wasm"))]
     OpenChatSession {
         session_id: String,
-    },
-    /// Submits a user prompt from the chat panel composer to the bound
-    /// live CLI agent session by writing the text to the terminal's PTY.
-    /// Dispatched by the chat panel's `SubmittableTextInput` on Enter.
-    #[cfg(not(target_family = "wasm"))]
-    SubmitChatPrompt {
-        text: String,
     },
     /// Submits a prompt from the unified agent panel composer, routed by the
     /// active conversation's backend: a live CLI conversation goes to the
@@ -827,10 +815,8 @@ impl WorkspaceAction {
             // workspace would most likely require a save, so that if the app gets
             // restarted, the user can continue working
             #[cfg(not(target_family = "wasm"))]
-            ToggleCliChatPanel
-            | ToggleUnifiedAgentPanel
+            ToggleUnifiedAgentPanel
             | OpenChatSession { .. }
-            | SubmitChatPrompt { .. }
             | SubmitAgentPrompt { .. }
             | CliChatNewChat { .. } => false,
             AutoupdateFailureLink
