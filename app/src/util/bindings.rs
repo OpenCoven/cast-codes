@@ -137,6 +137,7 @@ pub enum CustomAction {
     ToggleGlobalSearch,
     ToggleConversationListView,
     ToggleCliChatPanel,
+    ToggleUnifiedAgentPanel,
 }
 
 lazy_static! {
@@ -442,6 +443,15 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
                 Keystroke::parse("cmd-shift-H").ok()
             } else {
                 Keystroke::parse("ctrl-shift-H").ok()
+            }
+        }
+        // The unified agent panel uses `cmd-shift-U` / `ctrl-shift-U` so it is
+        // reachable alongside the legacy chat panel during the 2b–2d transition.
+        CustomAction::ToggleUnifiedAgentPanel => {
+            if OperatingSystem::get().is_mac() {
+                Keystroke::parse("cmd-shift-U").ok()
+            } else {
+                Keystroke::parse("ctrl-shift-U").ok()
             }
         }
         CustomAction::NewTerminalTab

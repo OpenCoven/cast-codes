@@ -410,6 +410,17 @@ fn make_new_view_menu(ctx: &AppContext) -> Menu {
         }
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    {
+        if crate::agent_panel::feature_flag::is_enabled() {
+            items.push(updateable_custom_item_without_checkmark(
+                CustomAction::ToggleUnifiedAgentPanel,
+                ctx,
+            ));
+            items.push(MenuItem::Separator);
+        }
+    }
+
     items.extend([
         updateable_custom_item_without_checkmark(CustomAction::History, ctx),
         updateable_custom_item_without_checkmark(CustomAction::CommandSearch, ctx),
