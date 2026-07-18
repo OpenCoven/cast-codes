@@ -1,4 +1,4 @@
-use crate::ai_assistant::utils::{
+use crate::ai_assistant::dialogue_types::{
     AssistantTranscriptPart, CodeBlockIndex, FormattedTranscriptMessage, MarkdownSegment,
 };
 use markdown_parser::{CodeBlockText, FormattedText};

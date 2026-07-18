@@ -10,15 +10,15 @@ use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::{
     ai::{RequestLimitInfo, RequestUsageInfo},
-    ai_assistant::utils::{AssistantTranscriptPart, TranscriptPartSubType},
+    ai_assistant::dialogue_types::{AssistantTranscriptPart, TranscriptPartSubType},
     auth::AuthStateProvider,
     server::server_api::{ai::AIClient, ServerApi},
     workspaces::user_workspaces::UserWorkspaces,
 };
 
 use super::{
+    dialogue_types::{markdown_segments_from_text, FormattedTranscriptMessage, TranscriptPart},
     execution_context::WarpAiExecutionContext,
-    utils::{markdown_segments_from_text, FormattedTranscriptMessage, TranscriptPart},
 };
 use anyhow::Result;
 

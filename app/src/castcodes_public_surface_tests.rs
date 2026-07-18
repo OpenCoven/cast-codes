@@ -4,7 +4,6 @@ const AUTH_VIEW_SHARED_HELPERS_SOURCE: &str = include_str!("auth/auth_view_share
 const AI_AGENT_SDK_AMBIENT_SOURCE: &str = include_str!("ai/agent_sdk/ambient.rs");
 const AI_AGENT_SDK_DRIVER_SOURCE: &str = include_str!("ai/agent_sdk/driver.rs");
 const AI_AGENT_TIPS_SOURCE: &str = include_str!("ai/agent_tips.rs");
-const AI_ASSISTANT_PANEL_SOURCE: &str = include_str!("ai_assistant/panel.rs");
 const AI_BLOCK_COMMON_SOURCE: &str = include_str!("ai/blocklist/block/view_impl/common.rs");
 const AI_BLOCK_SOURCE: &str = include_str!("ai/blocklist/block.rs");
 const AI_BLOCK_STATUS_BAR_SOURCE: &str = include_str!("ai/blocklist/block/status_bar.rs");
@@ -12,6 +11,9 @@ const AI_FACT_RULE_SOURCE: &str = include_str!("ai/facts/view/rule.rs");
 const AI_TELEMETRY_BANNER_SOURCE: &str = include_str!("ai/blocklist/telemetry_banner.rs");
 const AGENT_VIEW_ZERO_STATE_BLOCK_SOURCE: &str =
     include_str!("ai/blocklist/agent_view/zero_state_block.rs");
+const AGENT_PANEL_MOD_SOURCE: &str = include_str!("agent_panel/mod.rs");
+const AGENT_PANEL_STRINGS_SOURCE: &str = include_str!("agent_panel/strings.rs");
+const AGENT_PANEL_DAEMON_TURN_SOURCE: &str = include_str!("agent_panel/daemon_turn.rs");
 const CLI_BLOCK_SOURCE: &str = include_str!("ai/blocklist/block/cli.rs");
 const CLI_AGENT_EVENT_SOURCE: &str = include_str!("terminal/cli_agent_sessions/event/mod.rs");
 const CLI_AGENT_PLUGIN_MANAGER_SOURCE: &str =
@@ -95,10 +97,14 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
     assert!(AI_FACT_RULE_SOURCE.contains("AGENTS.md"));
     assert!(AI_AGENT_SDK_DRIVER_SOURCE.contains("USER_DOCS_URL"));
     assert!(AI_AGENT_SDK_AMBIENT_SOURCE.contains("USER_DOCS_URL"));
-    assert!(AI_ASSISTANT_PANEL_SOURCE.contains("const COVEN_CODE_HARNESS: &str = \"coven-code\""));
-    assert!(AI_ASSISTANT_PANEL_SOURCE.contains("Run native Coven Code operation"));
-    assert!(AI_ASSISTANT_PANEL_SOURCE.contains("fn issue_primary_request"));
-    assert!(AI_ASSISTANT_PANEL_SOURCE.contains("send_via_coven_gateway_with_prompt"));
+    // Unified agent panel: fork-local Coven wiring + labels. Ports the guards
+    // that previously lived on the retired `ai_assistant/panel.rs` (which held
+    // the `COVEN_CODE_HARNESS`/`send_via_coven_gateway` wiring) onto the surface
+    // that now owns the native daemon path.
+    assert!(AGENT_PANEL_MOD_SOURCE.contains("\"coven-code\""));
+    assert!(AGENT_PANEL_DAEMON_TURN_SOURCE.contains("::ai::cast_agent::AgentMessage"));
+    assert!(AGENT_PANEL_STRINGS_SOURCE.contains("pub const PANEL_TITLE: &str = \"Agent\""));
+    assert!(AGENT_PANEL_STRINGS_SOURCE.contains("pub const BADGE_DAEMON: &str = \"Coven\""));
     assert!(AI_BLOCK_COMMON_SOURCE.contains("Internal CastCodes error."));
     assert!(AI_BLOCK_COMMON_SOURCE.contains("Working..."));
     assert!(AI_BLOCK_STATUS_BAR_SOURCE.contains("Working with {name}."));
@@ -182,7 +188,6 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
         AUTH_VIEW_SHARED_HELPERS_SOURCE,
         AI_AGENT_SDK_AMBIENT_SOURCE,
         AI_AGENT_SDK_DRIVER_SOURCE,
-        AI_ASSISTANT_PANEL_SOURCE,
         AI_AGENT_TIPS_SOURCE,
         AI_BLOCK_COMMON_SOURCE,
         AI_BLOCK_SOURCE,
@@ -190,6 +195,9 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
         AI_FACT_RULE_SOURCE,
         AI_TELEMETRY_BANNER_SOURCE,
         AGENT_VIEW_ZERO_STATE_BLOCK_SOURCE,
+        AGENT_PANEL_MOD_SOURCE,
+        AGENT_PANEL_STRINGS_SOURCE,
+        AGENT_PANEL_DAEMON_TURN_SOURCE,
         CLI_BLOCK_SOURCE,
         CLI_AGENT_EVENT_SOURCE,
         CODE_REVIEW_VIEW_SOURCE,

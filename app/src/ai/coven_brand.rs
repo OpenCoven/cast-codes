@@ -9,6 +9,7 @@ pub(crate) const OPENCOVEN_PURPLE: ColorU = ColorU {
 };
 
 /// Brand success colour (`#22C55E`) — used for the Coven Gateway "online" pill.
+#[allow(dead_code)]
 pub(crate) const OPENCOVEN_SUCCESS: ColorU = ColorU {
     r: 34,
     g: 197,
@@ -17,6 +18,7 @@ pub(crate) const OPENCOVEN_SUCCESS: ColorU = ColorU {
 };
 
 /// Brand warning colour (`#F59E0B`) — used for the Coven Gateway "degraded" pill.
+#[allow(dead_code)]
 pub(crate) const OPENCOVEN_WARNING: ColorU = ColorU {
     r: 245,
     g: 158,

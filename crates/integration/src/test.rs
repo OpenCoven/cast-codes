@@ -3,7 +3,6 @@
 //! to be run.
 
 mod agent_mode;
-mod ai_assistant;
 mod block_filtering;
 mod bootstrapping;
 mod code_review;
@@ -35,7 +34,6 @@ mod workflows;
 mod workspace;
 
 pub use agent_mode::*;
-pub use ai_assistant::*;
 pub use block_filtering::*;
 pub use bootstrapping::*;
 pub use code_review::*;
