@@ -1,7 +1,7 @@
 //! Composer shell for the unified agent panel.
 //!
 //! In 2b the composer is active only for a live CLI conversation (submit routes
-//! to the terminal PTY via the shared `WorkspaceAction::SubmitChatPrompt`);
+//! to the terminal PTY via `WorkspaceAction::SubmitAgentPrompt`);
 //! daemon and unbound conversations render a disabled placeholder. Per-backend
 //! routing (daemon send) arrives in 2c.
 

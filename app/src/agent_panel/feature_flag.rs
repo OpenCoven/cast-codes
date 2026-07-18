@@ -1,5 +1,4 @@
-//! Convenience accessor for the `UnifiedAgentPanel` feature flag. Mirrors
-//! `crate::cli_chat::feature_flag`.
+//! Convenience accessor for the `UnifiedAgentPanel` feature flag. Mirrors the `cli_chat` feature-flag accessor pattern.
 
 use warp_core::features::FeatureFlag;
 

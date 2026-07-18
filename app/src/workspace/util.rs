@@ -121,11 +121,6 @@ pub struct WorkspaceState {
     pub is_suggested_rule_modal_open: bool,
     pub is_notification_mailbox_open: bool,
     pub is_agent_management_view_open: bool,
-    /// Whether the CastCodes chat panel is open. Gated by
-    /// `FeatureFlag::CastCodesChatPanel` at the call site (the field
-    /// itself stays unconditional so the struct shape doesn't drift
-    /// across builds).
-    pub is_cli_chat_panel_open: bool,
     /// Whether the unified agent panel is open. Gated by
     /// `FeatureFlag::UnifiedAgentPanel` at the call site; the field itself
     /// stays unconditional so the struct shape doesn't drift across builds.
