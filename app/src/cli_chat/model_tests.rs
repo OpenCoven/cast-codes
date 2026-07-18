@@ -408,3 +408,38 @@ fn unknown_event_increments_skipped_count() {
     let conv = model.conversation("abc").expect("conversation exists");
     assert!(matches!(conv.entries[0].kind, ChatEntryKind::Raw { .. }));
 }
+
+#[test]
+fn bootstrap_surfaces_migrated_daemon_conversations() {
+    use super::conversation::ConversationBackend;
+    use super::history_migration::{migrate_history_records, HistoryRecord};
+
+    // A store already carrying a migrated daemon conversation (as
+    // `migrate_stream_history_file` would produce at bootstrap).
+    let store = ChatStore::open_in_memory().unwrap();
+    migrate_history_records(
+        &store,
+        &[HistoryRecord {
+            conversation_id: "d1".into(),
+            text: "hi from coven".into(),
+        }],
+        Utc::now(),
+    )
+    .unwrap();
+
+    // Building the model over this store loads the daemon conversation into the
+    // merged list alongside any CLI conversations.
+    let model = ChatModel::with_store_for_testing(store);
+    let conv = model
+        .conversation("d1")
+        .expect("migrated daemon convo present");
+    assert!(matches!(conv.backend, ConversationBackend::Daemon { .. }));
+    assert_eq!(
+        model
+            .conversations_sorted_by_recency()
+            .iter()
+            .filter(|c| c.session_id == "d1")
+            .count(),
+        1
+    );
+}
