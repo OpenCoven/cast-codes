@@ -15,6 +15,9 @@ pub mod feature_flag;
 pub mod strings;
 pub mod view;
 
+#[cfg(test)]
+mod view_tests;
+
 use warpui::elements::{CrossAxisAlignment, Element, Expanded, Flex, MainAxisSize, ParentElement};
 use warpui::{AppContext, Entity, ModelHandle, SingletonEntity, View, ViewContext, ViewHandle};
 
@@ -34,9 +37,12 @@ impl AgentPanelView {
     /// Build an `AgentPanelView` bound to the app's singleton `ChatModel`.
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         let chat_model = ChatModel::handle(ctx);
-        ctx.subscribe_to_model(&chat_model, |_view, _model, _event: &ChatModelEvent, ctx| {
-            ctx.notify();
-        });
+        ctx.subscribe_to_model(
+            &chat_model,
+            |_view, _model, _event: &ChatModelEvent, ctx| {
+                ctx.notify();
+            },
+        );
 
         let composer_input = Self::create_composer(ctx);
 
@@ -50,9 +56,12 @@ impl AgentPanelView {
     /// callers).
     #[allow(dead_code)]
     pub fn with_model(chat_model: ModelHandle<ChatModel>, ctx: &mut ViewContext<Self>) -> Self {
-        ctx.subscribe_to_model(&chat_model, |_view, _model, _event: &ChatModelEvent, ctx| {
-            ctx.notify();
-        });
+        ctx.subscribe_to_model(
+            &chat_model,
+            |_view, _model, _event: &ChatModelEvent, ctx| {
+                ctx.notify();
+            },
+        );
 
         let composer_input = Self::create_composer(ctx);
 

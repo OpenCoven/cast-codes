@@ -37,7 +37,11 @@ pub fn render(view: &AgentPanelView, app: &AppContext) -> Box<dyn Element> {
         .with_cross_axis_alignment(CrossAxisAlignment::Center)
         .with_child(Container::new(label_element).with_margin_left(8.0).finish())
         .with_child(Expanded::new(1.0, Container::new(Empty::new().finish()).finish()).finish())
-        .with_child(Container::new(new_chat_button).with_margin_right(8.0).finish())
+        .with_child(
+            Container::new(new_chat_button)
+                .with_margin_right(8.0)
+                .finish(),
+        )
         .finish();
 
     ConstrainedBox::new(bar).with_height(BAR_HEIGHT).finish()
@@ -45,7 +49,10 @@ pub fn render(view: &AgentPanelView, app: &AppContext) -> Box<dyn Element> {
 
 /// Label for the bound conversation ("Backend — Model"), or the default agent
 /// when nothing is bound.
-fn current_label(binding: &ConversationBinding, chat: &crate::cli_chat::model::ChatModel) -> String {
+fn current_label(
+    binding: &ConversationBinding,
+    chat: &crate::cli_chat::model::ChatModel,
+) -> String {
     let conv = match binding {
         ConversationBinding::Live { session_id, .. } | ConversationBinding::Past { session_id } => {
             chat.conversation(session_id)
@@ -63,7 +70,11 @@ fn current_label(binding: &ConversationBinding, chat: &crate::cli_chat::model::C
     } else {
         let (agent, _) = AgentKind::default_agent_and_model();
         let default_model_display = agent.curated_models()[0].display_name;
-        format!("{} \u{2014} {}", agent.display_name(), default_model_display)
+        format!(
+            "{} \u{2014} {}",
+            agent.display_name(),
+            default_model_display
+        )
     }
 }
 
