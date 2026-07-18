@@ -1,0 +1,102 @@
+//! Header bar for the unified agent panel: the active conversation's
+//! agent/model label on the left, a "New chat" button on the right (dispatches
+//! the shared `WorkspaceAction::CliChatNewChat`). Full model selection is later
+//! polish.
+
+use std::sync::{Arc, Mutex};
+
+use warpui::elements::{
+    ConstrainedBox, Container, CrossAxisAlignment, Element, Empty, Expanded, Flex, Hoverable,
+    MainAxisSize, MouseState, ParentElement, Text,
+};
+use warpui::platform::Cursor;
+use warpui::{AppContext, SingletonEntity};
+
+use crate::agent_panel::strings;
+use crate::agent_panel::AgentPanelView;
+use crate::appearance::Appearance;
+use crate::cli_chat::conversation::{AgentKind, ConversationBinding};
+use crate::workspace::WorkspaceAction;
+
+/// Height of the header bar (in logical pixels).
+const BAR_HEIGHT: f32 = 32.0;
+
+pub fn render(view: &AgentPanelView, app: &AppContext) -> Box<dyn Element> {
+    let appearance = Appearance::as_ref(app);
+    let font_family = appearance.ui_font_family();
+    let font_size = appearance.ui_font_size();
+
+    let chat = view.chat_model.as_ref(app);
+    let label = current_label(chat.binding(), chat);
+    let label_element = Text::new(label, font_family, font_size).finish();
+
+    let new_chat_button = render_new_chat_button(font_family, font_size);
+
+    let bar = Flex::row()
+        .with_main_axis_size(MainAxisSize::Max)
+        .with_cross_axis_alignment(CrossAxisAlignment::Center)
+        .with_child(Container::new(label_element).with_margin_left(8.0).finish())
+        .with_child(Expanded::new(1.0, Container::new(Empty::new().finish()).finish()).finish())
+        .with_child(
+            Container::new(new_chat_button)
+                .with_margin_right(8.0)
+                .finish(),
+        )
+        .finish();
+
+    ConstrainedBox::new(bar).with_height(BAR_HEIGHT).finish()
+}
+
+/// Label for the bound conversation ("Backend — Model"), or the default agent
+/// when nothing is bound.
+fn current_label(
+    binding: &ConversationBinding,
+    chat: &crate::cli_chat::model::ChatModel,
+) -> String {
+    let conv = match binding {
+        ConversationBinding::Live { session_id, .. } | ConversationBinding::Past { session_id } => {
+            chat.conversation(session_id)
+        }
+        ConversationBinding::None => None,
+    };
+
+    if let Some(conv) = conv {
+        let agent_name = conv.backend.display_name();
+        let model_name = conv
+            .last_model
+            .as_deref()
+            .unwrap_or(conv.backend.agent_kind().curated_models()[0].display_name);
+        format!("{} \u{2014} {}", agent_name, model_name)
+    } else {
+        let (agent, _) = AgentKind::default_agent_and_model();
+        let default_model_display = agent.curated_models()[0].display_name;
+        format!(
+            "{} \u{2014} {}",
+            agent.display_name(),
+            default_model_display
+        )
+    }
+}
+
+fn render_new_chat_button(
+    font_family: warpui::fonts::FamilyId,
+    font_size: f32,
+) -> Box<dyn Element> {
+    let (agent, model_id) = AgentKind::default_agent_and_model();
+    let command = agent.cli_command(model_id);
+
+    let mouse_state = Arc::new(Mutex::new(MouseState::default()));
+
+    Hoverable::new(mouse_state, move |_| {
+        Container::new(Text::new(strings::NEW_CHAT_LABEL, font_family, font_size).finish())
+            .with_uniform_padding(4.0)
+            .finish()
+    })
+    .with_cursor(Cursor::PointingHand)
+    .on_click(move |ctx, _, _| {
+        ctx.dispatch_typed_action(WorkspaceAction::CliChatNewChat {
+            command: command.clone(),
+        });
+    })
+    .finish()
+}

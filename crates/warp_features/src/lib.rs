@@ -853,6 +853,12 @@ pub enum FeatureFlag {
     /// that observes terminal state and renders alongside the workspace.
     /// CastCodes-only; never enabled in upstream Warp builds.
     CastCodesChatPanel,
+
+    /// Gates the unified CastCodes agent panel: one surface merging the
+    /// CLI-agent chat and the Coven-daemon agent conversations behind a
+    /// single list + transcript + composer. CastCodes-only; never enabled
+    /// in upstream Warp builds.
+    UnifiedAgentPanel,
 }
 
 static FLAG_STATES: [AtomicBool; cardinality::<FeatureFlag>()] =

@@ -2,6 +2,8 @@
 #![allow(clippy::doc_lazy_continuation)]
 
 #[cfg(not(target_family = "wasm"))]
+mod agent_panel;
+#[cfg(not(target_family = "wasm"))]
 mod agent_transcript;
 mod ai;
 mod alloc;

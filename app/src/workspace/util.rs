@@ -126,6 +126,10 @@ pub struct WorkspaceState {
     /// itself stays unconditional so the struct shape doesn't drift
     /// across builds).
     pub is_cli_chat_panel_open: bool,
+    /// Whether the unified agent panel is open. Gated by
+    /// `FeatureFlag::UnifiedAgentPanel` at the call site; the field itself
+    /// stays unconditional so the struct shape doesn't drift across builds.
+    pub is_agent_panel_open: bool,
     pub is_codex_modal_open: bool,
     pub is_tab_config_params_modal_open: bool,
     pub is_session_config_modal_open: bool,

@@ -97,6 +97,16 @@ impl ChatModel {
             store,
             skipped_event_count: 0,
         };
+        // One-time, non-destructive import of the daemon panel's plain-text
+        // stream history into the sqlite store, so migrated coven-code
+        // conversations join the merged list. No-op when the file is absent or
+        // already migrated.
+        if let Some(store) = model.store.as_ref() {
+            crate::cli_chat::history_migration::migrate_stream_history_file(
+                store,
+                chrono::Utc::now(),
+            );
+        }
         model.load_existing_history();
         model
     }

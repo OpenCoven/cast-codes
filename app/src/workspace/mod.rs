@@ -750,6 +750,22 @@ pub fn init(app: &mut AppContext) {
         .with_linux_or_windows_key_binding("ctrl-shift-H"),
         #[cfg(not(target_family = "wasm"))]
         EditableBinding::new(
+            "workspace:toggle_unified_agent_panel",
+            BindingDescription::new(crate::agent_panel::strings::TOGGLE_MENU_ITEM)
+                .with_custom_description(
+                    bindings::MAC_MENUS_CONTEXT,
+                    crate::agent_panel::strings::TOGGLE_MENU_ITEM,
+                ),
+            WorkspaceAction::ToggleUnifiedAgentPanel,
+        )
+        .with_context_predicate(id!("Workspace"))
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_enabled(crate::agent_panel::feature_flag::is_enabled)
+        .with_custom_action(CustomAction::ToggleUnifiedAgentPanel)
+        .with_mac_key_binding("cmd-shift-U")
+        .with_linux_or_windows_key_binding("ctrl-shift-U"),
+        #[cfg(not(target_family = "wasm"))]
+        EditableBinding::new(
             TOGGLE_BROWSER_PANE_BINDING_NAME,
             BindingDescription::new("Toggle Browser Pane"),
             WorkspaceAction::ToggleBrowserPane,

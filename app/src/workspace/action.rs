@@ -266,6 +266,10 @@ pub enum WorkspaceAction {
     /// so the menu item and keybinding can be registered now.
     #[cfg(not(target_family = "wasm"))]
     ToggleCliChatPanel,
+    /// Toggles the unified CastCodes agent panel. Gated by
+    /// `FeatureFlag::UnifiedAgentPanel` at registration time.
+    #[cfg(not(target_family = "wasm"))]
+    ToggleUnifiedAgentPanel,
     /// Opens a past CLI chat session in the chat panel transcript.
     /// Dispatched from the conversation-list sidebar when a user clicks a row.
     #[cfg(not(target_family = "wasm"))]
@@ -817,6 +821,7 @@ impl WorkspaceAction {
             // restarted, the user can continue working
             #[cfg(not(target_family = "wasm"))]
             ToggleCliChatPanel
+            | ToggleUnifiedAgentPanel
             | OpenChatSession { .. }
             | SubmitChatPrompt { .. }
             | CliChatNewChat { .. } => false,

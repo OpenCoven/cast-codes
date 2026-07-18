@@ -3,8 +3,9 @@ set -euo pipefail
 
 PATTERN='warp_multi_agent_api|warp_server_client|app\.warp\.dev|api\.warp\.dev|MARKETPLACE_REPO|PLATFORM_MARKETPLACE_REPO|EXTENSION_REPO|warpdotdev/'
 # The neutral agent_transcript render module must stay as free of Warp-owned
-# infrastructure as cli_chat — it is a leaf module both backends feed.
-TARGETS='app/src/cli_chat app/src/agent_transcript'
+# infrastructure as cli_chat — it is a leaf module both backends feed. The
+# unified agent_panel fold-in surface is held to the same fork-local boundary.
+TARGETS='app/src/cli_chat app/src/agent_transcript app/src/agent_panel'
 
 checked_any=0
 for TARGET in $TARGETS; do

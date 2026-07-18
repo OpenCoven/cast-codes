@@ -1028,6 +1028,8 @@ pub struct Workspace {
     /// time; otherwise stays `None` and the toggle action is a no-op.
     #[cfg(not(target_family = "wasm"))]
     cli_chat_panel_view: Option<ViewHandle<crate::cli_chat::ChatPanelView>>,
+    #[cfg(not(target_family = "wasm"))]
+    agent_panel_view: Option<ViewHandle<crate::agent_panel::AgentPanelView>>,
     working_directories_model: ModelHandle<pane_group::WorkingDirectoriesModel>,
     agent_management_view: ViewHandle<AgentManagementView>,
     notification_mailbox_view: Option<ViewHandle<NotificationMailboxView>>,
@@ -2759,6 +2761,13 @@ impl Workspace {
             None
         };
 
+        #[cfg(not(target_family = "wasm"))]
+        let agent_panel_view = if crate::agent_panel::feature_flag::is_enabled() {
+            Some(ctx.add_view(crate::agent_panel::AgentPanelView::new))
+        } else {
+            None
+        };
+
         // Get persisted filters from window snapshot if restoring.
         let agent_management_filters = match workspace_setting {
             NewWorkspaceSource::Restored {
@@ -3140,6 +3149,8 @@ impl Workspace {
             right_panel_view,
             #[cfg(not(target_family = "wasm"))]
             cli_chat_panel_view,
+            #[cfg(not(target_family = "wasm"))]
+            agent_panel_view,
             working_directories_model,
             shown_staging_banner_count: 0,
 
@@ -19275,6 +19286,24 @@ impl Workspace {
             }
         }
 
+        #[cfg(not(target_family = "wasm"))]
+        {
+            if self.current_workspace_state.is_agent_panel_open {
+                if let Some(agent_panel_view) = &self.agent_panel_view {
+                    let agent_panel_content = self.render_panel(
+                        app,
+                        ChildView::new(agent_panel_view).finish(),
+                        &PanelPosition::Right,
+                    );
+                    panels_view = panels_view.with_child(
+                        ConstrainedBox::new(agent_panel_content)
+                            .with_width(360.0)
+                            .finish(),
+                    );
+                }
+            }
+        }
+
         panels_view.finish()
     }
 
@@ -20754,6 +20783,29 @@ impl TypedActionView for Workspace {
                         !self.current_workspace_state.is_cli_chat_panel_open;
                     if let Some(view) = &self.cli_chat_panel_view {
                         if self.current_workspace_state.is_cli_chat_panel_open {
+                            ctx.focus(view);
+                        } else {
+                            self.focus_active_tab(ctx);
+                        }
+                    }
+                    ctx.notify();
+                }
+            }
+            #[cfg(not(target_family = "wasm"))]
+            ToggleUnifiedAgentPanel => {
+                // Gated by `FeatureFlag::UnifiedAgentPanel` at registration, so
+                // this is only reachable when the panel was constructed.
+                if self.agent_panel_view.is_none() {
+                    log::debug!(
+                        "WorkspaceAction::ToggleUnifiedAgentPanel dispatched but \
+                         no AgentPanelView exists (feature flag was disabled at \
+                         workspace init); ignoring"
+                    );
+                } else {
+                    self.current_workspace_state.is_agent_panel_open =
+                        !self.current_workspace_state.is_agent_panel_open;
+                    if let Some(view) = &self.agent_panel_view {
+                        if self.current_workspace_state.is_agent_panel_open {
                             ctx.focus(view);
                         } else {
                             self.focus_active_tab(ctx);
