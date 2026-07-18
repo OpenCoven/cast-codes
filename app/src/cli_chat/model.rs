@@ -11,7 +11,9 @@ use chrono::{DateTime, Utc};
 use tracing::warn;
 use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
 
-use crate::cli_chat::conversation::{AgentKind, ChatConversation, ConversationBinding};
+use crate::cli_chat::conversation::{
+    AgentKind, ChatConversation, ConversationBackend, ConversationBinding,
+};
 use crate::cli_chat::entry::{ChatEntry, ChatEntryKind};
 use crate::cli_chat::store::ChatStore;
 use crate::terminal::cli_agent_sessions::{
@@ -283,7 +285,8 @@ impl ChatModel {
             .conversations
             .entry(session_id.clone())
             .or_insert_with(|| {
-                let mut c = ChatConversation::new(session_id.clone(), agent, now);
+                let mut c =
+                    ChatConversation::new(session_id.clone(), ConversationBackend::Cli(agent), now);
                 c.cwd = event.cwd.clone();
                 c.project = event.project.clone();
                 c

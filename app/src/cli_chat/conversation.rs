@@ -143,12 +143,33 @@ impl ConversationBackend {
         }
     }
 
+    /// Human-facing label for lists and headers. CLI agents use their curated
+    /// display name; daemon lanes show the harness name verbatim.
+    pub fn display_name(&self) -> String {
+        match self {
+            ConversationBackend::Cli(k) => k.display_name().to_string(),
+            ConversationBackend::Daemon { harness } => harness.clone(),
+        }
+    }
+
+    /// The CLI [`AgentKind`] backing this conversation, for CLI-only affordances
+    /// like the model picker. Daemon lanes have no CLI kind, so they fall back
+    /// to the default agent (`Claude`) — such lanes never surface the picker.
+    pub fn agent_kind(&self) -> AgentKind {
+        match self {
+            ConversationBackend::Cli(k) => *k,
+            ConversationBackend::Daemon { .. } => AgentKind::Claude,
+        }
+    }
+
     /// Reconstruct from the two persisted columns. Unknown `cli` agent names
     /// fall back to `Claude` (forward-compatible); any non-`cli` kind is a
     /// daemon lane carrying the name verbatim.
     pub fn from_persisted(name: &str, kind: &str) -> Self {
         if kind == "cli" {
-            ConversationBackend::Cli(AgentKind::from_protocol_str(name).unwrap_or(AgentKind::Claude))
+            ConversationBackend::Cli(
+                AgentKind::from_protocol_str(name).unwrap_or(AgentKind::Claude),
+            )
         } else {
             ConversationBackend::Daemon {
                 harness: name.to_string(),
@@ -160,7 +181,7 @@ impl ConversationBackend {
 #[derive(Debug, Clone)]
 pub struct ChatConversation {
     pub session_id: String,
-    pub agent: AgentKind,
+    pub backend: ConversationBackend,
     pub title: String,
     pub cwd: Option<String>,
     pub project: Option<String>,
@@ -172,10 +193,10 @@ pub struct ChatConversation {
 }
 
 impl ChatConversation {
-    pub fn new(session_id: String, agent: AgentKind, now: DateTime<Utc>) -> Self {
+    pub fn new(session_id: String, backend: ConversationBackend, now: DateTime<Utc>) -> Self {
         Self {
             session_id,
-            agent,
+            backend,
             title: String::new(),
             cwd: None,
             project: None,

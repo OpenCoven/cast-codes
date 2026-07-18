@@ -5,7 +5,7 @@ use rusqlite::{params, Connection};
 
 use crate::terminal::cli_agent_sessions::CLIAgentSessionStatus;
 
-use super::conversation::{AgentKind, ChatConversation};
+use super::conversation::{ChatConversation, ConversationBackend};
 use super::entry::{ChatEntry, ChatEntryKind};
 use super::store_schema;
 
@@ -42,8 +42,8 @@ impl ChatStore {
     pub fn upsert_conversation(&self, conv: &ChatConversation) -> rusqlite::Result<()> {
         self.conn.execute(
             "INSERT INTO chat_conversation
-                (session_id, agent, title, cwd, project, created_at, updated_at, status, last_model)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                (session_id, agent, title, cwd, project, created_at, updated_at, status, last_model, backend)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(session_id) DO UPDATE SET
                 title      = excluded.title,
                 cwd        = excluded.cwd,
@@ -53,7 +53,7 @@ impl ChatStore {
                 last_model = excluded.last_model",
             params![
                 conv.session_id,
-                conv.agent.as_protocol_str(),
+                conv.backend.name(),
                 conv.title,
                 conv.cwd,
                 conv.project,
@@ -61,6 +61,7 @@ impl ChatStore {
                 conv.updated_at.timestamp_millis(),
                 status_to_str(&conv.status),
                 conv.last_model,
+                conv.backend.kind_str(),
             ],
         )?;
         Ok(())
@@ -93,7 +94,7 @@ impl ChatStore {
         session_id: &str,
     ) -> rusqlite::Result<Option<ChatConversation>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, agent, title, cwd, project, created_at, updated_at, status, last_model
+            "SELECT session_id, agent, title, cwd, project, created_at, updated_at, status, last_model, backend
              FROM chat_conversation
              WHERE session_id = ?1",
         )?;
@@ -139,7 +140,7 @@ impl ChatStore {
     /// Each conversation's entries are loaded eagerly.
     pub fn list_conversations(&self) -> rusqlite::Result<Vec<ChatConversation>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, agent, title, cwd, project, created_at, updated_at, status, last_model
+            "SELECT session_id, agent, title, cwd, project, created_at, updated_at, status, last_model, backend
              FROM chat_conversation
              ORDER BY updated_at DESC",
         )?;
@@ -171,10 +172,11 @@ fn row_to_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatConversa
     let updated_millis: i64 = row.get(6)?;
     let status_str: String = row.get(7)?;
     let last_model: Option<String> = row.get(8)?;
+    let backend_str: String = row.get(9)?;
 
     Ok(ChatConversation {
         session_id,
-        agent: agent_from_str(&agent_str),
+        backend: ConversationBackend::from_persisted(&agent_str, &backend_str),
         title,
         cwd,
         project,
@@ -219,19 +221,6 @@ fn str_to_status(s: &str) -> CLIAgentSessionStatus {
                 CLIAgentSessionStatus::Blocked { message: None }
             }
         }
-    }
-}
-
-// -- Agent serialisation ----------------------------------------------------
-
-fn agent_from_str(s: &str) -> AgentKind {
-    match s {
-        "claude" => AgentKind::Claude,
-        "codex" => AgentKind::Codex,
-        "gemini" => AgentKind::Gemini,
-        "opencode" => AgentKind::OpenCode,
-        // Fallback — default to Claude so we never panic on unknown data.
-        _ => AgentKind::Claude,
     }
 }
 
