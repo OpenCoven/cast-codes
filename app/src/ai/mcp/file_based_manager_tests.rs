@@ -296,8 +296,7 @@ fn test_global_warp_server_from_managed_home_root_always_spawns() {
         events.update(&mut app, |e, _| {
             assert!(
                 e.despawned_uuids.is_empty(),
-                "Managed CastCodes MCP config should never be despawned by toggle changes, got: {:?}",
-                e.despawned_uuids
+                "Managed CastCodes MCP config should never be despawned by toggle changes"
             );
         });
     });
