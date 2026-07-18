@@ -5,6 +5,9 @@ slow-timeout = { period = "30s", terminate-after = 2 }
 
 [test-groups]
 settings-file-reload = { max-threads = 1 }
+# Quarantine group for a UI-positioning shell integration test that flakes on
+# loaded macOS runners. See #211.
+copy-prompt-quarantine = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'package(integration)'
@@ -47,3 +50,14 @@ path = "junit.xml"
 filter = 'test(update_manager)'
 platform = { host = 'cfg(target_os = "windows")' }
 retries = 2
+
+[[profile.ci.overrides]]
+# On macOS CI, `test_copy_prompt_from_input_honor_ps1_enabled` intermittently
+# panics with "No position for Copy prompt" — a layout-timing flake when the
+# runner is loaded (it already exhausts the default integration retries=2).
+# Isolate it to a single thread (less contention starving layout) and give it
+# extra retries while the root cause is investigated. See #211.
+filter = 'test(test_copy_prompt_from_input_honor_ps1_enabled)'
+platform = { host = 'cfg(target_os = "macos")' }
+test-group = 'copy-prompt-quarantine'
+retries = 4
