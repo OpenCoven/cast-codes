@@ -68,6 +68,26 @@ impl AgentPanelView {
 
         let composer_input = Self::create_composer(ctx);
 
+        // Seed the merged list with any live Coven-daemon sessions (in addition
+        // to migrated history loaded by the model at bootstrap).
+        #[cfg(feature = "cast-agent")]
+        {
+            let sessions: Vec<(String, String)> = ::ai::cast_agent::sessions()
+                .into_iter()
+                .map(|s| (s.id, s.name))
+                .collect();
+            if !sessions.is_empty() {
+                chat_model.update(ctx, |model, mctx| {
+                    model.refresh_daemon_conversations(
+                        sessions,
+                        "coven-code",
+                        chrono::Utc::now(),
+                        mctx,
+                    );
+                });
+            }
+        }
+
         Self {
             chat_model,
             composer_input,
