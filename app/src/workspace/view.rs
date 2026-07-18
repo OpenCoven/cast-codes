@@ -20816,10 +20816,20 @@ impl TypedActionView for Workspace {
             }
             #[cfg(not(target_family = "wasm"))]
             OpenChatSession { session_id } => {
-                // Phase 4: bind the chat panel transcript to a past session.
+                // Bind the transcript to the selected conversation, routed by its
+                // backend: a daemon conversation becomes sendable (`LiveDaemon`),
+                // a CLI conversation binds read-only (`Past`).
                 let sid = session_id.clone();
                 crate::cli_chat::model::ChatModel::handle(ctx).update(ctx, |model, ctx| {
-                    model.bind_past(sid, ctx);
+                    let is_daemon = matches!(
+                        model.conversation(&sid).map(|c| &c.backend),
+                        Some(crate::cli_chat::conversation::ConversationBackend::Daemon { .. })
+                    );
+                    if is_daemon {
+                        model.bind_daemon(sid, ctx);
+                    } else {
+                        model.bind_past(sid, ctx);
+                    }
                 });
                 // Ensure the chat panel is visible.
                 if !self.current_workspace_state.is_cli_chat_panel_open {
@@ -20858,6 +20868,65 @@ impl TypedActionView for Workspace {
                     }
                 }
                 let _ = text; // Suppress unused warning when local_tty is absent.
+            }
+            #[cfg(not(target_family = "wasm"))]
+            SubmitAgentPrompt { text } => {
+                // Unified panel composer: route by the active conversation's
+                // backend. Live CLI → terminal PTY; daemon → cast_agent.
+                let binding = crate::cli_chat::model::ChatModel::handle(ctx)
+                    .read(ctx, |model, _| model.binding().clone());
+
+                #[cfg(feature = "local_tty")]
+                if let crate::cli_chat::conversation::ConversationBinding::Live {
+                    terminal_view_id,
+                    ..
+                } = &binding
+                {
+                    let terminal_view_id = *terminal_view_id;
+                    let text = text.clone();
+                    let found = self.tabs.iter().find_map(|tab| {
+                        let views = tab.pane_group.read(ctx, |pg, ctx| pg.terminal_views(ctx));
+                        views.into_iter().find(|tv| tv.id() == terminal_view_id)
+                    });
+                    if let Some(tv) = found {
+                        tv.update(ctx, |view, ctx| {
+                            view.submit_text_to_cli_agent_pty(text, ctx);
+                        });
+                    }
+                }
+
+                #[cfg(all(feature = "cast-agent", unix))]
+                if let crate::cli_chat::conversation::ConversationBinding::LiveDaemon {
+                    session_id,
+                } = &binding
+                {
+                    let session_id = session_id.clone();
+                    let text = text.clone();
+                    // Show the user's prompt immediately, then stream the reply.
+                    let sid = session_id.clone();
+                    let prompt = text.clone();
+                    crate::cli_chat::model::ChatModel::handle(ctx).update(ctx, |model, ctx| {
+                        model.append_entry(
+                            &sid,
+                            crate::agent_transcript::entry::ChatEntry {
+                                sequence: 0,
+                                created_at: chrono::Utc::now(),
+                                kind: crate::agent_transcript::entry::ChatEntryKind::UserPrompt {
+                                    text: prompt,
+                                },
+                            },
+                            ctx,
+                        );
+                    });
+                    if let Some(view) = &self.agent_panel_view {
+                        view.update(ctx, |panel, ctx| {
+                            panel.start_daemon_turn(session_id, text, ctx);
+                        });
+                    }
+                }
+
+                let _ = &binding;
+                let _ = text;
             }
             #[cfg(not(target_family = "wasm"))]
             CliChatNewChat { command } => {

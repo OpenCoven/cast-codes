@@ -283,6 +283,13 @@ pub enum WorkspaceAction {
     SubmitChatPrompt {
         text: String,
     },
+    /// Submits a prompt from the unified agent panel composer, routed by the
+    /// active conversation's backend: a live CLI conversation goes to the
+    /// terminal PTY; a daemon conversation goes to cast_agent.
+    #[cfg(not(target_family = "wasm"))]
+    SubmitAgentPrompt {
+        text: String,
+    },
     /// Opens a new terminal tab and launches the given CLI agent with the
     /// specified model. Dispatched by the chat panel's "New chat" button.
     #[cfg(not(target_family = "wasm"))]
@@ -824,6 +831,7 @@ impl WorkspaceAction {
             | ToggleUnifiedAgentPanel
             | OpenChatSession { .. }
             | SubmitChatPrompt { .. }
+            | SubmitAgentPrompt { .. }
             | CliChatNewChat { .. } => false,
             AutoupdateFailureLink
             | ApplyUpdate
