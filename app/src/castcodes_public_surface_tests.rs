@@ -11,6 +11,9 @@ const AI_FACT_RULE_SOURCE: &str = include_str!("ai/facts/view/rule.rs");
 const AI_TELEMETRY_BANNER_SOURCE: &str = include_str!("ai/blocklist/telemetry_banner.rs");
 const AGENT_VIEW_ZERO_STATE_BLOCK_SOURCE: &str =
     include_str!("ai/blocklist/agent_view/zero_state_block.rs");
+const AGENT_PANEL_MOD_SOURCE: &str = include_str!("agent_panel/mod.rs");
+const AGENT_PANEL_STRINGS_SOURCE: &str = include_str!("agent_panel/strings.rs");
+const AGENT_PANEL_DAEMON_TURN_SOURCE: &str = include_str!("agent_panel/daemon_turn.rs");
 const CLI_BLOCK_SOURCE: &str = include_str!("ai/blocklist/block/cli.rs");
 const CLI_AGENT_EVENT_SOURCE: &str = include_str!("terminal/cli_agent_sessions/event/mod.rs");
 const CLI_AGENT_PLUGIN_MANAGER_SOURCE: &str =
@@ -94,6 +97,14 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
     assert!(AI_FACT_RULE_SOURCE.contains("AGENTS.md"));
     assert!(AI_AGENT_SDK_DRIVER_SOURCE.contains("USER_DOCS_URL"));
     assert!(AI_AGENT_SDK_AMBIENT_SOURCE.contains("USER_DOCS_URL"));
+    // Unified agent panel: fork-local Coven wiring + labels. Ports the guards
+    // that previously lived on the retired `ai_assistant/panel.rs` (which held
+    // the `COVEN_CODE_HARNESS`/`send_via_coven_gateway` wiring) onto the surface
+    // that now owns the native daemon path.
+    assert!(AGENT_PANEL_MOD_SOURCE.contains("\"coven-code\""));
+    assert!(AGENT_PANEL_DAEMON_TURN_SOURCE.contains("::ai::cast_agent::AgentMessage"));
+    assert!(AGENT_PANEL_STRINGS_SOURCE.contains("pub const PANEL_TITLE: &str = \"Agent\""));
+    assert!(AGENT_PANEL_STRINGS_SOURCE.contains("pub const BADGE_DAEMON: &str = \"Coven\""));
     assert!(AI_BLOCK_COMMON_SOURCE.contains("Internal CastCodes error."));
     assert!(AI_BLOCK_COMMON_SOURCE.contains("Working..."));
     assert!(AI_BLOCK_STATUS_BAR_SOURCE.contains("Working with {name}."));
@@ -184,6 +195,9 @@ fn public_app_surfaces_use_castcodes_links_and_labels() {
         AI_FACT_RULE_SOURCE,
         AI_TELEMETRY_BANNER_SOURCE,
         AGENT_VIEW_ZERO_STATE_BLOCK_SOURCE,
+        AGENT_PANEL_MOD_SOURCE,
+        AGENT_PANEL_STRINGS_SOURCE,
+        AGENT_PANEL_DAEMON_TURN_SOURCE,
         CLI_BLOCK_SOURCE,
         CLI_AGENT_EVENT_SOURCE,
         CODE_REVIEW_VIEW_SOURCE,
