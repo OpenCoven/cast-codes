@@ -59,3 +59,36 @@ fn composer_active_for_live_daemon_only_when_runtime_up() {
     assert!(!composer_is_active_for(&past, true));
     assert!(!composer_is_active_for(&ConversationBinding::None, true));
 }
+
+#[test]
+fn inactive_placeholder_names_the_daemon_fix() {
+    use crate::agent_panel::strings;
+    use crate::agent_panel::view::composer::{inactive_placeholder_for, DaemonLink};
+    use crate::cli_chat::conversation::ConversationBinding;
+
+    let daemon = ConversationBinding::LiveDaemon {
+        session_id: "d1".into(),
+    };
+    // Daemon conversations get action-oriented hints per handshake outcome.
+    let offline = inactive_placeholder_for(&daemon, DaemonLink::Offline);
+    assert_eq!(offline, strings::COMPOSER_PLACEHOLDER_DAEMON_OFFLINE);
+    // The hint must name the real CLI verb — `coven daemon start`.
+    assert!(offline.contains("coven daemon start"));
+    assert_eq!(
+        inactive_placeholder_for(&daemon, DaemonLink::Incompatible),
+        strings::COMPOSER_PLACEHOLDER_DAEMON_INCOMPATIBLE
+    );
+
+    // Non-daemon bindings keep the generic copy regardless of daemon state.
+    let past = ConversationBinding::Past {
+        session_id: "p1".into(),
+    };
+    assert_eq!(
+        inactive_placeholder_for(&past, DaemonLink::Offline),
+        strings::COMPOSER_PLACEHOLDER_INACTIVE
+    );
+    assert_eq!(
+        inactive_placeholder_for(&ConversationBinding::None, DaemonLink::Incompatible),
+        strings::COMPOSER_PLACEHOLDER_INACTIVE
+    );
+}

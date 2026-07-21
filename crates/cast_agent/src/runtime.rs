@@ -110,6 +110,12 @@ impl CastAgentRuntime {
         self.agent.is_available()
     }
 
+    /// Latest `coven.daemon.v1` handshake outcome. Cheap, sync, safe to
+    /// call on the UI thread on every render.
+    pub fn connection_state(&self) -> crate::handshake::ConnectionState {
+        self.agent.connection_state()
+    }
+
     /// Sync snapshot of the cached Coven session list. Safe to call from
     /// the UI render thread — reads a [`std::sync::RwLock`] populated by
     /// the background refresh loop.
@@ -213,6 +219,16 @@ pub fn is_available() -> bool {
     global()
         .map(CastAgentRuntime::is_available)
         .unwrap_or(false)
+}
+
+/// Sync convenience for the handshake outcome. Returns
+/// [`ConnectionState::Unreachable`] if the runtime never started — a dead
+/// runtime and an unreachable daemon call for the same user action
+/// (bring the daemon up / restart CastCodes).
+pub fn connection_state() -> crate::handshake::ConnectionState {
+    global()
+        .map(CastAgentRuntime::connection_state)
+        .unwrap_or(crate::handshake::ConnectionState::Unreachable)
 }
 
 /// Sync convenience for the agent panel's session list. Returns an empty

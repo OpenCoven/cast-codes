@@ -8,6 +8,7 @@ use super::integration_tests;
 
 integration_tests! {
     test_add_many_sessions,
+    test_daemon_conversation_composer_names_daemon_fix,
     test_ctrl_tab_session_switching,
     test_hover_over_menu,
     test_shell_reinitializing,

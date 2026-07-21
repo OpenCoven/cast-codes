@@ -32,10 +32,7 @@
 
 #[cfg(unix)]
 use std::path::PathBuf;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::{Arc, RwLock};
 
 use anyhow::Context;
 // `anyhow!()` only fires inside cfg(unix) branches; importing
@@ -50,6 +47,7 @@ use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as WsMes
 use crate::{
     agent::{AgentMessage, AgentResponse},
     config::CastAgentConfig,
+    handshake::{self, ConnectionState, DaemonHealth},
     session::CovenSession,
 };
 // Unix transport: direct HTTP/1.1 over the daemon's socket. The
@@ -118,7 +116,11 @@ fn build_http_client(config: &CastAgentConfig) -> reqwest::Client {
 pub struct GatewayClient {
     config: Arc<CastAgentConfig>,
     transport: Transport,
-    available: AtomicBool,
+    /// Latest handshake outcome. Written by [`Self::health_probe`], read
+    /// (cheaply, sync) by the UI via [`Self::connection_state`] /
+    /// [`Self::is_available`]. Lock poisoning is recovered by reading the
+    /// inner value — the state is plain data.
+    state: RwLock<ConnectionState>,
 }
 
 impl GatewayClient {
@@ -142,15 +144,16 @@ impl GatewayClient {
         Self {
             config,
             transport,
-            available: AtomicBool::new(false),
+            state: RwLock::new(ConnectionState::default()),
         }
     }
 
-    /// Hit `GET /health` (or `/api/v1/health` on Unix) and update
-    /// `is_available()`. Never panics; logs on failure and falls back to
-    /// `false` (degraded mode).
+    /// Run the mandatory `coven.daemon.v1` handshake (`GET /api/v1/health`
+    /// on Unix, `GET /health` on the legacy TCP bridge) and update
+    /// [`Self::connection_state`]. Never panics; logs on failure and falls
+    /// back to [`ConnectionState::Unreachable`] (degraded mode).
     pub async fn health_probe(&self) {
-        let ok = match &self.transport {
+        let state = match &self.transport {
             #[cfg(unix)]
             Transport::Unix { socket } => {
                 match unix_http::request(
@@ -162,34 +165,69 @@ impl GatewayClient {
                 )
                 .await
                 {
-                    Ok(resp) => (200..300).contains(&resp.status),
+                    Ok(resp) => {
+                        let state = handshake::classify_health_response(resp.status, &resp.body);
+                        if let ConnectionState::Incompatible { api_version } = &state {
+                            log::warn!(
+                                "cast_agent: Coven daemon at {} speaks {:?}, expected {:?} — update Coven or CastCodes",
+                                socket.display(),
+                                api_version,
+                                handshake::DAEMON_API_VERSION,
+                            );
+                        }
+                        state
+                    }
                     Err(err) => {
                         log::warn!(
                             "cast_agent: Coven daemon health probe failed for {}: {err} — running in degraded mode",
                             socket.display()
                         );
-                        false
+                        ConnectionState::Unreachable
                     }
                 }
             }
             Transport::Tcp { http } => {
+                // The legacy bridge predates the versioned contract, so a
+                // 2xx health response is all it can promise — no version
+                // enforcement, conservatively empty capabilities.
                 let url = format!("{}/health", self.config.gateway_url.trim_end_matches('/'));
                 match http.get(&url).send().await {
-                    Ok(resp) => resp.status().is_success(),
+                    Ok(resp) if resp.status().is_success() => {
+                        ConnectionState::Ready(DaemonHealth::legacy_bridge())
+                    }
+                    Ok(resp) => {
+                        log::warn!(
+                            "cast_agent: Coven Gateway health probe for {url} returned HTTP {} — running in degraded mode",
+                            resp.status()
+                        );
+                        ConnectionState::Unreachable
+                    }
                     Err(err) => {
                         log::warn!(
                             "cast_agent: Coven Gateway health probe failed for {url}: {err} — running in degraded mode"
                         );
-                        false
+                        ConnectionState::Unreachable
                     }
                 }
             }
         };
-        self.available.store(ok, Ordering::Release);
+        let mut guard = self
+            .state
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard = state;
+    }
+
+    /// Latest handshake outcome. Cheap, sync, safe on the UI thread.
+    pub fn connection_state(&self) -> ConnectionState {
+        self.state
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     pub fn is_available(&self) -> bool {
-        self.available.load(Ordering::Acquire)
+        self.connection_state().is_ready()
     }
 
     fn auth_header(&self) -> Option<(&'static str, String)> {

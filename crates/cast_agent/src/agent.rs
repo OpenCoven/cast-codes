@@ -105,6 +105,13 @@ impl CastAgent {
         self.gateway.health_probe().await;
     }
 
+    /// Latest `coven.daemon.v1` handshake outcome. Cheap, sync, safe to
+    /// call from the UI render thread — reads the state cached by the
+    /// most recent [`Self::health_probe`].
+    pub fn connection_state(&self) -> crate::handshake::ConnectionState {
+        self.gateway.connection_state()
+    }
+
     /// Refresh the cached session list from the gateway. Logs and keeps the
     /// previous snapshot on transport error — never panics. Returns the
     /// (possibly stale) cached list either way.

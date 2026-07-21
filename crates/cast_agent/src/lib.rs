@@ -23,6 +23,7 @@ pub mod familiar;
 #[cfg(unix)]
 mod daemon_chat;
 pub mod gateway;
+pub mod handshake;
 pub mod runtime;
 pub mod session;
 pub mod stream_json;
@@ -34,8 +35,12 @@ pub use agent::{AgentBackend, AgentMessage, AgentResponse, CastAgent};
 pub use comux::ComuxPane;
 pub use config::CastAgentConfig;
 pub use gateway::MessageChunk;
+pub use handshake::{
+    ConnectionState, DaemonCapabilities, DaemonHealth, DaemonProcessInfo, DAEMON_API_VERSION,
+};
 pub use runtime::{
-    global, is_available, sessions, set_host_substrate, update_host_substrate, CastAgentRuntime,
+    connection_state, global, is_available, sessions, set_host_substrate, update_host_substrate,
+    CastAgentRuntime,
 };
 pub use session::{CovenSession, SessionStatus};
 pub use stream_json::{parse_stream_json_line, CovenAgentEvent};

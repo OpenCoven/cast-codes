@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use warpui::{App, AssetProvider, View, ViewHandle, WindowId};
 
 pub mod agent_mode;
+pub mod agent_panel;
 pub mod assertions;
 pub mod block;
 pub mod block_filtering;
