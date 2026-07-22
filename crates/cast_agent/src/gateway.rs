@@ -173,12 +173,23 @@ impl GatewayClient {
                     Ok(resp) => {
                         let state = handshake::classify_health_response(resp.status, &resp.body);
                         if let ConnectionState::Incompatible { api_version } = &state {
-                            log::warn!(
-                                "cast_agent: Coven daemon at {} speaks {:?}, expected {:?} — update Coven or CastCodes",
-                                socket.display(),
-                                api_version,
-                                handshake::DAEMON_API_VERSION,
-                            );
+                            // An empty version means the health body was
+                            // unparseable or omitted apiVersion — not a real
+                            // version mismatch, so don't log `speaks ""`.
+                            if api_version.is_empty() {
+                                log::warn!(
+                                    "cast_agent: Coven daemon at {} returned an invalid health response (missing or unparseable apiVersion), expected {:?} — update Coven or CastCodes",
+                                    socket.display(),
+                                    handshake::DAEMON_API_VERSION,
+                                );
+                            } else {
+                                log::warn!(
+                                    "cast_agent: Coven daemon at {} speaks {:?}, expected {:?} — update Coven or CastCodes",
+                                    socket.display(),
+                                    api_version,
+                                    handshake::DAEMON_API_VERSION,
+                                );
+                            }
                         }
                         state
                     }
