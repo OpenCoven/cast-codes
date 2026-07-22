@@ -227,7 +227,12 @@ impl GatewayClient {
     }
 
     pub fn is_available(&self) -> bool {
-        self.connection_state().is_ready()
+        // Read through the guard rather than via `connection_state()`: this
+        // runs on every poll/render and must not clone the state's strings.
+        self.state
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_ready()
     }
 
     fn auth_header(&self) -> Option<(&'static str, String)> {
