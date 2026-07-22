@@ -127,6 +127,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_single_command);
     register_test!(test_add_and_close_session);
     register_test!(test_add_many_sessions);
+    register_test!(test_daemon_conversation_composer_names_daemon_fix);
     register_test!(test_ctrl_tab_session_switching);
     register_test!(test_ctrl_d_eot);
     register_test!(test_ctrl_d_exit);

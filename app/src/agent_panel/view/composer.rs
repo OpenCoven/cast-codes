@@ -28,17 +28,64 @@ pub fn composer_is_active_for(binding: &ConversationBinding, daemon_available: b
     }
 }
 
+/// Feature-independent projection of the cast_agent handshake outcome, so
+/// placeholder selection stays pure and testable without a daemon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DaemonLink {
+    /// Handshake succeeded — requests may proceed.
+    Ready,
+    /// Daemon unreachable (or the cast-agent feature/runtime is absent).
+    Offline,
+    /// Daemon answered but speaks a different `coven.daemon.v1` version.
+    /// Only reachable when the cast-agent handshake runs.
+    #[cfg_attr(not(feature = "cast-agent"), allow(dead_code))]
+    Incompatible,
+}
+
+/// Crate-visible so integration-test helpers can read the same projection
+/// the composer renders from.
+pub(crate) fn current_daemon_link() -> DaemonLink {
+    #[cfg(feature = "cast-agent")]
+    {
+        use ::ai::cast_agent::ConnectionState;
+        match ::ai::cast_agent::connection_state() {
+            ConnectionState::Ready(_) => DaemonLink::Ready,
+            ConnectionState::Incompatible { .. } => DaemonLink::Incompatible,
+            // No probe yet reads the same as down: input must stay closed
+            // and "start the daemon" is still the right user action.
+            ConnectionState::Unknown | ConnectionState::Unreachable => DaemonLink::Offline,
+        }
+    }
+    #[cfg(not(feature = "cast-agent"))]
+    {
+        DaemonLink::Offline
+    }
+}
+
+/// Placeholder text for an inactive composer. Daemon conversations get an
+/// action-oriented hint keyed off the handshake outcome; everything else
+/// keeps the generic "select a conversation" copy.
+pub fn inactive_placeholder_for(binding: &ConversationBinding, link: DaemonLink) -> &'static str {
+    match (binding, link) {
+        (ConversationBinding::LiveDaemon { .. }, DaemonLink::Offline) => {
+            strings::COMPOSER_PLACEHOLDER_DAEMON_OFFLINE
+        }
+        (ConversationBinding::LiveDaemon { .. }, DaemonLink::Incompatible) => {
+            strings::COMPOSER_PLACEHOLDER_DAEMON_INCOMPATIBLE
+        }
+        _ => strings::COMPOSER_PLACEHOLDER_INACTIVE,
+    }
+}
+
 pub fn render_composer(view: &AgentPanelView, app: &AppContext) -> Box<dyn Element> {
     let chat = view.chat_model.as_ref(app);
-    #[cfg(feature = "cast-agent")]
-    let daemon_available = ::ai::cast_agent::is_available();
-    #[cfg(not(feature = "cast-agent"))]
-    let daemon_available = false;
+    let link = current_daemon_link();
 
-    if composer_is_active_for(chat.binding(), daemon_available) {
+    if composer_is_active_for(chat.binding(), link == DaemonLink::Ready) {
         render_active_composer(view)
     } else {
-        render_inactive_placeholder(app)
+        let placeholder = inactive_placeholder_for(chat.binding(), link);
+        render_inactive_placeholder(app, placeholder)
     }
 }
 
@@ -48,19 +95,12 @@ fn render_active_composer(view: &AgentPanelView) -> Box<dyn Element> {
         .finish()
 }
 
-fn render_inactive_placeholder(app: &AppContext) -> Box<dyn Element> {
+fn render_inactive_placeholder(app: &AppContext, placeholder: &'static str) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
     let font_family = appearance.ui_font_family();
     let font_size = appearance.ui_font_size();
 
-    Container::new(
-        Text::new(
-            strings::COMPOSER_PLACEHOLDER_INACTIVE,
-            font_family,
-            font_size,
-        )
-        .finish(),
-    )
-    .with_uniform_padding(COMPOSER_PADDING)
-    .finish()
+    Container::new(Text::new(placeholder, font_family, font_size).finish())
+        .with_uniform_padding(COMPOSER_PADDING)
+        .finish()
 }

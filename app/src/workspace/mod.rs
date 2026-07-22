@@ -743,9 +743,13 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace"))
         .with_group(bindings::BindingGroup::Navigation.as_str())
         .with_enabled(crate::agent_panel::feature_flag::is_enabled)
-        .with_custom_action(CustomAction::ToggleUnifiedAgentPanel)
         .with_mac_key_binding("cmd-shift-U")
-        .with_linux_or_windows_key_binding("ctrl-shift-U"),
+        .with_linux_or_windows_key_binding("ctrl-shift-U")
+        // `with_custom_action` must come last: it sets the `Trigger::Custom`
+        // that Mac menu building resolves the item name through, and the
+        // key-binding builders above would otherwise overwrite it. The
+        // keystroke shown in menus comes from `custom_tag_to_keystroke`.
+        .with_custom_action(CustomAction::ToggleUnifiedAgentPanel),
         #[cfg(not(target_family = "wasm"))]
         EditableBinding::new(
             TOGGLE_BROWSER_PANE_BINDING_NAME,

@@ -83,16 +83,22 @@ impl CastAgentRuntime {
         });
 
         // Periodic session refresh so `sessions_snapshot()` stays current.
-        // Initial fetch runs immediately so the UI has data on first render
-        // (modulo network latency); subsequent fetches happen on the interval.
+        // The `coven.daemon.v1` handshake is mandatory before any other
+        // request, so every cycle re-probes and skips the fetches unless
+        // the daemon answered `Ready`. The initial cycle runs immediately
+        // (probe included, rather than racing the boot-time one) so the UI
+        // has data on first render when the daemon is up; while the daemon
+        // is unreachable or off-contract only `GET /api/v1/health` keeps
+        // polling, and sessions resume on the cycle after it recovers.
         let session_agent = agent.clone();
         handle.spawn(async move {
-            session_agent.refresh_sessions().await;
-            session_agent.refresh_familiars().await;
             loop {
+                session_agent.health_probe().await;
+                if session_agent.is_available() {
+                    session_agent.refresh_sessions().await;
+                    session_agent.refresh_familiars().await;
+                }
                 tokio::time::sleep(SESSION_REFRESH_INTERVAL).await;
-                session_agent.refresh_sessions().await;
-                session_agent.refresh_familiars().await;
             }
         });
 
@@ -108,6 +114,12 @@ impl CastAgentRuntime {
     /// safe to call on the UI thread on every render.
     pub fn is_available(&self) -> bool {
         self.agent.is_available()
+    }
+
+    /// Latest `coven.daemon.v1` handshake outcome. Cheap, sync, safe to
+    /// call on the UI thread on every render.
+    pub fn connection_state(&self) -> crate::handshake::ConnectionState {
+        self.agent.connection_state()
     }
 
     /// Sync snapshot of the cached Coven session list. Safe to call from
@@ -213,6 +225,16 @@ pub fn is_available() -> bool {
     global()
         .map(CastAgentRuntime::is_available)
         .unwrap_or(false)
+}
+
+/// Sync convenience for the handshake outcome. Returns
+/// [`ConnectionState::Unreachable`] if the runtime never started — a dead
+/// runtime and an unreachable daemon call for the same user action
+/// (bring the daemon up / restart CastCodes).
+pub fn connection_state() -> crate::handshake::ConnectionState {
+    global()
+        .map(CastAgentRuntime::connection_state)
+        .unwrap_or(crate::handshake::ConnectionState::Unreachable)
 }
 
 /// Sync convenience for the agent panel's session list. Returns an empty

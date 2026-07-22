@@ -13,7 +13,8 @@ Agent integration currently embedded in `crates/ai/src/agent/`.
 - ✅ Dedicated tokio runtime on a background OS thread
   ([`crates/cast_agent/src/runtime.rs`](crates/cast_agent/src/runtime.rs)).
   Lazy `OnceLock<CastAgentRuntime>` so the UI thread reads `is_available()`
-  as a cheap atomic. Periodic 30s health re-probe keeps the bit fresh.
+  / `connection_state()` cheaply. Periodic 30s health re-probe keeps the
+  cached state fresh.
 - ✅ Eager runtime boot at app startup
   ([`app/src/lib.rs`](app/src/lib.rs) `run()`) so the first render is free
   of `OnceLock` init overhead.
@@ -278,10 +279,17 @@ Each subsection below tags status:
 #### `GET /health` — ✅ Implemented
 
 - **Request:** none.
-- **Response:** any 2xx body is treated as healthy; body content is ignored.
+- **Response:** on the Unix daemon transport the body is the mandatory
+  `coven.daemon.v1` handshake: `apiVersion` must equal `"coven.daemon.v1"`
+  and the `capabilities` block is cached
+  ([`crates/cast_agent/src/handshake.rs`](crates/cast_agent/src/handshake.rs)).
+  A 2xx with a wrong/missing `apiVersion` is `Incompatible`, not healthy.
+  On the legacy TCP bridge (which predates the versioned contract) any 2xx
+  is treated as healthy and body content is ignored.
 - **Used by:** `GatewayClient::health_probe`, called at startup and on a
-  30 s background loop. Drives `CastAgent::is_available()` and the panel's
-  gateway status pill.
+  30 s background loop. Drives `connection_state()`
+  (`Unknown | Unreachable | Incompatible | Ready`), from which
+  `CastAgent::is_available()` and the panel surfaces derive.
 
 ### Messages (chat transport)
 
@@ -572,7 +580,8 @@ panel has a "history" view that needs it.
 
 | Symptom                                  | What the client does                                                            | What the UI shows                          |
 |------------------------------------------|---------------------------------------------------------------------------------|--------------------------------------------|
-| `GET /health` non-2xx or timeout         | `is_available()` flips to `false`; retried on 30 s loop.                        | Amber gateway pill; sessions list hidden.  |
+| `GET /health` non-2xx or timeout         | `connection_state()` flips to `Unreachable`; retried on 30 s loop.              | Composer placeholder says to run `coven daemon start`. |
+| `GET /health` 2xx, wrong `apiVersion`    | `connection_state()` flips to `Incompatible`; retried on 30 s loop.             | Composer placeholder says to update Coven or CastCodes. |
 | `GET /v1/sessions` transport error       | Returns the in-memory cache; logs at `warn`.                                    | Stale list rendered as-is; no flicker.     |
 | `POST /v1/messages` 4xx/5xx              | `Err` propagates; no retry.                                                     | (no UI consumer today)                     |
 | `WS /v1/messages/stream` connect failure | `stream_messages` returns `Err`.                                                | Stream section shows the error in-band.    |
