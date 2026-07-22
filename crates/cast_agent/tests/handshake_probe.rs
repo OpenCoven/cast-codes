@@ -24,7 +24,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 
 use cast_agent::{
-    config::CastAgentConfig, gateway::GatewayClient, ConnectionState, DAEMON_API_VERSION,
+    config::CastAgentConfig, gateway::GatewayClient, runtime::CastAgentRuntime, ConnectionState,
+    DAEMON_API_VERSION,
 };
 
 /// A `GET /api/v1/health` body that satisfies the `coven.daemon.v1`
@@ -196,6 +197,110 @@ async fn probe_against_erroring_daemon_is_unreachable() {
         "non-2xx health means the daemon is not serving its contract"
     );
     assert!(!client.is_available());
+
+    server.abort();
+    let _ = std::fs::remove_file(&socket_path);
+}
+
+/// Serve every connection with a per-path response and count hits per
+/// path prefix. Unlike [`spawn_stub_daemon`], this parses the request
+/// line so tests can assert which endpoints were (not) called.
+fn spawn_path_counting_daemon(
+    tag: &str,
+    health_body: &'static str,
+) -> (
+    PathBuf,
+    tokio::task::JoinHandle<()>,
+    Arc<AtomicUsize>,
+    Arc<AtomicUsize>,
+) {
+    let socket_path = std::env::temp_dir().join(format!(
+        "cast_agent_handshake_{tag}_{}.sock",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&socket_path);
+    let listener = UnixListener::bind(&socket_path).expect("bind stub daemon socket");
+
+    let health_hits = Arc::new(AtomicUsize::new(0));
+    let other_hits = Arc::new(AtomicUsize::new(0));
+    let (health_ctr, other_ctr) = (health_hits.clone(), other_hits.clone());
+
+    let server = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let (health_ctr, other_ctr) = (health_ctr.clone(), other_ctr.clone());
+            tokio::spawn(async move {
+                let mut buf = Vec::new();
+                let mut tmp = [0u8; 1024];
+                while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match stream.read(&mut tmp).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                    }
+                }
+                let head = String::from_utf8_lossy(&buf);
+                let path = head
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or("")
+                    .to_string();
+                let body = if path.starts_with("/api/v1/health") {
+                    health_ctr.fetch_add(1, Ordering::SeqCst);
+                    health_body.to_string()
+                } else {
+                    other_ctr.fetch_add(1, Ordering::SeqCst);
+                    r#"{"sessions":[]}"#.to_string()
+                };
+                let resp = format!(
+                    "HTTP/1.1 200 X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len(),
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+                let _ = stream.flush().await;
+            });
+        }
+    });
+    (socket_path, server, health_hits, other_hits)
+}
+
+/// The handshake is mandatory before any other request: while the daemon
+/// is off-contract, the runtime's background refresh loop must keep
+/// probing `GET /api/v1/health` and never touch `/api/v1/sessions` or the
+/// familiar catalog. Plain `#[test]`: `new_isolated` owns its runtime and
+/// `Handle::block_on` panics inside another tokio context, so the stub
+/// gets a dedicated runtime instead.
+#[test]
+fn refresh_loop_never_polls_sessions_while_daemon_is_off_contract() {
+    let stub_rt = tokio::runtime::Runtime::new().expect("stub runtime");
+    let (socket_path, server, health_hits, other_hits) = {
+        let _guard = stub_rt.enter();
+        spawn_path_counting_daemon(
+            "gating",
+            r#"{ "ok": true, "apiVersion": "coven.daemon.v2" }"#,
+        )
+    };
+
+    let cfg = CastAgentConfig {
+        socket_path: Some(socket_path.clone()),
+        ..CastAgentConfig::default()
+    };
+    let runtime = CastAgentRuntime::new_isolated(Some(cfg)).expect("boot isolated runtime");
+
+    // The initial refresh cycle runs immediately at boot; give it (and the
+    // boot-time probe) ample time to land before asserting.
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+
+    assert!(
+        health_hits.load(Ordering::SeqCst) >= 1,
+        "the refresh loop must keep running the handshake probe"
+    );
+    assert_eq!(
+        other_hits.load(Ordering::SeqCst),
+        0,
+        "no session/familiar request may be issued while the daemon is Incompatible"
+    );
+    assert!(!runtime.is_available());
+    assert!(runtime.sessions().is_empty());
 
     server.abort();
     let _ = std::fs::remove_file(&socket_path);

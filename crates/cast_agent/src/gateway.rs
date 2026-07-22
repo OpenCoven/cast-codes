@@ -47,9 +47,14 @@ use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as WsMes
 use crate::{
     agent::{AgentMessage, AgentResponse},
     config::CastAgentConfig,
-    handshake::{self, ConnectionState, DaemonHealth},
+    handshake::{ConnectionState, DaemonHealth},
     session::CovenSession,
 };
+// `classify_health_response` / `DAEMON_API_VERSION` are only referenced
+// inside cfg(unix) branches; importing the module unconditionally would
+// trip `-D unused-imports` on Windows/wasm.
+#[cfg(unix)]
+use crate::handshake;
 // Unix transport: direct HTTP/1.1 over the daemon's socket. The
 // `daemon_chat` and `unix_http` modules + the daemon-shape adapter
 // only compile on Unix; the cross-platform default is the TCP/bridge

@@ -83,16 +83,22 @@ impl CastAgentRuntime {
         });
 
         // Periodic session refresh so `sessions_snapshot()` stays current.
-        // Initial fetch runs immediately so the UI has data on first render
-        // (modulo network latency); subsequent fetches happen on the interval.
+        // The `coven.daemon.v1` handshake is mandatory before any other
+        // request, so every cycle re-probes and skips the fetches unless
+        // the daemon answered `Ready`. The initial cycle runs immediately
+        // (probe included, rather than racing the boot-time one) so the UI
+        // has data on first render when the daemon is up; while the daemon
+        // is unreachable or off-contract only `GET /api/v1/health` keeps
+        // polling, and sessions resume on the cycle after it recovers.
         let session_agent = agent.clone();
         handle.spawn(async move {
-            session_agent.refresh_sessions().await;
-            session_agent.refresh_familiars().await;
             loop {
+                session_agent.health_probe().await;
+                if session_agent.is_available() {
+                    session_agent.refresh_sessions().await;
+                    session_agent.refresh_familiars().await;
+                }
                 tokio::time::sleep(SESSION_REFRESH_INTERVAL).await;
-                session_agent.refresh_sessions().await;
-                session_agent.refresh_familiars().await;
             }
         });
 
