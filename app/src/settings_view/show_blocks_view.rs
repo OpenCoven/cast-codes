@@ -18,6 +18,7 @@ use chrono::{DateTime, FixedOffset, Local};
 use pathfinder_geometry::vector::vec2f;
 use std::sync::Arc;
 use warp_core::ui::theme::color::internal_colors;
+use warpui::elements::Radius;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{
@@ -30,7 +31,6 @@ use warpui::{
         ScrollableElement, Shrinkable, Stack, UniformList, UniformListState,
     },
 };
-use warpui::{color::ColorU, elements::Radius};
 use warpui::{elements::ScrollbarWidth, fonts::Weight};
 use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
@@ -109,15 +109,18 @@ impl UserOwnedBlock {
             Hoverable::new(self.overflow_button_mouse_state_handle.clone(), |state| {
                 let container = Container::new(
                     ConstrainedBox::new(
-                        Icon::new("bundled/svg/overflow.svg", ColorU::new(179, 186, 184, 255))
-                            .finish(),
+                        Icon::new(
+                            "bundled/svg/overflow.svg",
+                            appearance.theme().nonactive_ui_text_color(),
+                        )
+                        .finish(),
                     )
                     .with_height(20.)
                     .with_width(20.)
                     .finish(),
                 )
                 .with_uniform_padding(4.)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(5.)));
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)));
 
                 let container = if state.is_clicked() || state.is_hovered() {
                     container.with_background(appearance.theme().surface_2())

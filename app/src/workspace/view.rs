@@ -9262,8 +9262,8 @@ impl Workspace {
             ThemeDeletionModalEvent::DeleteCurrentTheme => {
                 self.theme_chooser_view
                     .update(ctx, |theme_chooser_view, ctx| {
-                        // Reset theme to Dark if we are deleting the current theme
-                        theme_chooser_view.select_and_save_theme(&ThemeKind::Dark, ctx);
+                        // Reset to the default theme if we are deleting the current theme
+                        theme_chooser_view.select_and_save_theme(&ThemeKind::default(), ctx);
                     });
             }
         }
@@ -17631,8 +17631,8 @@ impl Workspace {
                 font_family_id: Some(appearance.ui_font_family()),
                 font_weight: Some(Weight::Bold),
                 background: Some(appearance.theme().accent().into()),
-                font_size: Some(12.),
-                font_color: Some(ColorU::black()),
+                font_size: Some(crate::ui_components::design::font_size::SMALL),
+                font_color: Some(appearance.theme().active_highlighted_text_color().into()),
                 ..Default::default()
             },
         );

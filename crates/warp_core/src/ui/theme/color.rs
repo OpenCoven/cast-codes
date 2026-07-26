@@ -313,8 +313,15 @@ impl WarpTheme {
         self.disabled_text_color(self.surface_2())
     }
 
+    /// Foreground color for content drawn on top of the accent color (accent buttons, avatars,
+    /// selected rows). Prefers the theme's explicit `primary_foreground` token and otherwise
+    /// derives a readable color from the accent background.
     pub fn active_highlighted_text_color(&self) -> Fill {
-        self.main_text_color(self.accent())
+        self.ui
+            .as_ref()
+            .and_then(|u| u.primary_foreground)
+            .map(Fill::Solid)
+            .unwrap_or_else(|| self.main_text_color(self.accent()))
     }
 
     pub fn settings_import_config_hover_opacity(&self) -> Opacity {

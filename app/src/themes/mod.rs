@@ -10,11 +10,12 @@ pub mod tweakcn_import;
 
 use warp_core::ui::theme::WarpTheme;
 
+/// Themes offered in the onboarding picker, drawn from the bundled set.
 pub fn onboarding_theme_picker_themes() -> [WarpTheme; 4] {
     [
         default_themes::castcodes_dark(),
-        default_themes::phenomenon(),
+        default_themes::dark_theme(),
         default_themes::light_theme(),
-        default_themes::adeberry(),
+        default_themes::dracula(),
     ]
 }

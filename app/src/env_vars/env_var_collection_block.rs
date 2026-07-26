@@ -43,7 +43,8 @@ use crate::{
 /// The vertical padding applied to the env var collection block's content body.
 /// For horizontal padding, use [`INLINE_ACTION_HORIZONTAL_PADDING`] for consistency.
 const ENV_VAR_COLLECTION_BODY_VERTICAL_PADDING: f32 = 16.;
-
+/// Large-surface corner radius, capped at the 8px design-contract maximum.
+const ENV_VAR_COLLECTION_RADIUS: f32 = crate::ui_components::design::radius::SURFACE;
 const ENV_VAR_COLLECTION_CANCEL_LABEL: &str = "Cancel";
 const ENV_VAR_COLLECTION_ACCEPT_LABEL: &str = "Run";
 
@@ -422,9 +423,9 @@ impl View for EnvVarCollectionBlock {
             })
             // Rounded corners will make the header feel disconnected from its expanded details.
             .with_corner_radius(if should_expand_downward {
-                CornerRadius::with_top(Radius::Pixels(9.))
+                CornerRadius::with_top(Radius::Pixels(ENV_VAR_COLLECTION_RADIUS))
             } else {
-                CornerRadius::with_all(Radius::Pixels(9.))
+                CornerRadius::with_all(Radius::Pixels(ENV_VAR_COLLECTION_RADIUS))
             })
             .with_border(Border::all(1.).with_border_fill(border_color))
             .finish();

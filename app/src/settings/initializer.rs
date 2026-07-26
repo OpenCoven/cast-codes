@@ -8,9 +8,8 @@ use crate::{
     auth::auth_state::AuthState,
     report_if_error,
     settings::input::InputBoxType,
-    settings::{InputSettings, PrivacySettings, ThemeSettings},
+    settings::{InputSettings, PrivacySettings},
     terminal::session_settings::SessionSettings,
-    themes::theme::ThemeKind,
 };
 
 pub struct SettingsInitializer;
@@ -44,15 +43,6 @@ impl SettingsInitializer {
                 // However, for new users, we don't want to add these defaults without their explicit action, so we disable adding them here.
                 settings.disable_default_regex_trigger(ctx);
             });
-
-            if FeatureFlag::DefaultAdeberryTheme.is_enabled() {
-                log::debug!("Setting default theme to Adeberry for new user");
-                ThemeSettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if !settings.theme_kind.is_value_explicitly_set() {
-                        report_if_error!(settings.theme_kind.set_value(ThemeKind::Adeberry, ctx));
-                    }
-                });
-            }
 
             if cfg!(windows) {
                 log::debug!("Setting default font size to 16px (12pt) for a new Windows user");

@@ -584,6 +584,11 @@ enum Indicator {
     Maximized,
     /// We should show a shell indicator for the tab.
     Shell(ShellIndicatorType),
+    /// One or more panes in this tab have an agent blocked awaiting the
+    /// user's response.
+    NeedsResponse {
+        pane_count: usize,
+    },
     Agent {
         conversation_status: Option<ConversationStatus>,
     },
@@ -769,6 +774,8 @@ impl<'a> TabComponent<'a> {
             Indicator::UnsavedChanges
         } else if !should_show_indicators {
             Indicator::None
+        } else if let Some(needs_response) = Self::needs_response_indicator(tab, ctx) {
+            needs_response
         } else if are_inputs_synced {
             Indicator::Synced
         } else if let Some(agent) = Self::agent_indicator(tab, ctx) {
@@ -819,6 +826,14 @@ impl<'a> TabComponent<'a> {
     pub fn for_drag_ghost(mut self) -> Self {
         self.for_drag_ghost = true;
         self
+    }
+
+    /// Returns the needs-response indicator when any visible pane in this tab
+    /// (focused or not, Oz conversation or CLI agent session) is blocked
+    /// awaiting the user's response, so the user can spot it from the tab bar.
+    fn needs_response_indicator(tab: &TabData, ctx: &AppContext) -> Option<Indicator> {
+        let pane_count = tab.pane_group.as_ref(ctx).panes_awaiting_user_response(ctx);
+        (pane_count > 0).then_some(Indicator::NeedsResponse { pane_count })
     }
 
     /// Returns the agent indicator for the focused session's active conversation,
@@ -881,6 +896,14 @@ impl<'a> TabComponent<'a> {
         tab: &TabData,
         ctx: &AppContext,
     ) -> Option<String> {
+        if let Indicator::NeedsResponse { pane_count } = indicator {
+            return Some(if *pane_count > 1 {
+                format!("{pane_count} agents need your response")
+            } else {
+                "Agent needs your response".to_string()
+            });
+        }
+
         if Self::is_agent_task_indicator(indicator) {
             return Self::get_agent_task_tooltip_message(tab, ctx);
         }
@@ -1159,7 +1182,9 @@ impl<'a> TabComponent<'a> {
                         self.styles
                             .default
                             .font_color
-                            .unwrap_or(ColorU::white())
+                            .unwrap_or_else(|| {
+                                self.appearance.theme().active_ui_text_color().into()
+                            })
                             .into(),
                     )
                     .finish(),
@@ -1170,6 +1195,17 @@ impl<'a> TabComponent<'a> {
                     .to_warpui_icon(internal_colors::neutral_5(self.appearance.theme()).into())
                     .finish(),
             ),
+            Indicator::NeedsResponse { .. } => {
+                let status = ConversationStatus::Blocked {
+                    blocked_action: String::new(),
+                };
+                if FeatureFlag::NewTabStyling.is_enabled() {
+                    let icon_size = 22.0 - STATUS_ELEMENT_PADDING * 2.;
+                    Some(render_status_element(&status, icon_size, self.appearance))
+                } else {
+                    Some(status.render_icon(self.appearance).finish())
+                }
+            }
             Indicator::Agent {
                 conversation_status,
             } => {
@@ -1248,7 +1284,9 @@ impl<'a> TabComponent<'a> {
                             self.styles
                                 .default
                                 .font_color
-                                .unwrap_or(ColorU::white())
+                                .unwrap_or_else(|| {
+                                    self.appearance.theme().active_ui_text_color().into()
+                                })
                                 .into(),
                         )
                         .finish(),
@@ -1385,7 +1423,9 @@ impl<'a> TabComponent<'a> {
                         self.styles
                             .default
                             .font_color
-                            .unwrap_or(ColorU::white())
+                            .unwrap_or_else(|| {
+                                self.appearance.theme().active_ui_text_color().into()
+                            })
                             .into(),
                     )
                     .finish()
@@ -1517,7 +1557,9 @@ impl<'a> TabComponent<'a> {
             // that merges into the content area below. The active tab's accent
             // underline (added below) sits along that flat edge. Tabs are spaced
             // by a small gap (added in `build`) rather than abutting separators.
-            tab = tab.with_corner_radius(CornerRadius::with_top(Radius::Pixels(6.0)));
+            tab = tab.with_corner_radius(CornerRadius::with_top(Radius::Pixels(
+                crate::ui_components::design::radius::CONTROL,
+            )));
             // Only the active/hovered card draws a subtle outline (top + sides,
             // open bottom); idle tabs stay borderless for a calm, uncluttered
             // strip.

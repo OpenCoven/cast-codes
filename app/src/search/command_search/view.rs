@@ -1061,8 +1061,6 @@ impl CommandSearchView {
 }
 
 pub mod styles {
-    use lazy_static::lazy_static;
-    use pathfinder_color::ColorU;
     use warpui::elements::{Border, DropShadow, ScrollbarWidth};
 
     use crate::{appearance::Appearance, themes::theme::Fill};
@@ -1072,11 +1070,6 @@ pub mod styles {
     pub const VIEW_HEIGHT: f32 = 450.;
     pub const TOP_PADDING: f32 = CORNER_RADIUS;
     pub const SCROLLBAR_WIDTH: ScrollbarWidth = ScrollbarWidth::Auto;
-
-    lazy_static! {
-        pub static ref SEARCH_ICON_COLOR: ColorU = ColorU::new(255, 255, 255, 204);
-        pub static ref INPUT_FIELD_BG_COLOR: ColorU = ColorU::new(255, 255, 255, 50);
-    }
 
     /// Returns the `Fill` to be used as the background of the search results panel and details
     /// panel.

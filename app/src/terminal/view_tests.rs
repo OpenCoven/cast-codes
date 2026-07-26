@@ -4890,6 +4890,104 @@ fn cli_session_status_updates_active_child_conversation() {
 }
 
 #[test]
+fn is_awaiting_user_response_tracks_cli_session_blocked_status() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
+
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        // A plain terminal with no agent session is not awaiting a response.
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.is_awaiting_user_response(ctx));
+        });
+
+        terminal.update(&mut app, |view, ctx| {
+            let listener = ctx.add_model(|ctx| {
+                CLIAgentSessionListener::new(
+                    view.view_id,
+                    CLIAgent::Claude,
+                    &view.model_events_handle,
+                    ctx,
+                )
+            });
+            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
+                sessions.set_session(
+                    view.view_id,
+                    CLIAgentSession {
+                        agent: CLIAgent::Claude,
+                        status: CLIAgentSessionStatus::InProgress,
+                        session_context: CLIAgentSessionContext::default(),
+                        input_state: CLIAgentInputState::Closed,
+                        should_auto_toggle_input: false,
+                        listener: Some(listener),
+                        remote_host: None,
+                        plugin_version: Some("1.0.0".to_owned()),
+                        draft_text: None,
+                        custom_command_prefix: None,
+                    },
+                    ctx,
+                );
+            });
+        });
+
+        // An in-progress run is not awaiting a response.
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.is_awaiting_user_response(ctx));
+        });
+
+        // A permission request blocks the run on the user's response.
+        terminal.update(&mut app, |view, ctx| {
+            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
+                sessions.update_from_event(
+                    view.view_id,
+                    &CLIAgentEvent {
+                        v: 1,
+                        agent: CLIAgent::Claude,
+                        event: CLIAgentEventType::PermissionRequest,
+                        session_id: None,
+                        cwd: None,
+                        project: None,
+                        payload: CLIAgentEventPayload {
+                            summary: Some("Approve?".to_owned()),
+                            ..Default::default()
+                        },
+                    },
+                    ctx,
+                );
+            });
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.is_awaiting_user_response(ctx));
+        });
+
+        // Replying to the permission request unblocks the run.
+        terminal.update(&mut app, |view, ctx| {
+            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
+                sessions.update_from_event(
+                    view.view_id,
+                    &CLIAgentEvent {
+                        v: 1,
+                        agent: CLIAgent::Claude,
+                        event: CLIAgentEventType::PermissionReplied,
+                        session_id: None,
+                        cwd: None,
+                        project: None,
+                        payload: CLIAgentEventPayload::default(),
+                    },
+                    ctx,
+                );
+            });
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.is_awaiting_user_response(ctx));
+        });
+    })
+}
+
+#[test]
 fn cli_session_status_updates_single_child_conversation_without_agent_view() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
