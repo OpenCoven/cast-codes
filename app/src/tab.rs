@@ -900,7 +900,7 @@ impl<'a> TabComponent<'a> {
             return Some(if *pane_count > 1 {
                 format!("{pane_count} agents need your response")
             } else {
-                "Agent needs your response".to_string()
+                "An agent needs your response".to_string()
             });
         }
 

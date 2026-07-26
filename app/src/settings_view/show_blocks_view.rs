@@ -11,6 +11,7 @@ use crate::{
     channel::{Channel, ChannelState},
     menu::{Event as MenuEvent, Event, Menu, MenuItem, MenuItemFields},
     server::{block::Block, server_api::block::BlockClient},
+    ui_components::design,
     view_components::ToastFlavor,
 };
 use anyhow::Result;
@@ -119,8 +120,10 @@ impl UserOwnedBlock {
                     .with_width(20.)
                     .finish(),
                 )
-                .with_uniform_padding(4.)
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)));
+                .with_uniform_padding(design::space::XS)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(
+                    design::radius::COMPACT,
+                )));
 
                 let container = if state.is_clicked() || state.is_hovered() {
                     container.with_background(appearance.theme().surface_2())

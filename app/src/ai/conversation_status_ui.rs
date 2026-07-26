@@ -70,7 +70,7 @@ pub fn render_status_element_with_label(
         Flex::row()
             .with_main_axis_size(MainAxisSize::Min)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_spacing(4.)
+            .with_spacing(design::space::XS)
             .with_child(
                 ConstrainedBox::new(icon.to_warpui_icon(Fill::from(color)).finish())
                     .with_width(12.)
