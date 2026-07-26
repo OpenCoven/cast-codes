@@ -1513,17 +1513,11 @@ impl Workspace {
     }
 
     fn build_settings_views(
-        global_resource_handles: GlobalResourceHandles,
         tips_completed: ModelHandle<TipsCompleted>,
         ctx: &mut ViewContext<Self>,
     ) -> (ViewHandle<SettingsView>, ViewHandle<ThemeChooser>) {
-        let theme_chooser_view = ctx.add_typed_action_view(|ctx| {
-            ThemeChooser::new(
-                global_resource_handles.referral_theme_status,
-                ctx,
-                tips_completed,
-            )
-        });
+        let theme_chooser_view =
+            ctx.add_typed_action_view(|ctx| ThemeChooser::new(ctx, tips_completed));
 
         ctx.subscribe_to_view(&theme_chooser_view, |me, _, event, ctx| {
             me.handle_theme_chooser_event(event, ctx);
@@ -2629,7 +2623,7 @@ impl Workspace {
         let (welcome_tips_view, welcome_tips_view_state) =
             Self::build_welcome_tips(tips_completed.clone(), ctx);
         let (settings_pane, theme_chooser_view) =
-            Self::build_settings_views(global_resource_handles, tips_completed.clone(), ctx);
+            Self::build_settings_views(tips_completed.clone(), ctx);
 
         let resource_center_view =
             Self::build_resource_center_view(ctx, tips_completed.clone(), changelog_model.clone());
