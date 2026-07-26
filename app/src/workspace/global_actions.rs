@@ -271,7 +271,7 @@ mod tests {
     use warpui::App;
 
     use crate::{
-        persistence::{ModelEvent, PersistenceWriter},
+        persistence::{ModelEvent, PersistenceWriter, WriterHandles},
         test_util::settings::initialize_settings_for_tests,
         workspace::{cross_window_tab_drag::CrossWindowTabDrag, WorkspaceRegistry},
         GlobalResourceHandles, GlobalResourceHandlesProvider,
@@ -285,9 +285,22 @@ mod tests {
             initialize_settings_for_tests(&mut app);
             app.add_singleton_model(|_| WorkspaceRegistry::new());
             app.add_singleton_model(|_| CrossWindowTabDrag::new());
-            app.add_singleton_model(|_| PersistenceWriter::new(None));
 
-            let (tx, rx) = sync_channel(1);
+            // Mirror the production wiring in `sqlite::start_writer`: `save_app`
+            // and `PersistenceWriter::terminate` share one channel into the
+            // writer thread. Capacity 2 fits the Snapshot + Terminate events;
+            // the dummy thread stands in for the writer so `terminate` has a
+            // real handle to join.
+            let (tx, rx) = sync_channel(2);
+            let writer_sender = tx.clone();
+            let thread_handle = std::thread::spawn(|| {});
+            app.add_singleton_model(move |_| {
+                PersistenceWriter::new(Some(WriterHandles {
+                    handle: thread_handle,
+                    sender: writer_sender,
+                }))
+            });
+
             let mut global_resource_handles = GlobalResourceHandles::mock(&mut app);
             global_resource_handles.model_event_sender = Some(tx);
             app.add_singleton_model(|_| {
@@ -298,10 +311,20 @@ mod tests {
                 run_shutdown_persistence(ctx);
             });
 
-            let event = rx
+            let first = rx
                 .try_recv()
                 .expect("shutdown save should enqueue a snapshot");
-            assert!(matches!(event, ModelEvent::Snapshot(_)));
+            assert!(
+                matches!(first, ModelEvent::Snapshot(_)),
+                "the session snapshot should be enqueued first, got {first:?}"
+            );
+            let second = rx
+                .try_recv()
+                .expect("shutdown save should terminate the writer");
+            assert!(
+                matches!(second, ModelEvent::Terminate),
+                "writer termination should follow the snapshot, got {second:?}"
+            );
         });
     }
 }
