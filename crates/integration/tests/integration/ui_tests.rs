@@ -7,6 +7,8 @@
 use super::integration_tests;
 
 integration_tests! {
+    #[cfg(target_os = "macos")]
+    test_oss_app_menu_startup,
     test_add_many_sessions,
     test_daemon_conversation_composer_names_daemon_fix,
     test_ctrl_tab_session_switching,

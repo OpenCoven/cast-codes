@@ -27,6 +27,7 @@ use itertools::Itertools;
 use settings::manager::SettingsManager;
 use settings::Setting as _;
 use warp_core::brand;
+use warp_core::channel::ChannelState;
 use warp_core::context_flag::ContextFlag;
 use warp_util::path::user_friendly_path;
 use warpui::actions::StandardAction;
@@ -62,7 +63,7 @@ const MAX_RECENT_REPOS_IN_MENU: usize = 10;
 
 /// Creates the root app menu bar
 pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
-    MenuBar::new(vec![
+    let mut menus = vec![
         make_new_app_menu(ctx),
         make_new_file_menu(ctx),
         make_new_edit_menu(ctx),
@@ -70,10 +71,14 @@ pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
         make_new_tab_menu(ctx),
         make_new_blocks_menu(ctx),
         make_new_ai_menu(ctx),
-        make_new_drive_menu(ctx),
-        make_new_window_menu(),
-        make_new_help_menu(),
-    ])
+    ];
+
+    if ChannelState::cloud_services_available() {
+        menus.push(make_new_drive_menu(ctx));
+    }
+
+    menus.extend([make_new_window_menu(), make_new_help_menu()]);
+    MenuBar::new(menus)
 }
 
 // Creates the app dock menu
@@ -150,11 +155,14 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         ))
     }
 
-    menu_items.extend([
-        MenuItem::Separator,
-        updateable_custom_item_without_checkmark(CustomAction::ReferAFriend, ctx),
-        MenuItem::Separator,
-    ]);
+    menu_items.push(MenuItem::Separator);
+    if ChannelState::cloud_services_available() {
+        menu_items.push(updateable_custom_item_without_checkmark(
+            CustomAction::ReferAFriend,
+            ctx,
+        ));
+        menu_items.push(MenuItem::Separator);
+    }
 
     let preferences_menu_items = vec![
         updateable_custom_item_without_checkmark(CustomAction::ShowSettings, ctx),
@@ -377,14 +385,21 @@ fn make_new_edit_menu(ctx: &AppContext) -> Menu {
 }
 
 fn make_new_view_menu(ctx: &AppContext) -> Menu {
-    let mut items = vec![
-        updateable_custom_item_without_checkmark(CustomAction::ToggleWarpDrive, ctx),
-        MenuItem::Separator,
+    let mut items = vec![];
+    if ChannelState::cloud_services_available() {
+        items.push(updateable_custom_item_without_checkmark(
+            CustomAction::ToggleWarpDrive,
+            ctx,
+        ));
+        items.push(MenuItem::Separator);
+    }
+
+    items.extend([
         updateable_custom_item_without_checkmark(CustomAction::CommandPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::NavigationPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::LaunchConfigPalette, ctx),
         updateable_custom_item_without_checkmark(CustomAction::FilesPalette, ctx),
-    ];
+    ]);
 
     if FeatureFlag::AgentViewConversationListView.is_enabled() {
         items.push(updateable_custom_item_without_checkmark(
@@ -598,9 +613,17 @@ fn make_new_blocks_menu(ctx: &AppContext) -> Menu {
         ctx,
     ));
     items.push(MenuItem::Separator);
+    items.push(updateable_custom_item_without_checkmark(
+        CustomAction::CreateBlockPermalink,
+        ctx,
+    ));
+    if ChannelState::cloud_services_available() {
+        items.push(non_updateable_custom_item(
+            CustomAction::ViewSharedBlocks,
+            ctx,
+        ));
+    }
     items.extend([
-        updateable_custom_item_without_checkmark(CustomAction::CreateBlockPermalink, ctx),
-        non_updateable_custom_item(CustomAction::ViewSharedBlocks, ctx),
         updateable_custom_item_without_checkmark(CustomAction::ToggleBookmarkBlock, ctx),
         updateable_custom_item_without_checkmark(CustomAction::FindWithinBlock, ctx),
         MenuItem::Separator,

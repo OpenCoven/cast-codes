@@ -9,6 +9,7 @@ const AI_BLOCK_SOURCE: &str = include_str!("ai/blocklist/block.rs");
 const AI_BLOCK_STATUS_BAR_SOURCE: &str = include_str!("ai/blocklist/block/status_bar.rs");
 const AI_FACT_RULE_SOURCE: &str = include_str!("ai/facts/view/rule.rs");
 const AI_TELEMETRY_BANNER_SOURCE: &str = include_str!("ai/blocklist/telemetry_banner.rs");
+const APP_MENUS_SOURCE: &str = include_str!("app_menus.rs");
 const AGENT_VIEW_ZERO_STATE_BLOCK_SOURCE: &str =
     include_str!("ai/blocklist/agent_view/zero_state_block.rs");
 const AGENT_PANEL_MOD_SOURCE: &str = include_str!("agent_panel/mod.rs");
@@ -53,6 +54,117 @@ const WORKFLOW_CATEGORIES_SOURCE: &str = include_str!("workflows/categories.rs")
 const WORKFLOW_VIEW_SOURCE: &str = include_str!("workflows/workflow_view.rs");
 const WORKSPACE_MOD_SOURCE: &str = include_str!("workspace/mod.rs");
 const WORKSPACE_VIEW_SOURCE: &str = include_str!("workspace/view.rs");
+
+fn function_source<'a>(source: &'a str, function: &str, next_function: &str) -> &'a str {
+    source
+        .split_once(function)
+        .unwrap_or_else(|| panic!("{function} should exist"))
+        .1
+        .split_once(next_function)
+        .unwrap_or_else(|| panic!("{next_function} should follow {function}"))
+        .0
+}
+
+fn matching_closing_brace(source: &str, opening_brace_offset: usize) -> Option<usize> {
+    if source.as_bytes().get(opening_brace_offset) != Some(&b'{') {
+        return None;
+    }
+
+    let mut depth = 0;
+    for (relative_offset, character) in source[opening_brace_offset..].char_indices() {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(opening_brace_offset + relative_offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn assert_item_is_cloud_service_only(function: &str, item: &str, description: &str) {
+    let item_offset = function
+        .find(item)
+        .unwrap_or_else(|| panic!("{description} should exist"));
+    let cloud_gate = "if ChannelState::cloud_services_available()";
+    let gate_offset = function[..item_offset]
+        .rfind(cloud_gate)
+        .unwrap_or_else(|| panic!("{description} should have a cloud-service gate"));
+    let gate_open_offset = function[gate_offset..item_offset]
+        .find('{')
+        .map(|offset| gate_offset + offset)
+        .unwrap_or_else(|| panic!("{description} cloud-service gate should open"));
+    let gate_end_offset = matching_closing_brace(function, gate_open_offset)
+        .unwrap_or_else(|| panic!("{description} cloud-service gate should close"));
+
+    assert!(
+        item_offset < gate_end_offset,
+        "{description} should be hidden when hosted cloud services are unavailable"
+    );
+}
+
+#[test]
+fn cloud_service_gate_matching_supports_nested_braces() {
+    let function = r#"
+        if ChannelState::cloud_services_available() {
+            if nested_condition {
+                nested_action();
+            }
+            CustomAction::ReferAFriend;
+        }
+    "#;
+    assert_item_is_cloud_service_only(
+        function,
+        "CustomAction::ReferAFriend",
+        "nested referral action",
+    );
+}
+
+#[test]
+fn referral_app_menu_item_is_cloud_service_only() {
+    let app_menu = function_source(
+        APP_MENUS_SOURCE,
+        "fn make_new_app_menu",
+        "fn make_new_file_menu",
+    );
+    assert_item_is_cloud_service_only(
+        app_menu,
+        "CustomAction::ReferAFriend",
+        "referral app menu action",
+    );
+}
+
+#[test]
+fn oss_app_menus_do_not_build_cloud_only_items() {
+    let menu_bar = function_source(APP_MENUS_SOURCE, "pub fn menu_bar", "pub fn dock_menu");
+    assert_item_is_cloud_service_only(menu_bar, "make_new_drive_menu(ctx)", "Drive app menu");
+
+    let view_menu = function_source(
+        APP_MENUS_SOURCE,
+        "fn make_new_view_menu",
+        "fn make_new_tab_menu",
+    );
+    assert_item_is_cloud_service_only(
+        view_menu,
+        "CustomAction::ToggleWarpDrive",
+        "Cast Drive view menu action",
+    );
+
+    let blocks_menu = function_source(
+        APP_MENUS_SOURCE,
+        "fn make_new_blocks_menu",
+        "fn make_new_drive_menu",
+    );
+    assert_item_is_cloud_service_only(
+        blocks_menu,
+        "CustomAction::ViewSharedBlocks",
+        "shared blocks menu action",
+    );
+}
 
 #[test]
 fn public_app_surfaces_use_castcodes_links_and_labels() {

@@ -4,6 +4,8 @@
 
 mod agent_mode;
 mod agent_panel;
+#[cfg(target_os = "macos")]
+mod app_startup;
 mod block_filtering;
 mod bootstrapping;
 mod code_review;
@@ -36,6 +38,8 @@ mod workspace;
 
 pub use agent_mode::*;
 pub use agent_panel::*;
+#[cfg(target_os = "macos")]
+pub use app_startup::*;
 pub use block_filtering::*;
 pub use bootstrapping::*;
 pub use code_review::*;
