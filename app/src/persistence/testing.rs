@@ -2,7 +2,10 @@
 
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl};
 
-use super::{schema, sqlite::init_db};
+use super::{
+    schema,
+    sqlite::{database_file_path, establish_ro_connection, init_db},
+};
 /// Updates the 'user' and 'host' columns for stored blocks to the given values.
 ///
 /// This is used at runtime to update the user and host values to real values based on the running
@@ -49,7 +52,12 @@ pub fn set_user_and_hostname_for_commands(user: String, hostname: String) {
 /// This is used by integration tests to verify that a session snapshot actually reached the
 /// sqlite database (e.g. via the shutdown save hook).
 pub fn count_persisted_tabs() -> i64 {
-    let mut conn = init_db().expect("Should be able to establish sqlite connection.");
+    let database_path = database_file_path();
+    let database_url = database_path
+        .to_str()
+        .expect("SQLite database path should be valid UTF-8.");
+    let mut conn = establish_ro_connection(database_url)
+        .expect("Should be able to establish read-only sqlite connection.");
 
     schema::tabs::dsl::tabs
         .count()
