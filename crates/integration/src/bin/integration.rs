@@ -23,8 +23,17 @@ pub struct Args {
 }
 
 pub fn main() -> Result<()> {
+    let args = Args::parse();
+    let tests = register_tests();
+    let channel = args
+        .integration_test_name
+        .as_deref()
+        .and_then(|test_name| tests.get(test_name))
+        .map(|(channel, _)| *channel)
+        .unwrap_or(Channel::Integration);
+
     ChannelState::set(ChannelState::new(
-        Channel::Integration,
+        channel,
         ChannelConfig {
             app_id: AppId::new(
                 "dev",
@@ -56,8 +65,6 @@ pub fn main() -> Result<()> {
         },
     ));
 
-    let args = Args::parse();
-
     if let Some(command) = &args.command {
         match command {
             #[cfg(unix)]
@@ -75,14 +82,13 @@ pub fn main() -> Result<()> {
         }
     }
 
-    let tests = register_tests();
     let test_name = args
         .integration_test_name
         .as_deref()
         .expect("Integration test name is required");
 
     println!("Running integration test: {test_name}");
-    let Some(builder) = tests.get(test_name).map(|func| func()) else {
+    let Some(builder) = tests.get(test_name).map(|(_, builder_fn)| builder_fn()) else {
         panic!("test not found for args: {:#?}", env::args());
     };
     #[cfg_attr(not(unix), allow(unused_variables))]
@@ -109,9 +115,10 @@ pub fn main() -> Result<()> {
 
 /// Type of a function that produces an integration test builder.
 type BoxedBuilderFn = Box<dyn Fn() -> Builder>;
+type RegisteredTest = (Channel, BoxedBuilderFn);
 
-fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
-    let mut tests: HashMap<&str, BoxedBuilderFn> = HashMap::new();
+fn register_tests() -> HashMap<&'static str, RegisteredTest> {
+    let mut tests: HashMap<&str, RegisteredTest> = HashMap::new();
 
     // A tiny macro to simplify the act of registering a test.  This avoids
     // any inconsistencies between the test function name and the key in the
@@ -119,11 +126,16 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     // decide to do so in the future).
     macro_rules! register_test {
         ($name:ident) => {
-            tests.insert(stringify!($name), Box::new(|| $name()));
+            register_test!($name, Channel::Integration);
+        };
+        ($name:ident, $channel:expr) => {
+            tests.insert(stringify!($name), ($channel, Box::new(|| $name())));
         };
     }
 
     // Add new tests here
+    #[cfg(target_os = "macos")]
+    register_test!(test_oss_app_menu_startup, Channel::Oss);
     register_test!(test_single_command);
     register_test!(test_add_and_close_session);
     register_test!(test_add_many_sessions);
