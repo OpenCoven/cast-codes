@@ -42,6 +42,7 @@ use super::{
 use crate::code_review::git_status_update::{GitRepoStatusEvent, GitRepoStatusModel};
 #[cfg(feature = "local_fs")]
 use crate::context_chips::display_chip::GitLineChanges;
+use instant::Instant;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash as _, Hasher as _};
 use std::sync::Arc;
@@ -105,6 +106,14 @@ pub struct ChipState {
     /// Monotonic counter incremented when a user command matching this chip's
     /// `invalidate_on_commands` completes. Hashed via `ChipFingerprintInput::InvalidatingCommandCount`.
     invalidating_command_count: u64,
+    /// Fingerprint of the chip's CONTEXT (its inputs excluding `InvalidatingCommandCount`), as of the
+    /// last rate-limit decision. Lets the limiter tell "the user ran git again here" from "the
+    /// user is somewhere else now", and only throttle the former.
+    last_context_fingerprint: Option<ChipFingerprint>,
+    /// When this chip's generator was last started. Compared against
+    /// `ChipRuntimePolicy::min_refresh_interval` to bound how often an expensive chip may run.
+    /// `None` means it has never run, so the first fetch is never delayed.
+    last_generator_started_at: Option<Instant>,
 }
 
 impl Drop for ChipState {
@@ -137,6 +146,8 @@ impl ChipState {
             on_click_generator_handle: None,
             should_render: kind.should_render("", &Default::default()),
             invalidating_command_count: 0,
+            last_context_fingerprint: None,
+            last_generator_started_at: None,
         }
     }
 
@@ -159,6 +170,12 @@ impl ChipState {
         self.last_failure_fingerprint = None;
         self.availability = ChipAvailability::Enabled;
         self.update_status = ChipUpdateStatus::Idle;
+        // `last_generator_started_at` is deliberately NOT cleared. This runs from
+        // `clear_chips_and_cache`, which fires on every new block — that is, after every command
+        // the user runs. Resetting the rate-limit clock here would hand every chip a fresh
+        // allowance on each command and leave `min_refresh_interval` doing nothing at all, which
+        // is the exact shape of the burn it exists to stop. The floor is a property of real
+        // elapsed time, not of cache state.
     }
 }
 
@@ -409,6 +426,14 @@ impl CurrentPrompt {
             .unwrap_or_default()
     }
 
+    /// Hash the chip's fingerprint inputs.
+    ///
+    /// `include_invalidating_command_count` distinguishes two questions. With it true you get the
+    /// cache fingerprint: "is anything at all different, including the user having run `git`
+    /// again". With it false you get the CONTEXT fingerprint: "is the thing this chip describes
+    /// actually somewhere else now — a different directory, branch, or session". The rate limiter
+    /// needs the second one, so that a burst of `git` commands in one place is throttled while
+    /// genuinely moving to another repo refreshes immediately.
     fn build_chip_fingerprint(
         &self,
         chip_kind: &ContextChipKind,
@@ -416,6 +441,7 @@ impl CurrentPrompt {
         required_executables: &[String],
         context: &GeneratorContext,
         capabilities: &ChipRuntimeCapabilities,
+        include_invalidating_command_count: bool,
     ) -> Option<ChipFingerprint> {
         let inputs = chip.runtime_policy().fingerprint_inputs();
         if inputs.is_empty() {
@@ -494,6 +520,9 @@ impl CurrentPrompt {
                     }
                 }
                 ChipFingerprintInput::InvalidatingCommandCount => {
+                    if !include_invalidating_command_count {
+                        continue;
+                    }
                     if let Some(state) = self.states.get(chip_kind) {
                         state.invalidating_command_count.hash(&mut hasher);
                     }
@@ -502,6 +531,72 @@ impl CurrentPrompt {
         }
 
         Some(hasher.finish())
+    }
+
+    /// Enforce `ChipRuntimePolicy::min_refresh_interval`: refuse to start the generator again
+    /// until that much time has passed since the last start.
+    ///
+    /// This runs BEFORE the fingerprint check on purpose. The fingerprint path records the
+    /// fingerprint it skipped on, which is right for "nothing changed" but wrong here — something
+    /// may well have changed and we are declining to look yet. Recording it would pair the chip's
+    /// stale displayed value with a fingerprint describing the new state, and the next fetch would
+    /// then skip as a match and never pick the change up.
+    /// Give back the refresh allowance after a failed run.
+    ///
+    /// The floor is meant to bound how often a chip successfully spends a network quota, not to
+    /// punish it for a blip: a run that produced no value should not lock the chip out for the
+    /// whole interval, or one dropped connection leaves it blank for five minutes. Failures that
+    /// are NOT transient are already held off by `suppress_on_failure`, which refuses to re-run
+    /// while the failing fingerprint is unchanged — so releasing the clock here cannot turn a
+    /// persistent failure into a retry storm.
+    fn release_refresh_allowance_after_failure(&mut self, chip_kind: &ContextChipKind) {
+        if let Some(state) = self.states.get_mut(chip_kind) {
+            state.last_generator_started_at = None;
+        }
+    }
+
+    fn maybe_skip_fetch_due_to_min_refresh_interval(
+        &mut self,
+        chip_kind: &ContextChipKind,
+        min_refresh_interval: Option<Duration>,
+        context_fingerprint: Option<ChipFingerprint>,
+    ) -> bool {
+        let Some(min_refresh_interval) = min_refresh_interval else {
+            return false;
+        };
+
+        let (last_started_at, last_context_fingerprint) = self
+            .states
+            .get(chip_kind)
+            .map(|state| {
+                (
+                    state.last_generator_started_at,
+                    state.last_context_fingerprint,
+                )
+            })
+            .unwrap_or((None, None));
+
+        // A genuine context change always wins over the floor. Moving to another repo or branch
+        // means the previous answer describes somewhere the user no longer is, and showing that
+        // for up to five minutes would be worse than the quota it saves. Only the *volume* of
+        // `git`/`gh` commands in one place is throttled, which is where the burn came from.
+        if context_fingerprint != last_context_fingerprint {
+            if let Some(state) = self.states.get_mut(chip_kind) {
+                state.last_context_fingerprint = context_fingerprint;
+            }
+            return false;
+        }
+
+        let Some(last_started_at) = last_started_at else {
+            // Never run in this state's lifetime — the first fetch is never delayed.
+            return false;
+        };
+        if last_started_at.elapsed() >= min_refresh_interval {
+            return false;
+        }
+
+        self.set_chip_update_status(chip_kind, ChipUpdateStatus::Cached);
+        true
     }
 
     fn maybe_skip_fetch_due_to_matching_fingerprint(
@@ -643,7 +738,10 @@ impl CurrentPrompt {
             .runtime_policy()
             .fingerprint_inputs()
             .contains(&ChipFingerprintInput::ExternalCommandsState);
-        let (availability, fingerprint) = self
+        // The context fingerprint is only needed by the rate limiter, so only compute it for
+        // chips that declare one.
+        let wants_rate_limit = chip.runtime_policy().min_refresh_interval().is_some();
+        let (availability, fingerprint, context_fingerprint) = self
             .with_current_generator_context(ctx, |generator_context| {
                 let capabilities = self.chip_runtime_capabilities_for_session(
                     generator_context.active_session,
@@ -658,10 +756,23 @@ impl CurrentPrompt {
                         required_executables,
                         generator_context,
                         &capabilities,
+                        true,
                     ),
+                    wants_rate_limit
+                        .then(|| {
+                            self.build_chip_fingerprint(
+                                chip_kind,
+                                &chip,
+                                required_executables,
+                                generator_context,
+                                &capabilities,
+                                false,
+                            )
+                        })
+                        .flatten(),
                 )
             })
-            .unwrap_or((ChipAvailability::Enabled, None));
+            .unwrap_or((ChipAvailability::Enabled, None, None));
         self.set_chip_availability(chip_kind, availability.clone());
         if !availability.is_enabled() {
             if let Some(state) = self.states.get_mut(chip_kind) {
@@ -690,6 +801,14 @@ impl CurrentPrompt {
             self.set_chip_update_status(chip_kind, ChipUpdateStatus::Disabled);
             return;
         }
+        if self.maybe_skip_fetch_due_to_min_refresh_interval(
+            chip_kind,
+            chip.runtime_policy().min_refresh_interval(),
+            context_fingerprint,
+        ) {
+            return;
+        }
+
         if self.maybe_skip_fetch_due_to_matching_fingerprint(
             chip_kind,
             fingerprint,
@@ -731,6 +850,10 @@ impl CurrentPrompt {
                     handle.abort();
                 }
                 state.update_status = ChipUpdateStatus::Loading;
+                // Stamp the start, not the completion: the floor exists to bound how many
+                // executions we BEGIN. Stamping on completion would let every render between
+                // start and finish start another one, which is the burst this prevents.
+                state.last_generator_started_at = Some(Instant::now());
 
                 let timeout = chip.runtime_policy().shell_command_timeout();
                 let suppress_on_failure = chip.runtime_policy().suppress_on_failure();
@@ -780,6 +903,7 @@ impl CurrentPrompt {
                                     }
                                 }
                             }
+                            Self::release_refresh_allowance_after_failure(me, &chip_kind);
                             me.update_chip_value(&chip_kind, None);
                             me.set_chip_update_status(&chip_kind, ChipUpdateStatus::TimedOut);
                             return;
@@ -801,6 +925,10 @@ impl CurrentPrompt {
                             }
                             _ => (None, ChipUpdateStatus::Error, true),
                         };
+
+                        if failed {
+                            Self::release_refresh_allowance_after_failure(me, &chip_kind);
+                        }
 
                         if matches!(chip_kind, ContextChipKind::GithubPullRequest) {
                             match Self::github_pr_prompt_chip_command_outcome(
