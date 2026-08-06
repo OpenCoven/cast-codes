@@ -1,3 +1,4 @@
+use instant::Instant;
 use std::{
     any::Any,
     collections::{HashMap, VecDeque},
@@ -45,7 +46,7 @@ use crate::{
 use repo_metadata::DirectoryWatcher;
 use warp_completer::completer::{CommandExitStatus, CommandOutput};
 
-use super::{ChipUpdateStatus, CurrentPrompt, PromptContext};
+use super::{ChipState, ChipUpdateStatus, CurrentPrompt, PromptContext};
 
 #[test]
 fn test_context_menu_items() {
@@ -1350,4 +1351,69 @@ impl CommandExecutor for RecordingCommandExecutor {
     fn supports_parallel_command_execution(&self) -> bool {
         false
     }
+}
+
+/// The GitHub PR chip must carry a refresh floor, and it must be long enough to matter.
+///
+/// Measured 2026-08-06: ~7,600 GraphQL calls/hour across 29 panes against a 5,000/hour budget,
+/// exhausting it repeatedly. The chip pairs `InvalidatingCommandCount` with an
+/// `invalidate_on_commands` list containing `git`, so in an agent session the fingerprint never
+/// matches and the fingerprint cache alone stops nothing. A 30s floor would merely match the
+/// periodic refresh and still cost ~3,480/hour at that pane count, so assert the floor is
+/// substantially longer than the periodic interval rather than merely present.
+#[test]
+fn test_github_pr_chip_declares_a_meaningful_refresh_floor() {
+    // The chip is feature-gated and resolves to None while the flag is off.
+    let _flag_guard = FeatureFlag::GithubPrPromptChip.override_enabled(true);
+    let chip = ContextChipKind::GithubPullRequest
+        .to_chip()
+        .expect("GithubPullRequest chip should be defined");
+    let floor = chip
+        .runtime_policy()
+        .min_refresh_interval()
+        .expect("the GitHub PR chip must rate-limit itself: it spends a shared network quota");
+
+    assert!(
+        floor >= Duration::from_secs(60),
+        "a floor at or below the 30s periodic refresh does not bound the burn: {floor:?}"
+    );
+}
+
+/// A chip with no declared floor keeps its previous behaviour exactly.
+#[test]
+fn test_chips_without_a_floor_are_unthrottled() {
+    let chip = ContextChipKind::ShellGitBranch
+        .to_chip()
+        .expect("ShellGitBranch chip should be defined");
+    assert_eq!(
+        chip.runtime_policy().min_refresh_interval(),
+        None,
+        "local git chips are cheap and must not be rate-limited"
+    );
+}
+
+/// `clear_cache` must NOT reset the rate-limit clock.
+///
+/// It runs from `clear_chips_and_cache`, which fires on every new block — after every command the
+/// user runs. Clearing the stamp there would hand the chip a fresh allowance each command and
+/// leave the floor doing nothing, which is precisely the burn it exists to stop. This test exists
+/// because the omission looks like an oversight when reading `clear_cache` in isolation.
+#[test]
+fn test_clear_cache_preserves_the_rate_limit_clock() {
+    let mut state = ChipState::new(&ContextChipKind::GithubPullRequest);
+    let started_at = Instant::now();
+    state.last_generator_started_at = Some(started_at);
+    state.last_fingerprint = Some(1234);
+
+    state.clear_cache();
+
+    assert_eq!(
+        state.last_generator_started_at,
+        Some(started_at),
+        "clearing the value cache must not grant a fresh rate-limit allowance"
+    );
+    assert_eq!(
+        state.last_fingerprint, None,
+        "clear_cache should still clear what it is meant to clear"
+    );
 }

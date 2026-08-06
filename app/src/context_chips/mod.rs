@@ -317,7 +317,24 @@ impl ContextChipKind {
                     ],
                 )
                 .with_suppress_on_failure()
-                .with_invalidate_on_commands(["git", "gh", "gt"]);
+                .with_invalidate_on_commands(["git", "gh", "gt"])
+                // `gh pr view` is a GitHub GraphQL call, billed against a 5,000/hour budget that
+                // is shared with everything else the user runs (`gh pr checks`, `gh pr merge`,
+                // and tooling that queries PR associations). Measured 2026-08-06: ~7,600
+                // calls/hour across 29 panes, exhausting the pool repeatedly and breaking
+                // unrelated commands for the rest of each hour.
+                //
+                // The invalidation above is what makes this expensive rather than the 30s
+                // periodic refresh: an agent session runs `git` constantly, and each one
+                // re-fingerprints the chip, so it re-ran on nearly every prompt render. A 30s
+                // floor would only match the periodic rate and still cost ~120/hour/pane, which
+                // is ~3,480/hour at the observed pane count — most of the budget for one chip.
+                // Five minutes puts it near ~350/hour at that scale.
+                //
+                // A PR URL for the current branch is close to static; it changes when a PR is
+                // opened or closed, not while you work. Waiting up to five minutes to notice is
+                // the right trade against making `gh` unusable.
+                .with_min_refresh_interval(Duration::from_secs(300));
                 Some(ContextChip::shell_builtin_with_runtime_policy(
                     "GitHub Pull Request",
                     generator,

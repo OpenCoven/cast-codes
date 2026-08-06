@@ -238,6 +238,21 @@ pub struct ChipRuntimePolicy {
     /// Top-level command names (e.g. `["git", "gh", "gt"]`) whose execution should
     /// invalidate this chip's fingerprint. Pair with `ChipFingerprintInput::InvalidatingCommandCount`.
     invalidate_on_commands: Vec<String>,
+    /// Shortest time that may pass between two executions of this chip's generator, whatever
+    /// asked for them.
+    ///
+    /// Fingerprint caching alone cannot bound how often a chip runs: a chip that pairs
+    /// `InvalidatingCommandCount` with `invalidate_on_commands` re-fingerprints on every matching
+    /// command, so in a session that runs `git` constantly the fingerprint never matches and the
+    /// generator runs on essentially every prompt render. That is fine for a local `git` call and
+    /// expensive for one that spends a network API quota — the GitHub PR chip measured ~7,600
+    /// GraphQL calls/hour against a 5,000/hour budget across 29 panes, exhausting it repeatedly.
+    ///
+    /// This is a floor on execution, not a cache: when it blocks a run the chip keeps its previous
+    /// value and no fingerprint is recorded, so the next run after the floor expires still sees an
+    /// accurate "has anything changed" answer. `shell_command_timeout` is unrelated — that bounds
+    /// how long one execution may take, not how often executions may start.
+    min_refresh_interval: Option<Duration>,
 }
 
 impl ChipRuntimePolicy {
@@ -254,6 +269,7 @@ impl ChipRuntimePolicy {
             fingerprint_inputs: fingerprint_inputs.into_iter().collect(),
             suppress_on_failure: false,
             invalidate_on_commands: Vec::new(),
+            min_refresh_interval: None,
         }
     }
 
@@ -296,6 +312,15 @@ impl ChipRuntimePolicy {
         commands: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         self.invalidate_on_commands = commands.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn min_refresh_interval(&self) -> Option<Duration> {
+        self.min_refresh_interval
+    }
+
+    pub fn with_min_refresh_interval(mut self, interval: Duration) -> Self {
+        self.min_refresh_interval = Some(interval);
         self
     }
 
