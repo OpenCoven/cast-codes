@@ -576,6 +576,7 @@ default = [
     "configurable_toolbar",
     "transfer_control_tool",
     "open_code_notifications",
+    "pluggable_notifications",
     "cli_agent_rich_input",
     "vertical_tabs",
     "tab_configs",

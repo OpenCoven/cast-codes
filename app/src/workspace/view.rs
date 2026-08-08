@@ -1513,17 +1513,11 @@ impl Workspace {
     }
 
     fn build_settings_views(
-        global_resource_handles: GlobalResourceHandles,
         tips_completed: ModelHandle<TipsCompleted>,
         ctx: &mut ViewContext<Self>,
     ) -> (ViewHandle<SettingsView>, ViewHandle<ThemeChooser>) {
-        let theme_chooser_view = ctx.add_typed_action_view(|ctx| {
-            ThemeChooser::new(
-                global_resource_handles.referral_theme_status,
-                ctx,
-                tips_completed,
-            )
-        });
+        let theme_chooser_view =
+            ctx.add_typed_action_view(|ctx| ThemeChooser::new(ctx, tips_completed));
 
         ctx.subscribe_to_view(&theme_chooser_view, |me, _, event, ctx| {
             me.handle_theme_chooser_event(event, ctx);
@@ -2629,7 +2623,7 @@ impl Workspace {
         let (welcome_tips_view, welcome_tips_view_state) =
             Self::build_welcome_tips(tips_completed.clone(), ctx);
         let (settings_pane, theme_chooser_view) =
-            Self::build_settings_views(global_resource_handles, tips_completed.clone(), ctx);
+            Self::build_settings_views(tips_completed.clone(), ctx);
 
         let resource_center_view =
             Self::build_resource_center_view(ctx, tips_completed.clone(), changelog_model.clone());
@@ -9262,8 +9256,8 @@ impl Workspace {
             ThemeDeletionModalEvent::DeleteCurrentTheme => {
                 self.theme_chooser_view
                     .update(ctx, |theme_chooser_view, ctx| {
-                        // Reset theme to Dark if we are deleting the current theme
-                        theme_chooser_view.select_and_save_theme(&ThemeKind::Dark, ctx);
+                        // Reset to the default theme if we are deleting the current theme
+                        theme_chooser_view.select_and_save_theme(&ThemeKind::default(), ctx);
                     });
             }
         }
@@ -17631,8 +17625,8 @@ impl Workspace {
                 font_family_id: Some(appearance.ui_font_family()),
                 font_weight: Some(Weight::Bold),
                 background: Some(appearance.theme().accent().into()),
-                font_size: Some(12.),
-                font_color: Some(ColorU::black()),
+                font_size: Some(crate::ui_components::design::font_size::SMALL),
+                font_color: Some(appearance.theme().active_highlighted_text_color().into()),
                 ..Default::default()
             },
         );

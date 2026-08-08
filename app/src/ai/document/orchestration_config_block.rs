@@ -56,7 +56,7 @@ fn render_pill_toggle(is_on: bool, theme: &WarpTheme) -> Box<dyn Element> {
         .finish();
     ConstrainedBox::new(
         Container::new(switch_inner)
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(9.)))
+            .with_corner_radius(CornerRadius::with_all(Radius::Percentage(50.)))
             .with_background_color(track_bg)
             .finish(),
     )

@@ -113,31 +113,13 @@ fn builtin_themes_render_identically_without_ui_block() {
         dark_theme(),
         light_theme(),
         dracula(),
-        solarized_light(),
         solarized_dark(),
         gruvbox_dark(),
-        gruvbox_light(),
-        cyber_wave(),
-        willow_dream(),
-        fancy_dracula(),
-        phenomenon(),
-        jellyfish(),
-        koi(),
-        leafy(),
-        marble(),
-        pink_city(),
-        snowy(),
-        red_rock(),
-        dark_city(),
-        sent_referral_reward(),
-        solar_flare(),
-        adeberry(),
-        received_referral_reward(),
     ];
 
     assert_eq!(
         builtins.len(),
-        23,
+        5,
         "update this test when adding/removing built-in themes"
     );
 
@@ -295,4 +277,82 @@ fn new_brand_accessors_fall_back_without_ui_block() {
         theme.sub_text_color(bg),
         Fill::from(color::internal_colors::text_sub(&theme, bg)),
     );
+}
+
+/// The bundled set is intentionally capped at six themes; see
+/// `super::default_themes`. If this fires, either a theme was added without a
+/// deliberate decision, or one was dropped without updating the docs.
+#[test]
+fn bundles_exactly_the_six_curated_themes() {
+    let config = WarpThemeConfig::new();
+    let mut names: Vec<String> = config
+        .theme_items()
+        .map(|(kind, _)| kind.to_string())
+        .collect();
+    names.sort();
+
+    assert_eq!(
+        names,
+        vec![
+            "CastCodes Dark",
+            "Dark",
+            "Dracula",
+            "Gruvbox Dark",
+            "Light",
+            "Solarized Dark",
+        ]
+    );
+    assert!(config.theme_items().all(|(kind, _)| kind.is_bundled()));
+}
+
+/// Retired themes must stay loadable: a settings file naming one resolves to a
+/// surviving theme of the same lightness rather than failing or flipping a
+/// light-theme user onto a dark background.
+#[test]
+fn retired_themes_resolve_to_a_same_lightness_replacement() {
+    let config = WarpThemeConfig::new();
+
+    for retired in [
+        ThemeKind::SolarizedLight,
+        ThemeKind::GruvboxLight,
+        ThemeKind::Marble,
+        ThemeKind::PinkCity,
+        ThemeKind::Snowy,
+        ThemeKind::ReceivedReferralReward,
+    ] {
+        assert_eq!(retired.retired_replacement(), ThemeKind::Light);
+        assert_eq!(config.theme(&retired), light_theme(), "{retired}");
+    }
+
+    assert_eq!(config.theme(&ThemeKind::FancyDracula), dracula());
+
+    for retired in [
+        ThemeKind::CyberWave,
+        ThemeKind::WillowDream,
+        ThemeKind::Phenomenon,
+        ThemeKind::SolarFlare,
+        ThemeKind::Adeberry,
+        ThemeKind::JellyFish,
+        ThemeKind::Koi,
+        ThemeKind::Leafy,
+        ThemeKind::DarkCity,
+        ThemeKind::RedRock,
+        ThemeKind::SentReferralReward,
+    ] {
+        assert_eq!(config.theme(&retired), castcodes_dark(), "{retired}");
+    }
+
+    // Bundled kinds are unaffected by the remapping.
+    for bundled in [ThemeKind::CastCodesDark, ThemeKind::Dark, ThemeKind::Light] {
+        assert_eq!(bundled.retired_replacement(), bundled);
+    }
+}
+
+/// Retired variants must keep deserializing so existing settings files load.
+#[test]
+fn retired_theme_kinds_still_deserialize() {
+    let kind: ThemeKind = serde_json::from_str("\"Jellyfish\"")
+        .or_else(|_| serde_json::from_str::<ThemeKind>("\"JellyFish\""))
+        .expect("retired theme kind should still deserialize");
+    assert_eq!(kind, ThemeKind::JellyFish);
 }

@@ -2954,7 +2954,6 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
                     | FeatureFlag::WarpManagedSecrets
                     | FeatureFlag::CloudConversations
                     | FeatureFlag::AmbientAgentsRTC
-                    | FeatureFlag::PluggableNotifications
                     | FeatureFlag::AgentViewConversationListView
                     | FeatureFlag::CloudMode
                     | FeatureFlag::CloudModeFromLocalSession
@@ -2975,4 +2974,21 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
     }
 
     flags
+}
+
+#[cfg(test)]
+mod enabled_features_tests {
+    use super::*;
+    use warp_core::channel::Channel;
+
+    #[test]
+    #[serial_test::serial]
+    fn oss_enables_local_cli_agent_notifications() {
+        let _channel = ChannelState::override_channel_for_test(Channel::Oss);
+
+        assert!(
+            enabled_features().contains(&FeatureFlag::PluggableNotifications),
+            "OSS builds need OSC 9/777 events for local CLI agent status"
+        );
+    }
 }

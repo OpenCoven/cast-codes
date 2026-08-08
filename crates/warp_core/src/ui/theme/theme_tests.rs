@@ -74,6 +74,28 @@ fn ring_uses_ui_override_when_set() {
 }
 
 #[test]
+fn active_highlighted_text_color_falls_back_to_text_on_accent() {
+    let theme = test_theme_without_ui();
+    assert_eq!(
+        theme.active_highlighted_text_color(),
+        theme.main_text_color(theme.accent())
+    );
+}
+
+#[test]
+fn active_highlighted_text_color_uses_primary_foreground_when_set() {
+    let mut theme = test_theme_without_ui();
+    theme.ui = Some(UiTokens {
+        primary_foreground: Some(ColorU::from_u32(0xffffffff)),
+        ..Default::default()
+    });
+    assert_eq!(
+        theme.active_highlighted_text_color(),
+        Fill::Solid(ColorU::from_u32(0xffffffff))
+    );
+}
+
+#[test]
 fn ui_sidebar_override_returns_none_without_ui() {
     let theme = test_theme_without_ui();
     assert!(theme.ui_sidebar_override().is_none());

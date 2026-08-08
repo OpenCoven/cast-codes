@@ -267,7 +267,12 @@ fn render_row(
                     .text_input(editor.clone())
                     .with_style(UiComponentStyles {
                         height: Some(TOP_MENU_BAR_HEIGHT),
-                        font_color: Some(pathfinder_color::ColorU::black()),
+                        font_color: Some(
+                            appearance
+                                .theme()
+                                .main_text_color(appearance.theme().surface_2())
+                                .into(),
+                        ),
                         font_size: Some(appearance.ui_font_size()),
                         padding: Some(Coords::uniform(7.)),
                         margin: Some(Coords::default().left(8.).right(8.)),

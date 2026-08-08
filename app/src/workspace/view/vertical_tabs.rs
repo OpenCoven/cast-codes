@@ -2,7 +2,7 @@ pub mod telemetry;
 
 use crate::ai::agent::conversation::ConversationStatus;
 use crate::ai::agent_management::AgentNotificationsModel;
-use crate::ai::conversation_status_ui::render_status_element;
+use crate::ai::conversation_status_ui::{render_status_element, render_status_element_with_label};
 use crate::code::editor::{add_color, remove_color};
 use crate::code::icon_from_file_path;
 use crate::safe_triangle::SafeTriangle;
@@ -56,7 +56,6 @@ use settings::Setting as _;
 use std::path::{Path, PathBuf};
 use warp_core::context_flag::ContextFlag;
 use warp_core::ui::color::blend::Blend;
-use warp_core::ui::color::coloru_with_opacity;
 use warp_core::ui::theme::color::internal_colors;
 use warp_core::ui::theme::{AnsiColorIdentifier, Fill as WarpThemeFill, WarpTheme};
 use warp_core::ui::Icon as WarpIcon;
@@ -5481,30 +5480,7 @@ fn render_detail_status_pill(
     status: &ConversationStatus,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
-    let theme = appearance.theme();
-    let (icon, color) = status.status_icon_and_color(theme);
-    Container::new(
-        Flex::row()
-            .with_main_axis_size(MainAxisSize::Min)
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_spacing(4.)
-            .with_child(
-                ConstrainedBox::new(icon.to_warpui_icon(WarpThemeFill::Solid(color)).finish())
-                    .with_width(12.)
-                    .with_height(12.)
-                    .finish(),
-            )
-            .with_child(
-                Text::new_inline(status.to_string(), appearance.ui_font_family(), 10.)
-                    .with_color(WarpThemeFill::Solid(color).into())
-                    .finish(),
-            )
-            .finish(),
-    )
-    .with_padding(Padding::uniform(2.).with_left(4.).with_right(4.))
-    .with_background(ThemeFill::Solid(coloru_with_opacity(color, 10)))
-    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(2.)))
-    .finish()
+    render_status_element_with_label(status, status.to_string(), appearance)
 }
 
 fn render_detail_wrapping_text(

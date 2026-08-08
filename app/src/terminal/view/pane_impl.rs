@@ -8,6 +8,7 @@ use crate::ai::agent::conversation::{
 use crate::ai::blocklist::agent_view::agent_view_bg_fill;
 use crate::ai::blocklist::agent_view::orchestration_conversation_links::parent_conversation_navigation_card;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
+use crate::ai::conversation_status_ui::render_status_element_with_label;
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
 use crate::menu::{MenuItem, MenuItemFields};
@@ -19,8 +20,10 @@ use crate::pane_group::pane::view::header::components::{
 use crate::pane_group::pane::view::header::PANE_HEADER_HEIGHT;
 use crate::pane_group::pane::PaneStack;
 use crate::pane_group::{pane::view, pane::view::PaneHeaderAction, BackingView, SplitPaneState};
+use crate::terminal::cli_agent_sessions::listener::agent_supports_rich_status;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::model::terminal_model::ConversationTranscriptViewerStatus;
+use crate::terminal::CLIAgent;
 use crate::terminal::TerminalManager;
 use crate::terminal::TerminalView;
 use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
@@ -295,6 +298,20 @@ impl TerminalView {
                     Shrinkable::new(1.0, title_text).finish()
                 };
             center_row.add_child(title_element);
+        }
+
+        // Surface a "Needs response" chip directly in the pane header when
+        // this pane's agent is blocked awaiting the user, so the pane itself
+        // signals it needs attention.
+        if self.is_awaiting_user_response(app) {
+            let pill = render_status_element_with_label(
+                &ConversationStatus::Blocked {
+                    blocked_action: String::new(),
+                },
+                "Needs response",
+                appearance,
+            );
+            center_row.add_child(Container::new(pill).with_margin_left(6.).finish());
         }
 
         center_row.finish()
@@ -916,6 +933,27 @@ impl TerminalView {
         } else {
             None
         }
+    }
+
+    /// Returns `true` when this pane's agent run is blocked awaiting the user's
+    /// response (e.g. a permission request or a question from the agent).
+    ///
+    /// Mirrors the status sources used by the vertical-tab status pills: a
+    /// plugin-backed CLI agent session with rich status, or the selected Oz
+    /// conversation's display status.
+    pub fn is_awaiting_user_response(&self, ctx: &AppContext) -> bool {
+        let cli_session_blocked = CLIAgentSessionsModel::as_ref(ctx)
+            .session(self.view_id)
+            .filter(|session| session.listener.is_some())
+            .filter(|session| !matches!(session.agent, CLIAgent::Unknown))
+            .filter(|session| agent_supports_rich_status(&session.agent))
+            .is_some_and(|session| session.status.to_conversation_status().is_blocked());
+        if cli_session_blocked {
+            return true;
+        }
+
+        self.selected_conversation_status_for_display(ctx)
+            .is_some_and(|status| status.is_blocked())
     }
 
     pub fn selected_conversation_display_title(&self, ctx: &AppContext) -> Option<String> {

@@ -24,6 +24,11 @@ const THUMBNAIL_MARGIN: f32 = 10.;
 
 // We use the discriminant of enum variants to determine the order of theme types in the
 // theme chooser view.
+//
+// Variants marked `#[schemars(skip)]` are retired: they are no longer bundled
+// and are hidden from the settings schema, but stay deserializable so existing
+// settings files keep loading. `ThemeKind::retired_replacement` maps them to a
+// surviving theme. See `super::default_themes`.
 #[derive(
     Clone,
     Debug,
@@ -47,9 +52,9 @@ pub enum ThemeKind {
     SentReferralReward,
     #[schemars(skip)]
     ReceivedReferralReward,
-    #[schemars(description = "Adeberry")]
+    #[schemars(skip)]
     Adeberry,
-    #[schemars(description = "Phenomenon")]
+    #[schemars(skip)]
     Phenomenon,
     #[default]
     #[schemars(description = "CastCodes Dark")]
@@ -58,39 +63,39 @@ pub enum ThemeKind {
     Dark,
     #[schemars(description = "Dracula")]
     Dracula,
-    #[schemars(description = "Fancy Dracula")]
+    #[schemars(skip)]
     FancyDracula,
-    #[schemars(description = "Cyber Wave")]
+    #[schemars(skip)]
     CyberWave,
-    #[schemars(description = "Solar Flare")]
+    #[schemars(skip)]
     SolarFlare,
     #[schemars(description = "Solarized Dark")]
     SolarizedDark,
-    #[schemars(description = "Willow Dream")]
+    #[schemars(skip)]
     WillowDream,
     #[schemars(description = "Light")]
     Light,
-    #[schemars(description = "Dark City")]
+    #[schemars(skip)]
     DarkCity,
     #[schemars(description = "Gruvbox Dark")]
     GruvboxDark,
-    #[schemars(description = "Red Rock")]
+    #[schemars(skip)]
     RedRock,
-    #[schemars(description = "Jellyfish")]
+    #[schemars(skip)]
     JellyFish,
-    #[schemars(description = "Leafy")]
+    #[schemars(skip)]
     Leafy,
-    #[schemars(description = "Koi")]
+    #[schemars(skip)]
     Koi,
-    #[schemars(description = "Solarized Light")]
+    #[schemars(skip)]
     SolarizedLight,
-    #[schemars(description = "Snowy")]
+    #[schemars(skip)]
     Snowy,
-    #[schemars(description = "Gruvbox Light")]
+    #[schemars(skip)]
     GruvboxLight,
-    #[schemars(description = "Pink City")]
+    #[schemars(skip)]
     PinkCity,
-    #[schemars(description = "Marble")]
+    #[schemars(skip)]
     Marble,
     #[schemars(description = "A user-provided custom theme loaded from a file.")]
     Custom(CustomTheme),
@@ -150,6 +155,49 @@ impl ThemeKind {
     pub fn matches(&self, query: &str) -> bool {
         let theme_name = format!("{self}").to_lowercase();
         theme_name.contains(&query.to_lowercase())
+    }
+
+    /// Whether this kind is still bundled with the app.
+    pub fn is_bundled(&self) -> bool {
+        matches!(
+            self,
+            ThemeKind::CastCodesDark
+                | ThemeKind::Dark
+                | ThemeKind::Light
+                | ThemeKind::Dracula
+                | ThemeKind::GruvboxDark
+                | ThemeKind::SolarizedDark
+        )
+    }
+
+    /// The bundled theme that stands in for a retired one.
+    ///
+    /// Retired variants stay deserializable so existing settings files keep
+    /// loading; they resolve to the nearest surviving theme of the same
+    /// lightness, so a user on a light theme never snaps to a dark one.
+    /// Non-retired and user-supplied kinds map to themselves.
+    pub fn retired_replacement(&self) -> ThemeKind {
+        match self {
+            ThemeKind::SolarizedLight
+            | ThemeKind::GruvboxLight
+            | ThemeKind::Marble
+            | ThemeKind::PinkCity
+            | ThemeKind::Snowy
+            | ThemeKind::ReceivedReferralReward => ThemeKind::Light,
+            ThemeKind::FancyDracula => ThemeKind::Dracula,
+            ThemeKind::CyberWave
+            | ThemeKind::WillowDream
+            | ThemeKind::Phenomenon
+            | ThemeKind::SolarFlare
+            | ThemeKind::Adeberry
+            | ThemeKind::JellyFish
+            | ThemeKind::Koi
+            | ThemeKind::Leafy
+            | ThemeKind::DarkCity
+            | ThemeKind::RedRock
+            | ThemeKind::SentReferralReward => ThemeKind::CastCodesDark,
+            other => other.clone(),
+        }
     }
 }
 
@@ -296,35 +344,15 @@ pub struct WarpThemeConfig {
 
 impl WarpThemeConfig {
     pub fn new() -> Self {
-        // preload with built-in themes
+        // Preload with the bundled themes. See `default_themes` for why the set
+        // is limited to six.
         let theme_map: HashMap<ThemeKind, WarpTheme> = HashMap::from_iter([
-            (ThemeKind::SentReferralReward, sent_referral_reward()),
-            (
-                ThemeKind::ReceivedReferralReward,
-                received_referral_reward(),
-            ),
             (ThemeKind::CastCodesDark, castcodes_dark()),
             (ThemeKind::Dark, dark_theme()),
             (ThemeKind::Light, light_theme()),
-            (ThemeKind::SolarizedDark, solarized_dark()),
-            (ThemeKind::SolarizedLight, solarized_light()),
             (ThemeKind::Dracula, dracula()),
             (ThemeKind::GruvboxDark, gruvbox_dark()),
-            (ThemeKind::GruvboxLight, gruvbox_light()),
-            (ThemeKind::JellyFish, jellyfish()),
-            (ThemeKind::Koi, koi()),
-            (ThemeKind::Leafy, leafy()),
-            (ThemeKind::Marble, marble()),
-            (ThemeKind::PinkCity, pink_city()),
-            (ThemeKind::Snowy, snowy()),
-            (ThemeKind::DarkCity, dark_city()),
-            (ThemeKind::RedRock, red_rock()),
-            (ThemeKind::CyberWave, cyber_wave()),
-            (ThemeKind::WillowDream, willow_dream()),
-            (ThemeKind::FancyDracula, fancy_dracula()),
-            (ThemeKind::Phenomenon, phenomenon()),
-            (ThemeKind::SolarFlare, solar_flare()),
-            (ThemeKind::Adeberry, adeberry()),
+            (ThemeKind::SolarizedDark, solarized_dark()),
         ]);
         WarpThemeConfig { theme_map }
     }
@@ -344,6 +372,7 @@ impl WarpThemeConfig {
     pub fn theme(&self, name: &ThemeKind) -> WarpTheme {
         self.theme_map
             .get(name)
+            .or_else(|| self.theme_map.get(&name.retired_replacement()))
             .cloned()
             .unwrap_or_else(castcodes_dark)
     }

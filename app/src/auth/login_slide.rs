@@ -235,10 +235,7 @@ fn resolve_visual_path(
         OnboardingIntention::Terminal => "terminal_intention",
     };
     let name_key = match theme_name {
-        "Phenomenon" => "phenomenon",
-        "Dark" => "dark",
         "Light" => "light",
-        "Adeberry" => "adeberry",
         _ => "dark",
     };
     let orientation = if use_vertical_tabs {

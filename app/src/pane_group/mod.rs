@@ -6661,6 +6661,16 @@ impl PaneGroup {
             .collect()
     }
 
+    /// Number of visible terminal panes in this pane group whose agent run is
+    /// blocked awaiting the user's response (e.g. a permission request or a
+    /// question from the agent).
+    pub fn panes_awaiting_user_response(&self, ctx: &AppContext) -> usize {
+        self.terminal_views(ctx)
+            .into_iter()
+            .filter(|view| view.as_ref(ctx).is_awaiting_user_response(ctx))
+            .count()
+    }
+
     pub fn code_views(&self, ctx: &AppContext) -> Vec<ViewHandle<CodeView>> {
         self.panes_of::<CodePane>()
             .map(|p| p.file_view(ctx))

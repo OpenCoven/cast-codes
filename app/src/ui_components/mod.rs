@@ -8,6 +8,7 @@ pub(crate) mod blended_colors;
 pub(crate) mod breadcrumb;
 pub mod buttons;
 pub(crate) mod color_dot;
+pub mod design;
 pub(crate) mod dialog;
 pub(crate) mod icon_with_status;
 pub(crate) mod item_highlight;
@@ -18,4 +19,4 @@ pub(crate) mod window_focus_dimming;
 
 pub use warp_core::ui::icons;
 
-const BORDER_RADIUS: f32 = 4.;
+const BORDER_RADIUS: f32 = design::radius::COMPACT;

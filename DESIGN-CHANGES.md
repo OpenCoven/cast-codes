@@ -147,6 +147,43 @@ dependencies were added.
   expand chevron toggles the persistent collapsed state off.
 - Covered the manual collapse mode resolver with targeted unit tests.
 
+### Bundled theme set reduced to six
+
+The bundled catalog went from 24 themes to **6**: `CastCodes Dark` (default),
+`Dark`, `Light`, `Dracula`, `Gruvbox Dark`, `Solarized Dark`
+([`app/src/themes/theme.rs`](app/src/themes/theme.rs)).
+
+Retired: 10 background-image themes (Jellyfish, Koi, Leafy, Marble, Pink City,
+Snowy, Dark City, Red Rock, Solar Flare, Phenomenon), 3 gradient themes
+(Cyber Wave, Willow Dream, Fancy Dracula), the 2 referral-reward themes, plus
+Adeberry, Solarized Light, and Gruvbox Light. The decorative themes conflict
+with the Phase 1 contract (calm, dense, editor-grade, no decorative chrome),
+and the referral themes could never unlock in an OSS build.
+
+Compatibility:
+
+- Retired `ThemeKind` variants are kept and still deserialize, so existing
+  settings files load. They are marked `#[schemars(skip)]` so they no longer
+  appear in the settings JSON schema.
+- `ThemeKind::retired_replacement()` maps each retired kind to a surviving
+  theme of the same lightness — light themes resolve to `Light`, Fancy Dracula
+  to `Dracula`, the rest to `CastCodes Dark` — so a user on a light theme never
+  snaps onto a dark background. `WarpThemeConfig::theme()` consults it before
+  falling back.
+- Deleting the active custom theme now resets to `ThemeKind::default()`
+  (CastCodes Dark) instead of the generic `Dark`.
+- The upstream `DefaultAdeberryTheme` new-user override was removed; CastCodes
+  Dark is already the default.
+- The onboarding picker now offers CastCodes Dark, Dark, Light, and Dracula.
+
+### Radius contract cleanup
+
+- `app/src/env_vars/env_var_collection_block.rs` — collection card was 9px,
+  now the named `ENV_VAR_COLLECTION_RADIUS` at the 8px contract maximum.
+- `app/src/ai/document/orchestration_config_block.rs` — the toggle track used a
+  literal 9px on an 18px-tall pill; now `Radius::Percentage(50.)`, matching the
+  thumb and expressing the pill intent (pixel-identical).
+
 ## Deferred (follow-up PRs)
 
 The remainder of Phase 1 was originally deferred here. Items 1.3–1.8 have
@@ -206,3 +243,82 @@ Recommended verification before merge:
 ./script/check_rebrand
 cargo check -p warp-app --bin cast-codes --features gui
 ```
+
+## Contrast fixes and a sizing scale
+
+Follow-up to the UI/UX review. The review found the design system was sound
+where it existed (theme tokens, semantic color accessors) but unenforced:
+colors were re-derived as literals at some render sites, and radius, spacing
+and type had no code representation at all.
+
+### Theme-independent literals that broke on half the themes
+
+These were not stylistic preferences — each one hard-codes a color that only
+works against one background lightness, so it degrades or disappears on the
+other bundled themes.
+
+- **Settings working-directory input**
+  (`app/src/settings_view/features/working_directory.rs`): text was
+  `ColorU::black()` over a `surface_2()` background, i.e. black-on-dark and
+  effectively invisible in every dark theme. Now
+  `main_text_color(surface_2())`.
+- **Tab bar icons** (`app/src/tab.rs`, three sites): the maximize indicator
+  and both tab-kind icons fell back to `ColorU::white()` when the tab style
+  carried no font color, which is white-on-light in the Light theme. Now
+  fall back to `active_ui_text_color()`, matching the pattern the ambient
+  agent icon already used a few lines away.
+- **Account avatar** (`app/src/workspace/view.rs`): black initials on the
+  `#7c3aed` accent fill fails contrast. Now
+  `active_highlighted_text_color()`.
+- **Shared-block overflow icon**
+  (`app/src/settings_view/show_blocks_view.rs`): fixed `#b3bab8` glyph, low
+  contrast on light backgrounds. Now `nonactive_ui_text_color()`. Its
+  container also moved from a 5px to the 4px contract radius.
+- **Dead command-palette statics**
+  (`app/src/search/command_search/view.rs`): `SEARCH_ICON_COLOR` and
+  `INPUT_FIELD_BG_COLOR` were translucent-white constants with no remaining
+  callers. Removed rather than re-themed.
+
+`active_highlighted_text_color()` now reads the `primary_foreground` token
+before deriving a color from the accent. The token was defined in
+`castcodes_ui_tokens` but nothing consumed it, and the accessor itself had no
+callers — the avatar above is its first. Themes without a `ui` block keep the
+previous derived value, covered by
+`active_highlighted_text_color_falls_back_to_text_on_accent`.
+
+Deliberately left alone after checking:
+
+- `icon_with_status.rs` draws a black glyph on a fixed light-purple ambient
+  badge. The background is a brand constant, not a theme surface, so black is
+  the contrast-correct choice.
+- `traffic_lights.rs` uses white on `WINDOWS_BRIGHT_RED` for the Windows
+  close-button hover, which is the platform convention.
+- `login_slide.rs` copy reads as hosted-service marketing, but the login gate
+  is unreachable in OSS builds (`root_view.rs` requires
+  `ChannelState::cloud_services_available()`, and `auth_state.rs` returns
+  early without it). Retoning it would be churn on a dead path.
+
+### A sizing scale to reference
+
+`app/src/ui_components/design.rs` is new: radius, spacing, type and motion
+steps from the Phase 1 contract, expressed as constants. Colors stay in the
+theme accessors, since those must vary per theme while these do not.
+
+Adopted at `ui_components::BORDER_RADIUS`, the shared status chip
+(`ai/conversation_status_ui.rs`), the env-var collection surface, the tab
+top radius and the avatar type size. Inherited Warp views still use bare
+literals; 48 radii sit outside the 4/6/8 scale, mostly 1-3px hairlines on
+badges and glyphs. Those are migrated as views are touched rather than in one
+sweep, which would churn hundreds of visually unverifiable call sites.
+
+The scale is declared in full even where the fork has not adopted a step yet,
+because a partial vocabulary just sends the next author back to a bare
+literal; the module carries a scoped `#![allow(dead_code)]` for that reason.
+`motion` has no adopters at all — warpui still has no transition primitive —
+so it documents the intended timing rather than driving it.
+
+### Build verification
+
+- `cargo check -p warp-app --features gui --lib` ✅ zero warnings.
+- `cargo test -p warp_core ui::theme` ✅ including the two new
+  `active_highlighted_text_color` tests.
