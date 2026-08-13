@@ -1,9 +1,11 @@
 //! Module with integration test-only util methods setting up sqlite.
 
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl};
 
-use super::{schema, sqlite::init_db};
-
+use super::{
+    schema,
+    sqlite::{database_file_path, establish_ro_connection, init_db},
+};
 /// Updates the 'user' and 'host' columns for stored blocks to the given values.
 ///
 /// This is used at runtime to update the user and host values to real values based on the running
@@ -43,4 +45,34 @@ pub fn set_user_and_hostname_for_commands(user: String, hostname: String) {
     ))
     .execute(&mut conn)
     .expect("Failed to update user and hostname for persisted commands.");
+}
+
+/// Returns the number of tabs stored in the persisted app-state snapshot.
+///
+/// This is used by integration tests to verify that a session snapshot actually reached the
+/// sqlite database (e.g. via the shutdown save hook).
+pub fn count_persisted_tabs() -> i64 {
+    let database_path = database_file_path();
+    let database_url = database_path
+        .to_str()
+        .expect("SQLite database path should be valid UTF-8.");
+    let mut conn = establish_ro_connection(database_url)
+        .expect("Should be able to establish read-only sqlite connection.");
+
+    schema::tabs::dsl::tabs
+        .count()
+        .get_result(&mut conn)
+        .expect("Failed to count persisted tabs.")
+}
+
+/// Deletes the persisted app-state snapshot (windows, tabs, panes, etc.).
+///
+/// This lets integration tests wipe state written by ambient saves (window
+/// events, tab actions) so they can verify that a later save — e.g. the
+/// shutdown hook — persists a fresh snapshot on its own.
+pub fn clear_persisted_app_state() {
+    let mut conn = init_db().expect("Should be able to establish sqlite connection.");
+
+    conn.transaction(super::sqlite::delete_app_state)
+        .expect("Failed to clear persisted app state.");
 }

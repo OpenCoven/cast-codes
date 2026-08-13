@@ -12,16 +12,19 @@ use warp::{
         terminal::wait_until_bootstrapped_single_pane_for_tab,
         view_getters::single_terminal_view_for_tab,
         workflow::assert_workflow_metadata_revision,
+        workspace::assert_tab_count,
     },
     settings::Preference,
     settings_view::{SettingsSection, SettingsView},
-    sqlite_testing::set_user_and_hostname_for_blocks,
+    sqlite_testing::{
+        clear_persisted_app_state, count_persisted_tabs, set_user_and_hostname_for_blocks,
+    },
     terminal::{
         model::{session::get_local_hostname, terminal_model::BlockIndex},
         shell::ShellType,
         History, ShellHost, TerminalView,
     },
-    workspace::Workspace,
+    workspace::{Workspace, NEW_TAB_BUTTON_POSITION_ID},
 };
 use warpui::{
     async_assert_eq,
@@ -544,5 +547,61 @@ pub fn test_restore_snapshot_with_settings_page() -> Builder {
                         )
                     })
                 }),
+        )
+}
+
+/// Tests that the shutdown save hook persists the live session before the sqlite
+/// writer terminates.
+///
+/// The app's `on_will_terminate` callback must enqueue a final session snapshot
+/// before terminating the persistence writer, so that session restoration reflects
+/// the state at quit rather than the last ambient save. This test opens a second
+/// tab, waits for the ambient save triggered by that action to flush, wipes the
+/// persisted snapshot, and then replays the shutdown persistence hooks — so the
+/// snapshot found afterwards can only have been written by the shutdown save.
+pub fn test_shutdown_save_persists_session_snapshot() -> Builder {
+    new_builder()
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(
+            new_step_with_default_assertions("Add a second tab with the new tab button")
+                .with_click_on_saved_position(NEW_TAB_BUTTON_POSITION_ID)
+                .add_assertion(assert_tab_count(2)),
+        )
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
+        .with_step(
+            TestStep::new("Wait for the ambient save to flush both tabs").add_named_assertion(
+                "Ambient save persisted both tabs",
+                |_app, _window_id| {
+                    async_assert_eq!(
+                        count_persisted_tabs(),
+                        2,
+                        "The tab action's ambient save should persist both tabs"
+                    )
+                },
+            ),
+        )
+        .with_step(
+            TestStep::new("Clear the persisted snapshot to isolate the shutdown save")
+                .with_action(|_app, _window_id, _data| clear_persisted_app_state())
+                .add_named_assertion("Persisted snapshot is empty", |_app, _window_id| {
+                    async_assert_eq!(
+                        count_persisted_tabs(),
+                        0,
+                        "Clearing the persisted app state should remove all tabs"
+                    )
+                }),
+        )
+        .with_step(integration_testing::persistence::run_shutdown_persistence_hooks())
+        .with_step(
+            TestStep::new("Assert the persisted snapshot contains both tabs").add_named_assertion(
+                "Persisted snapshot contains both tabs",
+                |_app, _window_id| {
+                    async_assert_eq!(
+                        count_persisted_tabs(),
+                        2,
+                        "The shutdown save should persist a snapshot with both tabs"
+                    )
+                },
+            ),
         )
 }

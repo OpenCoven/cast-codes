@@ -60,6 +60,7 @@ integration_tests! {
     test_disabling_action_dispatching,
     test_session_restoration,
     test_restored_blocks_on_different_hosts,
+    test_shutdown_save_persists_session_snapshot,
     test_restore_snapshot_with_deleted_cwd,
     test_session_restoration_with_multiple_shells,
     test_restore_snapshot_with_background_output,

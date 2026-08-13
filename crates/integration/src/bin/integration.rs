@@ -199,6 +199,7 @@ fn register_tests() -> HashMap<&'static str, RegisteredTest> {
     register_test!(test_disabling_action_dispatching);
     register_test!(test_session_restoration);
     register_test!(test_restored_blocks_on_different_hosts);
+    register_test!(test_shutdown_save_persists_session_snapshot);
     register_test!(test_restore_snapshot_with_deleted_cwd);
     register_test!(test_session_restoration_with_multiple_shells);
     register_test!(test_restore_snapshot_with_background_output);

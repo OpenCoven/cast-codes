@@ -11,6 +11,7 @@ use warp_core::execution_mode::AppExecutionMode;
 
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::AIAgentExchangeId;
+use crate::persistence::PersistenceWriter;
 use crate::root_view::OpenPath;
 use crate::undo_close::UndoCloseStack;
 use crate::workspace::{Workspace, WorkspaceAction};
@@ -157,6 +158,19 @@ fn save_app(_: &(), ctx: &mut AppContext) {
     }
 }
 
+/// Persists a final session snapshot and then shuts down the sqlite writer.
+///
+/// Called from the app's `on_will_terminate` callback (see `app_callbacks` in `lib.rs`).
+/// The snapshot must be enqueued before `PersistenceWriter::terminate`, which synchronously
+/// drains the writer queue, so the session state at quit reaches the database.
+pub(crate) fn run_shutdown_persistence(ctx: &mut AppContext) {
+    save_app(&(), ctx);
+
+    PersistenceWriter::handle(ctx).update(ctx, |writer, _ctx| {
+        writer.terminate();
+    });
+}
+
 fn toggle_debug_network_status(_: &(), ctx: &mut AppContext) {
     NetworkStatus::handle(ctx).update(ctx, move |me, ctx| {
         let is_reachable = me.is_online();
@@ -248,4 +262,69 @@ fn summarize_ai_conversation(prompt: &Option<String>, ctx: &mut AppContext) {
 
 fn trigger_log_out(_: &(), ctx: &mut AppContext) {
     auth::log_out(ctx)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc::sync_channel;
+
+    use warpui::App;
+
+    use crate::{
+        persistence::{ModelEvent, PersistenceWriter, WriterHandles},
+        test_util::settings::initialize_settings_for_tests,
+        workspace::{cross_window_tab_drag::CrossWindowTabDrag, WorkspaceRegistry},
+        GlobalResourceHandles, GlobalResourceHandlesProvider,
+    };
+
+    use super::*;
+
+    #[test]
+    fn shutdown_save_sends_snapshot_before_writer_termination() {
+        App::test((), |mut app| async move {
+            initialize_settings_for_tests(&mut app);
+            app.add_singleton_model(|_| WorkspaceRegistry::new());
+            app.add_singleton_model(|_| CrossWindowTabDrag::new());
+
+            // Mirror the production wiring in `sqlite::start_writer`: `save_app`
+            // and `PersistenceWriter::terminate` share one channel into the
+            // writer thread. Capacity 2 fits the Snapshot + Terminate events;
+            // the dummy thread stands in for the writer so `terminate` has a
+            // real handle to join.
+            let (tx, rx) = sync_channel(2);
+            let writer_sender = tx.clone();
+            let thread_handle = std::thread::spawn(|| {});
+            app.add_singleton_model(move |_| {
+                PersistenceWriter::new(Some(WriterHandles {
+                    handle: thread_handle,
+                    sender: writer_sender,
+                }))
+            });
+
+            let mut global_resource_handles = GlobalResourceHandles::mock(&mut app);
+            global_resource_handles.model_event_sender = Some(tx);
+            app.add_singleton_model(|_| {
+                GlobalResourceHandlesProvider::new(global_resource_handles)
+            });
+
+            app.update(|ctx| {
+                run_shutdown_persistence(ctx);
+            });
+
+            let first = rx
+                .try_recv()
+                .expect("shutdown save should enqueue a snapshot");
+            assert!(
+                matches!(first, ModelEvent::Snapshot(_)),
+                "the session snapshot should be enqueued first, got {first:?}"
+            );
+            let second = rx
+                .try_recv()
+                .expect("shutdown save should terminate the writer");
+            assert!(
+                matches!(second, ModelEvent::Terminate),
+                "writer termination should follow the snapshot, got {second:?}"
+            );
+        });
+    }
 }
