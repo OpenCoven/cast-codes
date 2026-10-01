@@ -65,7 +65,7 @@ All contributors are expected to follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ## OpenCoven DCO and Patent Terms
 
-Thank you for your interest in contributing. OpenCoven is MIT licensed and community-driven. We want contributing to be easy, open, and safe for everyone.
+Thank you for your interest in contributing. CastCodes is licensed under AGPL-3.0-only, with the `warpui`, `warpui_core` and `create_markdown_core` crates under MIT, and is community-driven. We want contributing to be easy, open, and safe for everyone.
 
 ## Developer Certificate of Origin (DCO)
 
