@@ -12,10 +12,10 @@
 - Website: https://OpenCoven.ai
 - Discord: https://discord.gg/OpenCoven
 - X / Twitter: https://x.com/OpenCvn
-- License: MIT (https://opensource.org/licenses/MIT)
+- License of this repository: AGPL-3.0-only, except the `warpui`, `warpui_core` and `create_markdown_core` crates, which are MIT. This is the license structure inherited from upstream Warp; see [LICENSE-AGPL](LICENSE-AGPL) and [LICENSE-MIT](LICENSE-MIT).
 - Repository creation date: **2026-04-27** (verifiable via GitHub API: `https://api.github.com/repos/OpenCoven/coven`)
 
-This repository has no fork parent. It is an original work with no upstream source repository.
+This repository is derived from [Warp](https://github.com/warpdotdev/warp) (Denver Technologies, Inc.). Its git history begins with the upstream commit `0dbd3d5` ("Initial public release of Warp."). GitHub does not list a fork parent, but this is a derivative work, not an original work with no upstream source.
 
 ---
 
